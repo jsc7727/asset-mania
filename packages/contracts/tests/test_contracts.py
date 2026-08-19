@@ -1,4 +1,6 @@
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from asset_mania_contracts import (
@@ -49,6 +51,8 @@ FAILURE_MANIFEST = {
     "result": {"status": "failed", "diagnostics": ["INPUT_NOT_FOUND"]},
     "warnings": [],
 }
+
+SUCCESS_FIXTURE_PATH = Path(__file__).parents[3] / "tests" / "fixtures" / "manifest-v1-success.json"
 
 
 def test_build_manifest_uses_portable_labels_and_canonical_json():
@@ -118,6 +122,24 @@ def test_schema_rejects_an_absolute_source_path_field():
 
     with pytest.raises(ValidationError):
         validate(instance=manifest, schema=load_manifest_schema())
+
+
+def test_committed_success_fixture_is_readable_portable_and_schema_valid():
+    payload = SUCCESS_FIXTURE_PATH.read_text(encoding="utf-8")
+    manifest = json.loads(payload)
+
+    validate(instance=manifest, schema=load_manifest_schema())
+    assert manifest["inputs"][0]["label"] == "input-1"
+    assert "source_path" not in payload
+    assert "/Users/" not in payload
+    assert "\\Users\\" not in payload
+
+
+def test_internal_error_is_a_closed_v1_manifest_diagnostic():
+    manifest = deepcopy(FAILURE_MANIFEST)
+    manifest["result"]["diagnostics"] = [DiagnosticCode.INTERNAL_ERROR.value]
+
+    validate(instance=manifest, schema=load_manifest_schema())
 
 
 @pytest.mark.parametrize(

@@ -243,7 +243,10 @@ def test_internal_failure_uses_completed_failure_stream_contract(tmp_path: Path)
     assert completed.returncode == 4
     assert completed.stderr == "INTERNAL_ERROR\n"
     report = json.loads(completed.stdout)
-    assert report["result"] == {"status": "failed", "diagnostics": []}
+    assert report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INTERNAL_ERROR"],
+    }
     run_dir = _only_run(tmp_path / "runs")
     assert completed.stdout == (run_dir / "report.json").read_text()
     manifest = _assert_canonical_json(run_dir / "manifest.json")

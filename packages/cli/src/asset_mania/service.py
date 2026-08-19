@@ -79,10 +79,10 @@ def execute_inspect(
         environment = {}
         environment_diagnostics = []
         exit_code = 4
-        primary = "INTERNAL_ERROR"
+        primary = DiagnosticCode.INTERNAL_ERROR.value
         inputs = []
         inspection = {}
-        result_diagnostics = []
+        result_diagnostics = [DiagnosticCode.INTERNAL_ERROR]
         input_warnings = []
     warnings = sorted(
         {

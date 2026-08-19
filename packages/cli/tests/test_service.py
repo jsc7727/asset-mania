@@ -279,7 +279,10 @@ def test_internal_inspection_error_is_sanitized_into_a_completed_run(
     assert result.exit_code == 4
     assert result.primary_diagnostic == "INTERNAL_ERROR"
     assert result.report is not None
-    assert result.report["result"] == {"status": "failed", "diagnostics": []}
+    assert result.report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INTERNAL_ERROR"],
+    }
     assert "secret-token" not in json.dumps(result.report)
     assert source.name not in json.dumps(result.report)
     _assert_valid_run(result)
