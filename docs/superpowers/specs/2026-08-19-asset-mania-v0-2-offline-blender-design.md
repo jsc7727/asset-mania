@@ -445,8 +445,8 @@ eligibility; optional API `mask` is absent), `prompt_sha256`, closed `controls`,
 `subject`, `policy_evidence`, `cost_estimate`, `expected_view`, `required_gates` in gate order,
 `overwrite_policy: create_only`, and `plan_sha256`.
 
-`controls` is `{ "n": 1, "size": "WIDTHxHEIGHT", "quality": "auto" |
-"low" | "medium" | "high", "background": "auto" | "opaque", "output_format": "png" |
+`controls` is `{ "n": 1, "size": "WIDTHxHEIGHT", "quality": "low" | "medium" | "high",
+"background": "auto" | "opaque", "output_format": "png" |
 "jpeg" | "webp", "output_compression": integer 0..100 | null, "moderation": "auto" | "low" }`.
 Size must equal the conditioning bundle resolution and be one of the official cost-table sizes in
 this estimator profile: `1024x1024`, `1024x1536`, or `1536x1024`. Other API-valid custom sizes are
@@ -893,7 +893,8 @@ ceiling, and expected outputs. GPT Image 2 output controls are exactly:
 - `n`, fixed to `1` in this single-view profile;
 - `size` as an explicit `1024x1024`, `1024x1536`, or `1536x1024` value equal to the conditioning
   bundle; `auto` and other custom sizes are rejected in this aligned-view/cost profile;
-- `quality`: `auto`, `low`, `medium`, or `high`;
+- `quality`: `low`, `medium`, or `high`; `auto` is rejected because it has no approval-bound
+  published cost row;
 - `background`: `auto` or `opaque`; `transparent` is rejected for GPT Image 2;
 - `output_format`: `png`, `jpeg`, or `webp`;
 - `output_compression` as an integer `0..100`, only when the format is JPEG or WebP;

@@ -536,9 +536,9 @@ CLI wheel has no runtime dependency on it even though the root development works
   Close the
   controls to `n`, `size`, `quality`, `background`, `output_format`, `output_compression`, and
   `moderation`; reject transparent background, compression with PNG, `input_fidelity`, invalid
-  custom dimensions, `n != 1`, `size=auto`, size unequal to conditioning resolution, conditioning
-  resolution outside `1024x1024`/`1024x1536`/`1536x1024`, compression outside integer `0..100`, and
-  every unknown field before approval. Do not estimate arbitrary custom sizes.
+  custom dimensions, `n != 1`, `size=auto`, `quality=auto`, size unequal to conditioning resolution,
+  conditioning resolution outside `1024x1024`/`1024x1536`/`1536x1024`, compression outside integer
+  `0..100`, and every unknown field before approval. Do not estimate arbitrary custom sizes.
 - [ ] Test the approval disclosure snapshot: official source URLs, retrieval timestamp and
   source-version/digest; default no-training-unless-opt-in; no application state; default 30-day
   abuse-monitoring retention; Zero Data Retention eligibility/approval; potential-CSAM review
