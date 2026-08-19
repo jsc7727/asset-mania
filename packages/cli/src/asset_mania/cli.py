@@ -8,7 +8,7 @@ from typing import NoReturn
 
 from asset_mania_contracts import canonical_json
 
-from asset_mania.service import InspectRequest, execute_inspect
+from asset_mania.service import InspectRequest, complete_internal_failure, execute_inspect
 
 
 class _UsageError(Exception):
@@ -32,39 +32,53 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exit_signal:
         return exit_signal.code if isinstance(exit_signal.code, int) else 2
 
+    request = InspectRequest(
+        input_path=arguments.input,
+        output_parent=arguments.output_parent,
+        workflow=arguments.workflow,
+        kind=arguments.kind,
+    )
     try:
-        result = execute_inspect(
-            InspectRequest(
-                input_path=arguments.input,
-                output_parent=arguments.output_parent,
-                workflow=arguments.workflow,
-                kind=arguments.kind,
-            )
-        )
+        result = execute_inspect(request)
     except ValueError as error:
         try:
             parser.error(str(error))
         except _UsageError:
             return 2
-    except Exception:  # noqa: BLE001 - the CLI boundary must never expose a traceback
-        sys.stderr.write("INTERNAL_ERROR\n")
-        return 4
+    except Exception:  # noqa: BLE001 - recover with a sanitized completed run
+        try:
+            result = complete_internal_failure(request)
+        except Exception:  # noqa: BLE001 - the CLI boundary must never expose a traceback
+            _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+            return 4
 
     if result.exit_code == 73:
-        sys.stderr.write(f"{result.primary_diagnostic or 'OUTPUT_STORAGE_UNAVAILABLE'}\n")
+        _safe_write(
+            sys.stderr,
+            f"{result.primary_diagnostic or 'OUTPUT_STORAGE_UNAVAILABLE'}\n",
+        )
         return 73
 
     if result.report is None:
-        sys.stderr.write("OUTPUT_STORAGE_UNAVAILABLE\n")
+        _safe_write(sys.stderr, "OUTPUT_STORAGE_UNAVAILABLE\n")
         return 73
 
-    if arguments.output_format == "json":
-        sys.stdout.write(canonical_json(result.report))
-    else:
-        sys.stdout.write(_text_report(result.report))
+    try:
+        rendered = (
+            canonical_json(result.report)
+            if arguments.output_format == "json"
+            else _text_report(result.report)
+        )
+    except Exception:  # noqa: BLE001 - rendering failures must remain sanitized
+        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+        return 4
+
+    if not _safe_write(sys.stdout, rendered):
+        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+        return 4
 
     if result.exit_code in {3, 4}:
-        sys.stderr.write(f"{result.primary_diagnostic or 'INTERNAL_ERROR'}\n")
+        _safe_write(sys.stderr, f"{result.primary_diagnostic or 'INTERNAL_ERROR'}\n")
     return result.exit_code
 
 
@@ -94,6 +108,14 @@ def _build_parser() -> _ArgumentParser:
         default="json",
     )
     return parser
+
+
+def _safe_write(stream: object, payload: str) -> bool:
+    try:
+        stream.write(payload)
+    except Exception:  # noqa: BLE001 - stream errors are contained at the CLI boundary
+        return False
+    return True
 
 
 def _text_report(report: dict[str, object]) -> str:

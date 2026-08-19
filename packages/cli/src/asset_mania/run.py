@@ -1,8 +1,11 @@
 """Atomic persistence for Asset Mania run directories."""
 
+import ctypes
+import errno
 import os
 import re
 import shutil
+import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,6 +18,9 @@ Clock = Callable[[], datetime]
 IdFactory = Callable[[], str]
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_AT_FDCWD = -100
+_RENAME_NOREPLACE = 1
+_RENAME_EXCL = 0x00000004
 
 
 class RunStorageError(Exception):
@@ -70,9 +76,7 @@ def persist_run(
         _write_canonical_json(temporary / "manifest.json", manifest)
         _write_canonical_json(temporary / "report.json", report)
 
-        if final.exists():
-            raise FileExistsError("run already exists")
-        os.rename(temporary, final)
+        _rename_no_replace(temporary, final)
         temporary = None
         return final
     except (OSError, ValueError) as error:
@@ -80,6 +84,45 @@ def persist_run(
     finally:
         if temporary is not None:
             shutil.rmtree(temporary, ignore_errors=True)
+
+
+def _rename_no_replace(source: Path, destination: Path) -> None:
+    """Atomically rename a directory only when the destination does not exist."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes = os.fsencode(source)
+    destination_bytes = os.fsencode(destination)
+
+    if sys.platform == "darwin":
+        rename = libc.renamex_np
+        rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(source_bytes, destination_bytes, _RENAME_EXCL)
+    elif sys.platform == "linux":
+        try:
+            rename = libc.renameat2
+        except AttributeError as error:
+            raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable") from error
+        rename.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        rename.restype = ctypes.c_int
+        result = rename(
+            _AT_FDCWD,
+            source_bytes,
+            _AT_FDCWD,
+            destination_bytes,
+            _RENAME_NOREPLACE,
+        )
+    else:
+        raise OSError(errno.ENOTSUP, "atomic no-replace rename is unsupported")
+
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number), destination)
 
 
 def _write_canonical_json(path: Path, value: object) -> None:

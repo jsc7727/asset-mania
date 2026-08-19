@@ -255,6 +255,112 @@ def test_internal_failure_uses_completed_failure_stream_contract(tmp_path: Path)
     assert source.name not in completed.stdout + completed.stderr
 
 
+def test_execute_exception_creates_a_sanitized_completed_failure_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from asset_mania import cli
+
+    source = tmp_path / "private-source.png"
+    _save_png(source)
+
+    def fail_before_completion(_request):
+        raise RuntimeError(f"private failure at {source}")
+
+    monkeypatch.setattr(cli, "execute_inspect", fail_before_completion)
+
+    exit_code = cli.main(["inspect", str(source), "--out", str(tmp_path / "runs")])
+
+    captured = capsys.readouterr()
+    assert exit_code == 4
+    assert captured.err == "INTERNAL_ERROR\n"
+    report = json.loads(captured.out)
+    assert report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INTERNAL_ERROR"],
+    }
+    run_dir = _only_run(tmp_path / "runs")
+    assert captured.out == (run_dir / "report.json").read_text()
+    manifest = _assert_canonical_json(run_dir / "manifest.json")
+    validate(instance=manifest, schema=load_manifest_schema())
+    assert source.name not in captured.out + captured.err
+    assert str(source) not in captured.out + captured.err
+
+
+def test_report_render_exception_preserves_the_completed_run_without_a_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from asset_mania import cli
+
+    source = tmp_path / "private-source.png"
+    _save_png(source)
+
+    def fail_rendering(_report):
+        raise RuntimeError(f"private rendering failure at {source}")
+
+    monkeypatch.setattr(cli, "_text_report", fail_rendering)
+
+    exit_code = cli.main(
+        [
+            "inspect",
+            str(source),
+            "--out",
+            str(tmp_path / "runs"),
+            "--format",
+            "text",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == "INTERNAL_ERROR\n"
+    run_dir = _only_run(tmp_path / "runs")
+    report = _assert_canonical_json(run_dir / "report.json")
+    manifest = _assert_canonical_json(run_dir / "manifest.json")
+    assert report["result"]["status"] == "succeeded"
+    validate(instance=manifest, schema=load_manifest_schema())
+    assert source.name not in captured.err
+    assert str(source) not in captured.err
+
+
+def test_stdout_write_exception_preserves_the_completed_run_without_a_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from asset_mania import cli
+
+    source = tmp_path / "private-source.png"
+    _save_png(source)
+
+    class FailingStdout:
+        def write(self, _payload: str) -> int:
+            raise OSError(f"private output failure at {source}")
+
+    captured_stdout = cli.sys.stdout
+    monkeypatch.setattr(cli.sys, "stdout", FailingStdout())
+    try:
+        exit_code = cli.main(["inspect", str(source), "--out", str(tmp_path / "runs")])
+    finally:
+        monkeypatch.setattr(cli.sys, "stdout", captured_stdout)
+
+    captured = capsys.readouterr()
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == "INTERNAL_ERROR\n"
+    run_dir = _only_run(tmp_path / "runs")
+    report = _assert_canonical_json(run_dir / "report.json")
+    manifest = _assert_canonical_json(run_dir / "manifest.json")
+    assert report["result"]["status"] == "succeeded"
+    validate(instance=manifest, schema=load_manifest_schema())
+    assert source.name not in captured.err
+    assert str(source) not in captured.err
+
+
 def test_storage_failure_emits_only_sanitized_stderr_and_no_manifest(tmp_path: Path) -> None:
     source = tmp_path / "private-source.png"
     _save_png(source)

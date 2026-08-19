@@ -129,6 +129,58 @@ def execute_inspect(
     )
 
 
+def complete_internal_failure(
+    request: InspectRequest,
+    *,
+    clock: Clock = lambda: datetime.now(UTC),
+    id_factory: IdFactory = lambda: secrets.token_hex(4),
+) -> CommandResult:
+    """Persist a sanitized failure when orchestration escapes unexpectedly."""
+    input_path = Path(request.input_path)
+    output_parent = (
+        Path(request.output_parent)
+        if request.output_parent is not None
+        else Path.cwd() / ".asset-mania" / "runs"
+    )
+    parameters = _resolve_parameters(input_path, request.workflow, request.kind)
+    identity = create_run_identity(clock=clock, id_factory=id_factory)
+    manifest = _build_manifest(
+        run_id=identity.run_id,
+        created_at=identity.created_at,
+        inputs=[],
+        environment={},
+        parameters=parameters,
+        status=ResultStatus.FAILED,
+        diagnostics=[DiagnosticCode.INTERNAL_ERROR],
+        warnings=[],
+    )
+    report = {
+        **manifest,
+        "advisories": [_FACE_ADVISORY] if parameters.get("kind") == "face-head" else [],
+        "inspection": {},
+    }
+    try:
+        run_dir = persist_run(
+            output_parent=output_parent,
+            directory_name=identity.directory_name,
+            manifest=manifest,
+            report=report,
+        )
+    except RunStorageError:
+        return CommandResult(
+            exit_code=73,
+            report=None,
+            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            run_dir=None,
+        )
+    return CommandResult(
+        exit_code=4,
+        report=report,
+        primary_diagnostic=DiagnosticCode.INTERNAL_ERROR.value,
+        run_dir=run_dir,
+    )
+
+
 def _resolve_parameters(
     input_path: Path,
     workflow: Workflow | str | None,

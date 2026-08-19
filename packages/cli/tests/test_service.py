@@ -306,6 +306,37 @@ def test_existing_run_path_is_not_overwritten(tmp_path: Path) -> None:
     assert sorted(path.name for path in existing.iterdir()) == ["owned-by-user"]
 
 
+def test_atomic_publish_rejects_a_destination_created_at_the_rename_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from asset_mania import run
+
+    output_parent = tmp_path / "runs"
+    destination = output_parent / "20260819T000000Z-abc123"
+    collision_inode: list[int] = []
+    rename_no_replace = run._rename_no_replace
+
+    def race_with_an_empty_destination(source: Path, final: Path) -> None:
+        final.mkdir()
+        collision_inode.append(final.stat().st_ino)
+        rename_no_replace(source, final)
+
+    monkeypatch.setattr(run, "_rename_no_replace", race_with_an_empty_destination)
+
+    with pytest.raises(run.RunStorageError):
+        run.persist_run(
+            output_parent=output_parent,
+            directory_name=destination.name,
+            manifest={"kind": "manifest"},
+            report={"kind": "report"},
+        )
+
+    assert destination.is_dir()
+    assert destination.stat().st_ino == collision_inode[0]
+    assert list(destination.iterdir()) == []
+    assert sorted(path.name for path in output_parent.iterdir()) == [destination.name]
+
+
 def test_unwritable_output_parent_returns_73_without_manifest(tmp_path: Path) -> None:
     source = tmp_path / "source.png"
     _save_png(source)
