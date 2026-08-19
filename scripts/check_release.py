@@ -237,6 +237,27 @@ def _markdown_findings(root: Path, relative: PurePosixPath, text: str) -> list[F
     return findings
 
 
+def _read_tracked_schema(
+    root: Path,
+    tracked: set[PurePosixPath],
+    relative: PurePosixPath,
+    *,
+    unavailable_code: str,
+    unavailable_message: str,
+) -> tuple[bytes | None, Finding | None]:
+    path = _safe_regular_file(root, relative) if relative in tracked else None
+    if path is not None:
+        try:
+            return path.read_bytes(), None
+        except OSError:
+            pass
+    return None, Finding(
+        code=unavailable_code,
+        path=relative.as_posix(),
+        message=unavailable_message,
+    )
+
+
 def check_release(root: Path) -> list[Finding]:
     """Return sorted findings for the tracked files under ``root``."""
     root = Path(root).resolve()
@@ -310,21 +331,29 @@ def check_release(root: Path) -> list[Finding]:
         if relative.suffix.lower() == ".md":
             findings.extend(_markdown_findings(root, relative, text))
 
-    contract_path = _safe_regular_file(root, _CONTRACT_SCHEMA)
-    skill_path = _safe_regular_file(root, _SKILL_SCHEMA)
-    if contract_path is not None and skill_path is not None:
-        try:
-            schemas_match = contract_path.read_bytes() == skill_path.read_bytes()
-        except OSError:
-            schemas_match = True
-        if not schemas_match:
-            findings.append(
-                Finding(
-                    code="SKILL_SCHEMA_MISMATCH",
-                    path=_SKILL_SCHEMA.as_posix(),
-                    message="Skill schema differs from the contracts schema",
-                )
+    contract_schema, contract_finding = _read_tracked_schema(
+        root,
+        tracked,
+        _CONTRACT_SCHEMA,
+        unavailable_code="CONTRACT_SCHEMA_UNAVAILABLE",
+        unavailable_message="contracts schema is missing or unreadable",
+    )
+    skill_schema, skill_finding = _read_tracked_schema(
+        root,
+        tracked,
+        _SKILL_SCHEMA,
+        unavailable_code="SKILL_SCHEMA_UNAVAILABLE",
+        unavailable_message="Skill schema is missing or unreadable",
+    )
+    findings.extend(finding for finding in (contract_finding, skill_finding) if finding is not None)
+    if contract_schema is not None and skill_schema is not None and contract_schema != skill_schema:
+        findings.append(
+            Finding(
+                code="SKILL_SCHEMA_MISMATCH",
+                path=_SKILL_SCHEMA.as_posix(),
+                message="Skill schema differs from the contracts schema",
             )
+        )
 
     return sorted(set(findings))
 

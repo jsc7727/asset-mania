@@ -240,6 +240,51 @@ def test_skill_schema_must_match_the_contract_schema(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("relative", "expected_code", "expected_message"),
+    [
+        (
+            "packages/contracts/src/asset_mania_contracts/schema/manifest-v1.schema.json",
+            "CONTRACT_SCHEMA_UNAVAILABLE",
+            "contracts schema is missing or unreadable",
+        ),
+        (
+            "skills/asset-mania/references/manifest-v1.schema.json",
+            "SKILL_SCHEMA_UNAVAILABLE",
+            "Skill schema is missing or unreadable",
+        ),
+    ],
+)
+@pytest.mark.parametrize("unavailable_state", ["missing", "unreadable"])
+def test_schema_parity_fails_closed_when_either_schema_is_unavailable(
+    tmp_path: Path,
+    relative: str,
+    expected_code: str,
+    expected_message: str,
+    unavailable_state: str,
+) -> None:
+    root = _clean_tree(tmp_path)
+    schema_path = root / relative
+    if unavailable_state == "missing":
+        schema_path.unlink()
+    else:
+        schema_path.chmod(0)
+
+    try:
+        findings = check_release(root)
+    finally:
+        if schema_path.exists():
+            schema_path.chmod(0o600)
+
+    assert findings == [
+        Finding(
+            code=expected_code,
+            path=relative,
+            message=expected_message,
+        )
+    ]
+
+
 def test_minimal_clean_tree_has_no_findings(tmp_path: Path) -> None:
     assert check_release(_clean_tree(tmp_path)) == []
 

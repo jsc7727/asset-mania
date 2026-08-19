@@ -2,6 +2,8 @@
 name = "asset-mania-cli"
 version = "0.1.0"
 description = "Offline Asset Mania inspection CLI"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "asset-mania-contracts",

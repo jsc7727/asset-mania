@@ -1,9 +1,9 @@
 # Asset Mania documentation
 
-Asset Mania is pre-alpha and its inspection CLI is still in development. The pages below define
-the target contract and contributor decisions; they are not a runnable installation guide.
+Asset Mania is pre-alpha, and its v0.1 inspection CLI is implemented and runnable. The pages
+below document the working offline inspection contract and the boundaries for later generation.
 
-- [Getting started](getting-started.md) — intended first-inspection contract and current status.
+- [Getting started](getting-started.md) — install and run the working inspection command.
 - [Architecture](architecture.md) — workspace and future provider boundary.
 - [Development](development.md) — contributor conventions and canonical checks.
 - [Run manifest](concepts/run-manifest.md) — portable output and stream rules.

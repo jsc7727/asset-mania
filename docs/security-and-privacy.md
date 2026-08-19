@@ -1,6 +1,6 @@
 # Security and privacy
 
-v0.1 is local-first: it will inspect supported local inputs without network requests, uploads,
+v0.1 is local-first: it inspects supported local inputs without network requests, uploads,
 model downloads, Blender invocation, rendering, GPU jobs, or provider calls. Source inspection
 is read-only; it may write a new run directory but must never overwrite or embed the input.
 

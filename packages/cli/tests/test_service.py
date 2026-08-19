@@ -261,6 +261,26 @@ def test_unreadable_input_creates_schema_valid_failed_run(tmp_path: Path) -> Non
     _assert_valid_run(result)
 
 
+def test_inaccessible_input_parent_is_an_unreadable_input_failure(tmp_path: Path) -> None:
+    locked_parent = tmp_path / "locked-parent"
+    locked_parent.mkdir()
+    source = locked_parent / "private-source.png"
+    _save_png(source)
+    locked_parent.chmod(0)
+    try:
+        result = _execute(source, tmp_path / "runs")
+    finally:
+        locked_parent.chmod(stat.S_IRWXU)
+
+    assert result.exit_code == 3
+    assert result.primary_diagnostic == "INPUT_UNREADABLE"
+    assert result.report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INPUT_UNREADABLE"],
+    }
+    _assert_valid_run(result)
+
+
 def test_internal_inspection_error_is_sanitized_into_a_completed_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

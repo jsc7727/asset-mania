@@ -14,9 +14,11 @@ python3 scripts/inspect.py inspect <input>
 
 Images default to `image-to-3d` and `object`. Blender files default to `scene-to-image`; `--kind`
 is invalid for that workflow. The launcher uses `asset-mania` from `PATH`. Inside an Asset Mania
-repository it falls back to `uv run --package asset-mania-cli asset-mania`. Otherwise it exits 127
-with installation guidance. It executes an argument list without a shell and passes only a small
-allowlist of non-secret locale, temporary-directory, and `PATH` variables.
+repository it falls back only when the prepared workspace environment is present, using `uv run
+--offline --locked --no-sync --package asset-mania-cli asset-mania`. A cold checkout exits 127
+with installation guidance instead of syncing or downloading. It executes an argument list
+without a shell and passes only a small allowlist of non-secret locale, temporary-directory, and
+`PATH` variables.
 
 ## Outputs and streams
 

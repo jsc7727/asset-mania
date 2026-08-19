@@ -142,6 +142,15 @@ def test_internal_error_is_a_closed_v1_manifest_diagnostic():
     validate(instance=manifest, schema=load_manifest_schema())
 
 
+def test_output_storage_diagnostic_is_centrally_owned_but_never_manifested():
+    assert DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value == "OUTPUT_STORAGE_UNAVAILABLE"
+    manifest = deepcopy(FAILURE_MANIFEST)
+    manifest["result"]["diagnostics"] = [DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value]
+
+    with pytest.raises(ValidationError):
+        validate(instance=manifest, schema=load_manifest_schema())
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

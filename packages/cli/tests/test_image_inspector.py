@@ -1,4 +1,5 @@
 import json
+import warnings
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,22 @@ from PIL import Image
 
 def _save_image(path: Path, image_format: str) -> None:
     Image.new("RGBA", (8, 6), color=(20, 40, 60, 80)).save(path, format=image_format)
+
+
+def _inject_photoshop_resource(path: Path, resource_id: int) -> None:
+    resource_data = b"synthetic metadata"
+    resource = (
+        b"8BIM"
+        + resource_id.to_bytes(2, "big")
+        + b"\x00\x00"
+        + len(resource_data).to_bytes(4, "big")
+        + resource_data
+        + (b"\x00" if len(resource_data) % 2 else b"")
+    )
+    payload = b"Photoshop 3.0\x00" + resource
+    app13 = b"\xff\xed" + (len(payload) + 2).to_bytes(2, "big") + payload
+    jpeg = path.read_bytes()
+    path.write_bytes(jpeg[:2] + app13 + jpeg[2:])
 
 
 @pytest.mark.parametrize(
@@ -92,6 +109,39 @@ def test_inspect_image_detects_palette_transparency_as_alpha(tmp_path: Path) -> 
     assert source.name not in json.dumps(report)
 
 
+@pytest.mark.parametrize(
+    ("resource_id", "expected_iptc"),
+    [(0x0404, True), (0x0405, False)],
+)
+def test_inspect_image_detects_only_the_iptc_photoshop_resource(
+    tmp_path: Path, resource_id: int, expected_iptc: bool
+) -> None:
+    source = tmp_path / "private-app13.jpeg"
+    Image.new("RGB", (8, 6), color=(20, 40, 60)).save(source)
+    _inject_photoshop_resource(source, resource_id)
+
+    report, diagnostics = inspect_image(source)
+
+    assert report["metadata_blocks"]["iptc"] is expected_iptc
+    assert diagnostics == []
+
+
+@pytest.mark.parametrize("encoded_bit_depth", [1, 2, 4])
+def test_inspect_image_reports_the_encoded_palette_png_bit_depth(
+    tmp_path: Path, encoded_bit_depth: int
+) -> None:
+    source = tmp_path / f"private-palette-{encoded_bit_depth}.png"
+    image = Image.new("P", (8, 6))
+    image.putdata([index % (1 << encoded_bit_depth) for index in range(48)])
+    image.save(source, bits=encoded_bit_depth)
+    assert source.read_bytes()[24] == encoded_bit_depth
+
+    report, diagnostics = inspect_image(source)
+
+    assert report["bit_depth"] == encoded_bit_depth
+    assert diagnostics == []
+
+
 def test_inspect_image_sanitizes_decompression_bomb_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -104,6 +154,22 @@ def test_inspect_image_sanitizes_decompression_bomb_error(
     assert report == {}
     assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
     assert source.name not in json.dumps(report)
+
+
+def test_inspect_image_promotes_decompression_bomb_warning_to_sanitized_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "private-warning-image.png"
+    Image.new("RGB", (8, 6)).save(source)
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 24)
+
+    with warnings.catch_warnings(record=True) as emitted_warnings:
+        warnings.simplefilter("always")
+        report, diagnostics = inspect_image(source)
+
+    assert report == {}
+    assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
+    assert emitted_warnings == []
 
 
 def test_inspect_image_sanitizes_corrupt_input_error(tmp_path: Path) -> None:
@@ -130,3 +196,46 @@ def test_inspect_image_sanitizes_a_structurally_valid_truncated_png(tmp_path: Pa
     assert report == {}
     assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
     assert source.name not in json.dumps(report)
+
+
+def test_inspect_image_fully_decodes_a_structurally_valid_truncated_jpeg(tmp_path: Path) -> None:
+    source = tmp_path / "private-truncated-image.jpeg"
+    Image.new("RGB", (64, 64), color=(20, 40, 60)).save(source, quality=90)
+    source.write_bytes(source.read_bytes()[:-2])
+
+    with Image.open(source) as image:
+        image.verify()
+    with pytest.raises(OSError), Image.open(source) as image:
+        image.load()
+
+    report, diagnostics = inspect_image(source)
+
+    assert report == {}
+    assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
+
+
+def test_inspect_image_fully_decodes_a_corrupt_webp_frame(tmp_path: Path) -> None:
+    source = tmp_path / "private-corrupt-frame.webp"
+    image = Image.new("RGB", (64, 64))
+    pixels = image.load()
+    for y in range(64):
+        for x in range(64):
+            pixels[x, y] = (
+                (x * 37 + y * 13) % 256,
+                (x * 11 + y * 29) % 256,
+                (x * 17 + y * 43) % 256,
+            )
+    image.save(source, "WEBP", quality=80, method=6)
+    corrupted = bytearray(source.read_bytes())
+    corrupted[21] ^= 0xFF
+    source.write_bytes(corrupted)
+
+    with Image.open(source) as opened:
+        opened.verify()
+    with pytest.raises(OSError), Image.open(source) as opened:
+        opened.load()
+
+    report, diagnostics = inspect_image(source)
+
+    assert report == {}
+    assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]

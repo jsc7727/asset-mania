@@ -7,8 +7,9 @@ selects Python 3.12 for local development. The root `pyproject.toml` owns shared
 and workspace configuration.
 
 The canonical Make targets are `setup`, `check`, `test`, `skill-check`, and `release-check`.
-They are the stable interfaces for later implementation tasks. The first task intentionally does
-not provide a CLI executable or present these as a user quickstart.
+They are implemented stable interfaces for workspace setup, static checks, tests, Skill
+validation, and release-content validation. `make setup` installs the working `asset-mania`
+console command into the workspace environment.
 
 ## Engineering rules
 

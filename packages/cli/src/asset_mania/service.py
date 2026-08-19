@@ -129,7 +129,7 @@ def execute_inspect(
         return CommandResult(
             exit_code=73,
             report=None,
-            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            primary_diagnostic=DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value,
             run_dir=None,
         )
 
@@ -182,7 +182,7 @@ def complete_internal_failure(
         return CommandResult(
             exit_code=73,
             report=None,
-            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            primary_diagnostic=DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value,
             run_dir=None,
         )
     return CommandResult(
@@ -199,7 +199,7 @@ def mark_internal_failure(result: CommandResult) -> CommandResult:
         return CommandResult(
             exit_code=73,
             report=None,
-            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            primary_diagnostic=DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value,
             run_dir=None,
         )
 
@@ -229,7 +229,7 @@ def mark_internal_failure(result: CommandResult) -> CommandResult:
         return CommandResult(
             exit_code=73,
             report=None,
-            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            primary_diagnostic=DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value,
             run_dir=None,
         )
     return CommandResult(
@@ -280,11 +280,17 @@ def _inspect_input(
     try:
         exists = input_path.exists()
     except OSError:
-        exists = True
+        diagnostic = DiagnosticCode.INPUT_UNREADABLE
+        return 3, diagnostic.value, [], {}, [diagnostic], []
     if not exists:
         diagnostic = DiagnosticCode.INPUT_NOT_FOUND
         return 3, diagnostic.value, [], {}, [diagnostic], []
-    if not input_path.is_file():
+    try:
+        is_file = input_path.is_file()
+    except OSError:
+        diagnostic = DiagnosticCode.INPUT_UNREADABLE
+        return 3, diagnostic.value, [], {}, [diagnostic], []
+    if not is_file:
         diagnostic = DiagnosticCode.INPUT_UNREADABLE
         return 3, diagnostic.value, [], {}, [diagnostic], []
 

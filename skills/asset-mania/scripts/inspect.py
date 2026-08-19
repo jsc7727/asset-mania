@@ -38,6 +38,14 @@ def _find_repository(start: Path) -> Path | None:
     return None
 
 
+def _repository_environment_is_prepared(repository: Path) -> bool:
+    console_script = repository / ".venv" / "bin" / "asset-mania"
+    try:
+        return console_script.is_file() and os.access(console_script, os.X_OK)
+    except OSError:
+        return False
+
+
 def _command(arguments: Sequence[str]) -> list[str] | None:
     installed = shutil.which("asset-mania")
     if installed is not None:
@@ -45,8 +53,22 @@ def _command(arguments: Sequence[str]) -> list[str] | None:
 
     repository = _find_repository(Path.cwd().resolve())
     uv = shutil.which("uv")
-    if repository is not None and uv is not None:
-        return [uv, "run", "--package", "asset-mania-cli", "asset-mania", *arguments]
+    if (
+        repository is not None
+        and uv is not None
+        and _repository_environment_is_prepared(repository)
+    ):
+        return [
+            uv,
+            "run",
+            "--offline",
+            "--locked",
+            "--no-sync",
+            "--package",
+            "asset-mania-cli",
+            "asset-mania",
+            *arguments,
+        ]
     return None
 
 

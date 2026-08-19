@@ -21,5 +21,6 @@ in [SECURITY.md](SECURITY.md). Reports will be reviewed fairly and confidentiall
 may remove, edit, or reject contributions and may apply warnings, temporary bans, or permanent
 bans as appropriate.
 
-This policy is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/)
-version 2.1.
+This policy is adapted from [Contributor Covenant version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)
+and has been shortened and given an Asset Mania-specific enforcement route. The adapted text is
+provided under the [Creative Commons Attribution 4.0 International license](https://creativecommons.org/licenses/by/4.0/).

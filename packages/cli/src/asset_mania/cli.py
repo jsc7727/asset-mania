@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
-from asset_mania_contracts import canonical_json
+from asset_mania_contracts import DiagnosticCode, canonical_json
 
 from asset_mania.service import (
     CommandResult,
@@ -56,18 +56,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             result = complete_internal_failure(request)
         except Exception:  # noqa: BLE001 - the CLI boundary must never expose a traceback
-            _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+            _safe_write(sys.stderr, f"{DiagnosticCode.INTERNAL_ERROR.value}\n")
             return 4
 
     if result.exit_code == 73:
         _safe_write(
             sys.stderr,
-            f"{result.primary_diagnostic or 'OUTPUT_STORAGE_UNAVAILABLE'}\n",
+            f"{result.primary_diagnostic or DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value}\n",
         )
         return 73
 
     if result.report is None:
-        _safe_write(sys.stderr, "OUTPUT_STORAGE_UNAVAILABLE\n")
+        _safe_write(sys.stderr, f"{DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value}\n")
         return 73
 
     try:
@@ -83,7 +83,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _finish_output_failure(result)
 
     if result.exit_code in {3, 4}:
-        _safe_write(sys.stderr, f"{result.primary_diagnostic or 'INTERNAL_ERROR'}\n")
+        _safe_write(
+            sys.stderr,
+            f"{result.primary_diagnostic or DiagnosticCode.INTERNAL_ERROR.value}\n",
+        )
     return result.exit_code
 
 
@@ -127,12 +130,12 @@ def _finish_output_failure(result: CommandResult) -> int:
     try:
         failed_result = mark_internal_failure(result)
     except Exception:  # noqa: BLE001 - output failures must remain sanitized
-        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+        _safe_write(sys.stderr, f"{DiagnosticCode.INTERNAL_ERROR.value}\n")
         return 4
     if failed_result.exit_code == 73:
-        _safe_write(sys.stderr, "OUTPUT_STORAGE_UNAVAILABLE\n")
+        _safe_write(sys.stderr, f"{DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value}\n")
         return 73
-    _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+    _safe_write(sys.stderr, f"{DiagnosticCode.INTERNAL_ERROR.value}\n")
     return 4
 
 

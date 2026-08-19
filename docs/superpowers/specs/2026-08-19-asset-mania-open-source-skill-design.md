@@ -152,6 +152,8 @@ Diagnostics emitted by v0.1 include:
 - `EXIF_SENSITIVE_METADATA_PRESENT`
 - `BLEND_HEADER_INVALID`
 - `BLENDER_NOT_FOUND`
+- `INTERNAL_ERROR`
+- `OUTPUT_STORAGE_UNAVAILABLE` (stderr-only for exit 73; never persisted in a manifest)
 - `WORKFLOW_NOT_IMPLEMENTED`
 
 The following codes are reserved for later gated modes and are not emitted merely by inspecting a local file:

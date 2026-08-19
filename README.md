@@ -59,5 +59,7 @@ for the stream and exit-code contract.
 ## License
 
 The CLI/core, Skill instructions, schemas, and documentation are licensed under
-[Apache-2.0](LICENSE). A future Blender `bpy` add-on, if published, will be a separate
-GPL-3.0-or-later package. Inputs and generated outputs are not relicensed by this repository.
+[Apache-2.0](LICENSE), except the adapted Contributor Covenant text identified in
+[third-party notices](THIRD_PARTY_NOTICES.md). A future Blender `bpy` add-on, if published, will
+be a separate GPL-3.0-or-later package. Inputs and generated outputs are not relicensed by this
+repository.

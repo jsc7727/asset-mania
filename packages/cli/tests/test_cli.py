@@ -200,6 +200,76 @@ def test_completed_input_failures_emit_report_stdout_and_diagnostic_stderr(
     assert str(source) not in all_output
 
 
+def test_decompression_bomb_warning_is_sanitized_without_installed_path_leak(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "private-warning-source.png"
+    _save_png(source)
+    injection = tmp_path / "warning-injection"
+    injection.mkdir()
+    (injection / "sitecustomize.py").write_text(
+        "from PIL import Image\nImage.MAX_IMAGE_PIXELS = 24\n"
+    )
+
+    completed = _run(
+        tmp_path,
+        "inspect",
+        str(source),
+        "--out",
+        "runs",
+        extra_environment={"PYTHONPATH": str(injection)},
+    )
+
+    assert completed.returncode == 3
+    assert completed.stderr == "INPUT_UNREADABLE\n"
+    assert str(Path(Image.__file__).parent) not in completed.stderr
+    assert source.name not in completed.stdout + completed.stderr
+
+
+def test_same_sensitive_payload_is_redacted_from_all_persistence_and_stream_surfaces(
+    tmp_path: Path,
+) -> None:
+    secret_token = "token-private-123"
+    secret_home = "/Users/private-person"
+    secret_exif = "camera-owner@example.com"
+    source = tmp_path / "temporary-private-basename.jpeg"
+    exif = Image.Exif()
+    exif[315] = f"{secret_token} {secret_home} {secret_exif}"
+    Image.new("RGB", (64, 64), color=(20, 40, 60)).save(source, exif=exif, quality=90)
+    source.write_bytes(source.read_bytes()[:-2])
+
+    json_completed = _run(tmp_path, "inspect", str(source), "--out", "json-runs")
+    text_completed = _run(
+        tmp_path,
+        "inspect",
+        str(source),
+        "--out",
+        "text-runs",
+        "--format",
+        "text",
+    )
+
+    assert json_completed.returncode == text_completed.returncode == 3
+    assert json_completed.stderr == text_completed.stderr == "INPUT_UNREADABLE\n"
+    assert json.loads(json_completed.stdout)["result"]["diagnostics"] == ["INPUT_UNREADABLE"]
+    assert text_completed.stdout.startswith("Asset Mania inspection: failed\n")
+    persisted = "".join(
+        path.read_text(errors="replace")
+        for output_parent in (tmp_path / "json-runs", tmp_path / "text-runs")
+        for path in output_parent.rglob("*")
+        if path.is_file()
+    )
+    all_surfaces = (
+        persisted
+        + json_completed.stdout
+        + json_completed.stderr
+        + text_completed.stdout
+        + text_completed.stderr
+    )
+    for sensitive_value in (secret_token, secret_home, secret_exif, source.name, str(source)):
+        assert sensitive_value not in all_surfaces
+
+
 def test_unreadable_input_uses_completed_failure_stream_contract(tmp_path: Path) -> None:
     source = tmp_path / "unreadable.png"
     _save_png(source)

@@ -11,5 +11,5 @@
 5. **Later — Asset Mania Cloud:** an execution and collaboration option that shares the open
    project format rather than locking users into a separate contract.
 
-The current repository is at the beginning of v0.1. See [Getting started](getting-started.md)
-for the implementation-in-progress status.
+The current repository implements the v0.1 inspection and planning foundation. See
+[Getting started](getting-started.md) for the working command and current capability limits.
