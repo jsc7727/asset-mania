@@ -69,16 +69,150 @@
       }
     },
     "environment": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operating_system": {
+          "enum": [
+            "macos",
+            "linux"
+          ]
+        },
+        "architecture": {
+          "enum": [
+            "arm64",
+            "x86_64"
+          ]
+        },
+        "python_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "blender": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "found",
+                "not_found"
+              ]
+            }
+          }
+        }
+      }
     },
     "parameters": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow"
+      ],
+      "properties": {
+        "workflow": {
+          "enum": [
+            "image-to-3d",
+            "scene-to-image"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "object",
+            "character",
+            "face-head"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "workflow": {
+                "const": "image-to-3d"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "workflow": {
+                "const": "scene-to-image"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "kind"
+              ]
+            }
+          }
+        }
+      ]
     },
     "capabilities": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image-to-3d": {
+          "const": "not_implemented"
+        },
+        "scene-to-image": {
+          "const": "not_implemented"
+        }
+      }
     },
     "artifacts": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "media_type",
+          "provenance",
+          "validation_status"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "media_type": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*/[A-Za-z0-9][A-Za-z0-9.+-]*$"
+          },
+          "provenance": {
+            "enum": [
+              "observed",
+              "derived",
+              "generated"
+            ]
+          },
+          "validation_status": {
+            "enum": [
+              "valid",
+              "invalid",
+              "unvalidated",
+              "incomplete"
+            ]
+          }
+        }
+      }
     },
     "result": {
       "type": "object",
@@ -99,21 +233,29 @@
         "diagnostics": {
           "type": "array",
           "items": {
-            "enum": [
-              "INPUT_NOT_FOUND",
-              "UNSUPPORTED_MEDIA_TYPE",
-              "INPUT_UNREADABLE",
-              "EXIF_SENSITIVE_METADATA_PRESENT",
-              "BLEND_HEADER_INVALID",
-              "BLENDER_NOT_FOUND",
-              "WORKFLOW_NOT_IMPLEMENTED"
-            ]
+            "$ref": "#/$defs/diagnostic_code"
           }
         }
       }
     },
     "warnings": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic_code"
+      }
+    }
+  },
+  "$defs": {
+    "diagnostic_code": {
+      "enum": [
+        "INPUT_NOT_FOUND",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "INPUT_UNREADABLE",
+        "EXIF_SENSITIVE_METADATA_PRESENT",
+        "BLEND_HEADER_INVALID",
+        "BLENDER_NOT_FOUND",
+        "WORKFLOW_NOT_IMPLEMENTED"
+      ]
     }
   }
 }

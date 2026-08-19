@@ -3,9 +3,30 @@ from importlib.resources import files
 
 from .diagnostics import DiagnosticCode, ResultStatus
 
+_V1_WORKFLOWS = {"image-to-3d", "scene-to-image"}
+_V1_IMAGE_KINDS = {"object", "character", "face-head"}
+
 
 def canonical_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
+
+
+def _validate_v1_parameters(parameters: dict[str, object]) -> dict[str, object]:
+    if set(parameters) - {"workflow", "kind"}:
+        raise ValueError("parameters contain fields outside the v1 allowlist")
+
+    workflow = parameters.get("workflow")
+    if workflow not in _V1_WORKFLOWS:
+        raise ValueError("parameters.workflow must be a supported v1 workflow")
+
+    if workflow == "image-to-3d":
+        kind = parameters.get("kind")
+        if kind not in _V1_IMAGE_KINDS:
+            raise ValueError("parameters.kind must be a supported image-to-3d kind")
+    elif "kind" in parameters:
+        raise ValueError("parameters.kind is only valid for image-to-3d")
+
+    return dict(parameters)
 
 
 def build_manifest(
@@ -20,6 +41,8 @@ def build_manifest(
     result_status: ResultStatus,
     diagnostics: list[DiagnosticCode],
 ) -> dict[str, object]:
+    safe_parameters = _validate_v1_parameters(parameters)
+
     return {
         "schema_version": "1.0",
         "run_id": run_id,
@@ -35,7 +58,7 @@ def build_manifest(
             }
         ],
         "environment": {},
-        "parameters": parameters,
+        "parameters": safe_parameters,
         "capabilities": {},
         "artifacts": [],
         "result": {
