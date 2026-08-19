@@ -32,7 +32,7 @@ upstream license and any notices shipped by that distribution.
 | packaging | [26.3](https://github.com/pypa/packaging) | Apache-2.0 OR BSD-2-Clause | Not bundled; preserve selected license/notices if redistributed. |
 | pluggy | [1.6.0](https://github.com/pytest-dev/pluggy) | MIT | Not bundled. |
 | Pygments | [2.21.0](https://github.com/pygments/pygments) | BSD-2-Clause | Not bundled. |
-| pytest | [8.4.2](https://github.com/pytest-dev/pytest) | MIT | Not bundled. |
+| pytest | [9.1.1](https://github.com/pytest-dev/pytest) | MIT | Not bundled. |
 | pytest-cov | [7.1.0](https://github.com/pytest-dev/pytest-cov) | MIT | Not bundled. |
 | referencing | [0.37.0](https://github.com/python-jsonschema/referencing) | MIT | Not bundled. |
 | rpds-py | [2026.6.3](https://github.com/crate-py/rpds) | MIT | Not bundled. |
