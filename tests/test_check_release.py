@@ -70,10 +70,14 @@ def _findings_with_code(root: Path, code: str) -> list[Finding]:
     "relative",
     [
         ".env",
+        ".env.local",
+        ".env.production",
         "private/token.json",
         "private/cookies.txt",
         "weights/model.safetensors",
         ".cache/download.bin",
+        "cache/download.bin",
+        "build/cache/download.bin",
     ],
 )
 def test_forbidden_tracked_paths_are_reported(tmp_path: Path, relative: str) -> None:
@@ -127,6 +131,54 @@ def test_binary_fixture_requires_a_provenance_entry(tmp_path: Path, suffix: str)
     assert [finding.path for finding in findings] == [relative]
 
 
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        ("archive.zip", b"PK\x03\x04synthetic archive"),
+        ("opaque.payload", b"\x00synthetic opaque data"),
+        ("mislabelled.txt", b"text prefix\x00binary remainder"),
+    ],
+)
+def test_archive_and_opaque_binary_fixtures_require_provenance(
+    tmp_path: Path, name: str, content: bytes
+) -> None:
+    root = _clean_tree(tmp_path)
+    relative = f"tests/fixtures/{name}"
+    _track(root, relative, content)
+
+    findings = _findings_with_code(root, "FIXTURE_PROVENANCE_MISSING")
+
+    assert [finding.path for finding in findings] == [relative]
+
+
+def test_longer_fixture_path_does_not_satisfy_provenance(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    relative = "tests/fixtures/example.bin"
+    _track(root, relative, b"\x00synthetic binary")
+    _track(
+        root,
+        "tests/fixtures/PROVENANCE.md",
+        "# Fixture provenance\n\n- `tests/fixtures/example.bin.backup` - generated locally\n",
+    )
+
+    findings = _findings_with_code(root, "FIXTURE_PROVENANCE_MISSING")
+
+    assert [finding.path for finding in findings] == [relative]
+
+
+def test_exact_fixture_inventory_entry_satisfies_provenance(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    relative = "tests/fixtures/example.bin"
+    _track(root, relative, b"\x00synthetic binary")
+    _track(
+        root,
+        "tests/fixtures/PROVENANCE.md",
+        f"# Fixture provenance\n\n- `{relative}` - generated locally\n",
+    )
+
+    assert _findings_with_code(root, "FIXTURE_PROVENANCE_MISSING") == []
+
+
 def test_third_party_file_requires_a_notice_entry(tmp_path: Path) -> None:
     root = _clean_tree(tmp_path)
     _track(root, "third_party/example.py", "VALUE = 1\n")
@@ -134,6 +186,34 @@ def test_third_party_file_requires_a_notice_entry(tmp_path: Path) -> None:
     findings = _findings_with_code(root, "THIRD_PARTY_NOTICE_MISSING")
 
     assert [finding.path for finding in findings] == ["third_party/example.py"]
+
+
+def test_longer_third_party_path_does_not_satisfy_notices(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    relative = "third_party/example.py"
+    _track(root, relative, "VALUE = 1\n")
+    _track(
+        root,
+        "THIRD_PARTY_NOTICES.md",
+        "# Third-Party Notices\n\n- `third_party/example.py.backup` - Apache-2.0\n",
+    )
+
+    findings = _findings_with_code(root, "THIRD_PARTY_NOTICE_MISSING")
+
+    assert [finding.path for finding in findings] == [relative]
+
+
+def test_exact_third_party_inventory_entry_satisfies_notices(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    relative = "third_party/example.py"
+    _track(root, relative, "VALUE = 1\n")
+    _track(
+        root,
+        "THIRD_PARTY_NOTICES.md",
+        f"# Third-Party Notices\n\n- `{relative}` - Apache-2.0\n",
+    )
+
+    assert _findings_with_code(root, "THIRD_PARTY_NOTICE_MISSING") == []
 
 
 def test_broken_relative_markdown_link_is_reported(tmp_path: Path) -> None:

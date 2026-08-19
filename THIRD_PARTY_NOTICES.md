@@ -12,3 +12,5 @@ Before adding a third-party package, asset, icon, texture, HDRI, fixture, or mod
 record its source, version or immutable revision, license, required notice, and redistribution
 evidence here. Model terms are recorded separately from software licenses. Every tracked binary
 fixture must also have an entry in `tests/fixtures/PROVENANCE.md` when that fixture system lands.
+Begin each file inventory bullet with its exact root-relative repository path in an inline code
+span; longer paths and prose mentions do not satisfy the release check.

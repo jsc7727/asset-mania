@@ -25,6 +25,7 @@ _FORBIDDEN_DIRECTORY_NAMES = {
     ".ruff_cache",
     ".venv",
     "__pycache__",
+    "cache",
     "datasets",
     "models",
     "weights",
@@ -40,21 +41,20 @@ _FORBIDDEN_FILE_NAMES = {
     "token.json",
 }
 _FORBIDDEN_WEIGHT_SUFFIXES = {".ckpt", ".onnx", ".pt", ".pth", ".safetensors"}
-_BINARY_FIXTURE_SUFFIXES = {
-    ".bin",
-    ".blend",
-    ".bmp",
-    ".gif",
-    ".glb",
-    ".ico",
-    ".jpeg",
-    ".jpg",
-    ".png",
-    ".tif",
-    ".tiff",
-    ".webp",
+_TEXT_FIXTURE_SUFFIXES = {
+    ".csv",
+    ".json",
+    ".md",
+    ".py",
+    ".svg",
+    ".toml",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
 }
 _THIRD_PARTY_DIRECTORIES = {"external", "third-party", "third_party", "vendor"}
+_INVENTORY_ENTRY = re.compile(r"(?m)^\s*-\s+`(?P<path>[^`\r\n]+)`(?:\s|$)")
 _MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((?P<target><[^>]+>|[^\s)]+)(?:\s+[\"'][^)]*[\"'])?\)")
 _MACOS_HOME_ROOT = "/" + "Us" + "ers" + "/"
 _LINUX_HOME_ROOT = "/" + "ho" + "me" + "/"
@@ -114,6 +114,7 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
         any(part in _FORBIDDEN_DIRECTORY_NAMES for part in lowered_parts[:-1])
         or name in _FORBIDDEN_FILE_NAMES
         or name.endswith(".env")
+        or name.startswith(".env.")
         or stem == "token"
         or stem.endswith("-token")
         or stem == "cookie"
@@ -154,6 +155,31 @@ def _inventory_text(
     if path is None:
         return ""
     return _read_text(path) or ""
+
+
+def _inventory_entries(
+    root: Path,
+    tracked: set[PurePosixPath],
+    relative: PurePosixPath,
+) -> set[str]:
+    entries: set[str] = set()
+    for match in _INVENTORY_ENTRY.finditer(_inventory_text(root, tracked, relative)):
+        entry = PurePosixPath(match.group("path"))
+        if entry.is_absolute() or ".." in entry.parts:
+            continue
+        entries.add(entry.as_posix())
+    return entries
+
+
+def _is_binary_or_opaque_fixture(path: Path, relative: PurePosixPath) -> bool:
+    if relative.suffix.lower() not in _TEXT_FIXTURE_SUFFIXES:
+        return True
+    try:
+        content = path.read_bytes()
+        content.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return True
+    return b"\0" in content
 
 
 def _contains_absolute_home(text: str) -> bool:
@@ -219,8 +245,8 @@ def check_release(root: Path) -> list[Finding]:
         return [git_finding]
     tracked = set(tracked_paths)
     findings: list[Finding] = []
-    provenance = _inventory_text(root, tracked, _PROVENANCE)
-    third_party_notices = _inventory_text(root, tracked, _THIRD_PARTY_NOTICES)
+    provenance = _inventory_entries(root, tracked, _PROVENANCE)
+    third_party_notices = _inventory_entries(root, tracked, _THIRD_PARTY_NOTICES)
 
     for relative in tracked_paths:
         if _is_forbidden_path(relative):
@@ -239,7 +265,7 @@ def check_release(root: Path) -> list[Finding]:
 
         if (
             relative.parts[:2] == ("tests", "fixtures")
-            and relative.suffix.lower() in _BINARY_FIXTURE_SUFFIXES
+            and _is_binary_or_opaque_fixture(path, relative)
             and relative.as_posix() not in provenance
         ):
             findings.append(
