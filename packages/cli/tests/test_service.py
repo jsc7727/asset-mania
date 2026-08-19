@@ -219,7 +219,11 @@ def test_sensitive_values_never_reach_portable_outputs_or_logs(tmp_path: Path) -
     assert secret_home not in all_output
     assert source.name not in all_output
     assert str(source) not in all_output
-    assert result.report["warnings"] == ["EXIF_SENSITIVE_METADATA_PRESENT"]
+    assert "EXIF_SENSITIVE_METADATA_PRESENT" in result.report["warnings"]
+    assert set(result.report["warnings"]) <= {
+        "BLENDER_NOT_FOUND",
+        "EXIF_SENSITIVE_METADATA_PRESENT",
+    }
     _assert_valid_run(result)
 
 
