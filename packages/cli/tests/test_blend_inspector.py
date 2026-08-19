@@ -98,3 +98,27 @@ def test_inspect_environment_sanitizes_missing_blender(
     assert report["blender"] == {"status": "not_found"}
     assert diagnostics == [DiagnosticCode.BLENDER_NOT_FOUND]
     assert "missing" not in json.dumps(report)
+
+
+def test_inspect_environment_treats_inaccessible_blender_candidate_as_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from asset_mania import environment
+
+    inaccessible = tmp_path / "private-inaccessible-blender"
+    original_is_file = Path.is_file
+
+    def deny_candidate(path: Path) -> bool:
+        if path == inaccessible:
+            raise PermissionError(str(path))
+        return original_is_file(path)
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(environment, "_MACOS_BLENDER_EXECUTABLE", inaccessible)
+    monkeypatch.setattr(Path, "is_file", deny_candidate)
+
+    report, diagnostics = inspect_environment()
+
+    assert report["blender"] == {"status": "not_found"}
+    assert diagnostics == [DiagnosticCode.BLENDER_NOT_FOUND]
+    assert inaccessible.name not in json.dumps(report)

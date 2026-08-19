@@ -28,9 +28,16 @@ def inspect_environment(
 def _find_blender(configured_blender: Path | None) -> Path | None:
     candidates = [configured_blender, _path_blender(), _MACOS_BLENDER_EXECUTABLE]
     for candidate in candidates:
-        if candidate is not None and candidate.is_file() and os.access(candidate, os.X_OK):
+        if candidate is not None and _is_executable_file(candidate):
             return candidate
     return None
+
+
+def _is_executable_file(candidate: Path) -> bool:
+    try:
+        return candidate.is_file() and os.access(candidate, os.X_OK)
+    except OSError:
+        return False
 
 
 def _path_blender() -> Path | None:
