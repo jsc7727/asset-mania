@@ -86,6 +86,28 @@ def persist_run(
             shutil.rmtree(temporary, ignore_errors=True)
 
 
+def replace_run_records(
+    *,
+    run_dir: Path,
+    manifest: dict[str, object],
+    report: dict[str, object],
+) -> None:
+    """Replace a completed run's canonical records without exposing partial file writes."""
+    temporary: Path | None = None
+    try:
+        temporary = Path(tempfile.mkdtemp(prefix=".records.tmp-", dir=run_dir))
+        temporary.chmod(0o700)
+        _write_canonical_json(temporary / "manifest.json", manifest)
+        _write_canonical_json(temporary / "report.json", report)
+        os.replace(temporary / "manifest.json", run_dir / "manifest.json")
+        os.replace(temporary / "report.json", run_dir / "report.json")
+    except (OSError, ValueError) as error:
+        raise RunStorageError from error
+    finally:
+        if temporary is not None:
+            shutil.rmtree(temporary, ignore_errors=True)
+
+
 def _rename_no_replace(source: Path, destination: Path) -> None:
     """Atomically rename a directory only when the destination does not exist."""
     libc = ctypes.CDLL(None, use_errno=True)

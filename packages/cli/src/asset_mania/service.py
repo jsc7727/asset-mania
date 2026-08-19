@@ -2,6 +2,7 @@
 
 import hashlib
 import secrets
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,7 +13,14 @@ from asset_mania_contracts import DiagnosticCode, ResultStatus
 from asset_mania.environment import inspect_environment
 from asset_mania.inspectors.blend import inspect_blend
 from asset_mania.inspectors.image import inspect_image
-from asset_mania.run import Clock, IdFactory, RunStorageError, create_run_identity, persist_run
+from asset_mania.run import (
+    Clock,
+    IdFactory,
+    RunStorageError,
+    create_run_identity,
+    persist_run,
+    replace_run_records,
+)
 
 Workflow = Literal["image-to-3d", "scene-to-image"]
 Kind = Literal["object", "character", "face-head"]
@@ -50,6 +58,10 @@ class CommandResult:
     report: dict[str, object] | None
     primary_diagnostic: str | None
     run_dir: Path | None
+
+
+class InspectUsageError(ValueError):
+    """Expected request validation failure that must not create a run."""
 
 
 def execute_inspect(
@@ -181,15 +193,62 @@ def complete_internal_failure(
     )
 
 
+def mark_internal_failure(result: CommandResult) -> CommandResult:
+    """Rewrite an already-persisted run as a completed internal failure."""
+    if result.run_dir is None or result.report is None:
+        return CommandResult(
+            exit_code=73,
+            report=None,
+            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            run_dir=None,
+        )
+
+    report = deepcopy(result.report)
+    report["result"] = {
+        "status": ResultStatus.FAILED.value,
+        "diagnostics": [DiagnosticCode.INTERNAL_ERROR.value],
+    }
+    manifest_fields = (
+        "schema_version",
+        "run_id",
+        "command",
+        "tool_version",
+        "created_at",
+        "inputs",
+        "environment",
+        "parameters",
+        "capabilities",
+        "artifacts",
+        "result",
+        "warnings",
+    )
+    manifest = {field: deepcopy(report[field]) for field in manifest_fields}
+    try:
+        replace_run_records(run_dir=result.run_dir, manifest=manifest, report=report)
+    except RunStorageError:
+        return CommandResult(
+            exit_code=73,
+            report=None,
+            primary_diagnostic="OUTPUT_STORAGE_UNAVAILABLE",
+            run_dir=None,
+        )
+    return CommandResult(
+        exit_code=4,
+        report=report,
+        primary_diagnostic=DiagnosticCode.INTERNAL_ERROR.value,
+        run_dir=result.run_dir,
+    )
+
+
 def _resolve_parameters(
     input_path: Path,
     workflow: Workflow | str | None,
     kind: Kind | str | None,
 ) -> dict[str, object]:
     if workflow not in {None, "image-to-3d", "scene-to-image"}:
-        raise ValueError("workflow must be image-to-3d or scene-to-image")
+        raise InspectUsageError("workflow must be image-to-3d or scene-to-image")
     if kind not in {None, "object", "character", "face-head"}:
-        raise ValueError("kind must be object, character, or face-head")
+        raise InspectUsageError("kind must be object, character, or face-head")
 
     suffix = input_path.suffix.lower()
     is_blend = suffix == ".blend"
@@ -197,11 +256,11 @@ def _resolve_parameters(
     resolved_workflow = workflow or ("scene-to-image" if is_blend else "image-to-3d")
 
     if is_blend and resolved_workflow != "scene-to-image":
-        raise ValueError("a .blend input requires scene-to-image")
+        raise InspectUsageError("a .blend input requires scene-to-image")
     if is_image and resolved_workflow != "image-to-3d":
-        raise ValueError("an image input requires image-to-3d")
+        raise InspectUsageError("an image input requires image-to-3d")
     if resolved_workflow == "scene-to-image" and kind is not None:
-        raise ValueError("kind is only valid with image-to-3d")
+        raise InspectUsageError("kind is only valid with image-to-3d")
 
     if resolved_workflow == "image-to-3d":
         return {"workflow": resolved_workflow, "kind": kind or "object"}

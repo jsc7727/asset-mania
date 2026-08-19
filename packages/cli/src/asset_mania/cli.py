@@ -8,7 +8,14 @@ from typing import NoReturn
 
 from asset_mania_contracts import canonical_json
 
-from asset_mania.service import InspectRequest, complete_internal_failure, execute_inspect
+from asset_mania.service import (
+    CommandResult,
+    InspectRequest,
+    InspectUsageError,
+    complete_internal_failure,
+    execute_inspect,
+    mark_internal_failure,
+)
 
 
 class _UsageError(Exception):
@@ -40,7 +47,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         result = execute_inspect(request)
-    except ValueError as error:
+    except InspectUsageError as error:
         try:
             parser.error(str(error))
         except _UsageError:
@@ -70,12 +77,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             else _text_report(result.report)
         )
     except Exception:  # noqa: BLE001 - rendering failures must remain sanitized
-        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
-        return 4
+        return _finish_output_failure(result)
 
     if not _safe_write(sys.stdout, rendered):
-        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
-        return 4
+        return _finish_output_failure(result)
 
     if result.exit_code in {3, 4}:
         _safe_write(sys.stderr, f"{result.primary_diagnostic or 'INTERNAL_ERROR'}\n")
@@ -116,6 +121,19 @@ def _safe_write(stream: object, payload: str) -> bool:
     except Exception:  # noqa: BLE001 - stream errors are contained at the CLI boundary
         return False
     return True
+
+
+def _finish_output_failure(result: CommandResult) -> int:
+    try:
+        failed_result = mark_internal_failure(result)
+    except Exception:  # noqa: BLE001 - output failures must remain sanitized
+        _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+        return 4
+    if failed_result.exit_code == 73:
+        _safe_write(sys.stderr, "OUTPUT_STORAGE_UNAVAILABLE\n")
+        return 73
+    _safe_write(sys.stderr, "INTERNAL_ERROR\n")
+    return 4
 
 
 def _text_report(report: dict[str, object]) -> str:

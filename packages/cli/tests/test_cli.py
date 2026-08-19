@@ -266,7 +266,7 @@ def test_execute_exception_creates_a_sanitized_completed_failure_run(
     _save_png(source)
 
     def fail_before_completion(_request):
-        raise RuntimeError(f"private failure at {source}")
+        raise ValueError(f"private failure at {source}")
 
     monkeypatch.setattr(cli, "execute_inspect", fail_before_completion)
 
@@ -321,7 +321,11 @@ def test_report_render_exception_preserves_the_completed_run_without_a_traceback
     run_dir = _only_run(tmp_path / "runs")
     report = _assert_canonical_json(run_dir / "report.json")
     manifest = _assert_canonical_json(run_dir / "manifest.json")
-    assert report["result"]["status"] == "succeeded"
+    assert report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INTERNAL_ERROR"],
+    }
+    assert manifest["result"] == report["result"]
     validate(instance=manifest, schema=load_manifest_schema())
     assert source.name not in captured.err
     assert str(source) not in captured.err
@@ -355,7 +359,11 @@ def test_stdout_write_exception_preserves_the_completed_run_without_a_traceback(
     run_dir = _only_run(tmp_path / "runs")
     report = _assert_canonical_json(run_dir / "report.json")
     manifest = _assert_canonical_json(run_dir / "manifest.json")
-    assert report["result"]["status"] == "succeeded"
+    assert report["result"] == {
+        "status": "failed",
+        "diagnostics": ["INTERNAL_ERROR"],
+    }
+    assert manifest["result"] == report["result"]
     validate(instance=manifest, schema=load_manifest_schema())
     assert source.name not in captured.err
     assert str(source) not in captured.err
