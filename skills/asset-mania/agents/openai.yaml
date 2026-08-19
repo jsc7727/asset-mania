@@ -1,0 +1,7 @@
+interface:
+  display_name: "Asset Mania"
+  short_description: "Inspect image-to-3D and Blender-to-image workflows safely"
+  default_prompt: "Use $asset-mania to inspect this local asset for workflow readiness."
+
+policy:
+  allow_implicit_invocation: true
