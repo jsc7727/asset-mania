@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 
-**Status:** Proposed for user review
+**Status:** Approved for v0.1 implementation
 
 **Repository:** `jsc7727/asset-mania`
 
@@ -171,10 +171,18 @@ asset-mania/
 ├── CONTRIBUTING.md
 ├── CODE_OF_CONDUCT.md
 ├── SECURITY.md
+├── AGENTS.md
 ├── pyproject.toml
+├── uv.lock
 ├── scripts/
 │   └── check_release.py
-├── src/asset_mania/
+├── packages/
+│   ├── contracts/
+│   │   ├── pyproject.toml
+│   │   └── src/asset_mania_contracts/
+│   └── cli/
+│       ├── pyproject.toml
+│       └── src/asset_mania/
 ├── skills/asset-mania/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml
@@ -185,9 +193,22 @@ asset-mania/
 │       ├── safety-and-licenses.md
 │       └── evals.md
 ├── docs/
+│   ├── README.md
+│   ├── getting-started.md
 │   ├── architecture.md
+│   ├── development.md
+│   ├── concepts/
+│   │   └── run-manifest.md
+│   ├── security-and-privacy.md
 │   ├── research.md
 │   └── roadmap.md
+├── rules/
+│   ├── README.md
+│   ├── index.md
+│   ├── project/
+│   ├── development/
+│   ├── testing/
+│   └── agent/
 ├── tests/
 │   ├── fixtures/
 │   │   └── PROVENANCE.md
@@ -198,6 +219,8 @@ asset-mania/
 ```
 
 There is no skill-local README. The root README owns installation, status, examples, claims, and contribution guidance.
+
+The root `pyproject.toml` defines a `uv` workspace and shared development tooling. `packages/contracts` owns the versioned schema, diagnostic codes, and portable contract types. `packages/cli` owns inspection and command behavior and depends on `asset-mania-contracts` through a workspace source. The skill invokes the installed CLI rather than duplicating its implementation. Future local or cloud providers become additional workspace packages without coupling the v0.1 CLI to their dependencies.
 
 v0.1 supports CPython 3.11 through 3.13 on macOS 14 or newer and Ubuntu 22.04/24.04. Blender is optional because v0.1 reads only the portable file header; an absent executable is reported as a future capability limitation, not an inspection failure. Windows support and deep `bpy` inspection are outside v0.1.
 
