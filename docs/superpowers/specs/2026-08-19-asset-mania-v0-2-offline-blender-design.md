@@ -523,9 +523,11 @@ Allowed source hosts are exactly `developers.openai.com` and `platform.openai.co
 
 Rows are canonical in quality order `low`, `medium`, `high`, then size order `1024x1024`,
 `1024x1536`, `1536x1024`; duplicate or reordered semantic rows are rejected by the builder. Decimal
-strings use exactly six fractional digits. The concrete numbers are evidence data and must match the
-fresh official source parser; a later price change creates a new evidence digest and invalidates old
-plans rather than changing an existing artifact.
+strings match `^(0|[1-9][0-9]*)\.[0-9]{6}$`. The concrete numbers shown above are the design-date
+example, not JSON Schema constants: only keys, currency/mode, row identities/order, and decimal
+format are schema constants. Values must match the fresh official source parser; a later price
+change creates a new evidence digest and invalidates old plans rather than changing the schema or an
+existing artifact.
 
 #### `provider-plan-v1`
 
@@ -560,12 +562,31 @@ URLs, "retrieved_at": timestamp, "expires_at": timestamp, "content_digest": sha2
 "abuse_monitoring_days": 30, "zdr": "eligible_with_approval", "csam_review_exception": true,
 "effective_region": nonempty string | "unknown" }`.
 
-`cost_estimate` is `{ "currency": "USD", "rate_retrieved_at": timestamp, "rate_digest": sha256,
-"text_input_tokens": nonnegative integer, "image_input_tokens": nonnegative integer,
-"output_tokens": nonnegative integer, "n": 1, "size": control size,
-"quality": control quality, "estimated_cost": nonnegative decimal string, "maximum_cost": positive
-decimal string }`. `expected_view` fixes output count, dimensions, format, origin `generated`, and
-declared-alignment issuer `provider`.
+`cost_estimate` is exactly `{ "currency": "USD", "rate_retrieved_at": timestamp,
+"rate_digest": sha256, "text_input_tokens_assumed": nonnegative integer,
+"image_input_tokens_assumed": nonnegative integer, "cached_text_input_tokens_assumed": 0,
+"cached_image_input_tokens_assumed": 0, "n": 1, "size": control size,
+"quality": control quality, "formula": "uncached_inputs_plus_published_output_row_v1",
+"rounding": "ceiling_6_decimal_places", "estimate_uncertainty": "input_tokens_assumed",
+"estimated_cost": six-decimal nonnegative string, "maximum_cost": six-decimal positive string }`.
+`expected_view` fixes output count, dimensions, format, origin `generated`, and declared-alignment
+issuer `provider`.
+
+The preflight formula uses exact decimal arithmetic:
+
+```text
+input = text_input_tokens_assumed * text_input_rate / 1_000_000
+      + image_input_tokens_assumed * image_input_rate / 1_000_000
+output = the one published output_cost_rows USD value for (quality, size) * n
+estimated_cost = ceil_to_0.000001(input + output)
+```
+
+Cached assumptions are fixed to zero, so cached rates are recorded for evidence completeness but
+never used or double-counted in this profile. The `image_output` token rate is likewise recorded and
+used only to audit returned provider usage; the published size/quality output-cost row is the sole
+preflight output authority. `maximum_cost` must be at least `estimated_cost` and is an approval-bound
+ceiling over stated assumptions, not a guarantee of the provider's eventual bill. Returned token
+usage and actual cost are recorded separately after the one permitted call.
 
 #### `approval-receipt-v1`
 

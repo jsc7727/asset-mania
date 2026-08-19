@@ -548,6 +548,10 @@ CLI wheel has no runtime dependency on it even though the root development works
 - [ ] Parse only the official standard token rates and published size/quality output-cost rows into a
   versioned estimator table. Reject missing/duplicate/unit-changed rows and never depend on an
   interactive calculator or an invented arbitrary-dimension formula.
+- [ ] Treat pricing values as dynamic six-decimal evidence, not schema constants. Test the exact
+  uncached-input-token plus published output-row decimal formula, cached assumptions fixed to zero,
+  output-token rate excluded from preflight, ceiling-to-six-decimals rounding, maximum >= estimate,
+  and actual usage/cost stored separately without double counting.
 - [ ] Fix executable evidence TTL at 24 hours. Test fail-closed `PROVIDER_EVIDENCE_STALE` before
   credential access and prove there is no implicit refresh. Implement the explicit
   `provider evidence refresh openai` command separately with an official-host allowlist and a new
