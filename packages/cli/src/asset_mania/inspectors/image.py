@@ -42,7 +42,7 @@ def inspect_image(path: Path) -> tuple[dict[str, object], list[DiagnosticCode]]:
                 else []
             )
             return report, diagnostics
-    except (OSError, SyntaxError, UnidentifiedImageError, ValueError):
+    except (Image.DecompressionBombError, OSError, SyntaxError, UnidentifiedImageError, ValueError):
         return {}, [DiagnosticCode.INPUT_UNREADABLE]
 
 

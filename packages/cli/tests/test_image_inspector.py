@@ -92,9 +92,38 @@ def test_inspect_image_detects_palette_transparency_as_alpha(tmp_path: Path) -> 
     assert source.name not in json.dumps(report)
 
 
+def test_inspect_image_sanitizes_decompression_bomb_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "private-oversized-image.png"
+    Image.new("RGB", (8, 6)).save(source)
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1)
+
+    report, diagnostics = inspect_image(source)
+
+    assert report == {}
+    assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
+    assert source.name not in json.dumps(report)
+
+
 def test_inspect_image_sanitizes_corrupt_input_error(tmp_path: Path) -> None:
     source = tmp_path / "private-corrupt-image.png"
     source.write_bytes(b"not a PNG")
+
+    report, diagnostics = inspect_image(source)
+
+    assert report == {}
+    assert diagnostics == [DiagnosticCode.INPUT_UNREADABLE]
+    assert source.name not in json.dumps(report)
+
+
+def test_inspect_image_sanitizes_a_structurally_valid_truncated_png(tmp_path: Path) -> None:
+    source = tmp_path / "private-truncated-image.png"
+    Image.new("RGB", (8, 6)).save(source)
+    source.write_bytes(source.read_bytes()[:-12])
+
+    with Image.open(source) as image:
+        assert image.format == "PNG"
 
     report, diagnostics = inspect_image(source)
 
