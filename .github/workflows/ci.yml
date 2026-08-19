@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            python-version: "3.11"
+          - os: ubuntu-22.04
+            python-version: "3.12"
+          - os: ubuntu-22.04
+            python-version: "3.13"
+          - os: ubuntu-24.04
+            python-version: "3.12"
+          - os: macos-14
+            python-version: "3.12"
+    env:
+      UV_LOCKED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv with lockfile cache
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.10"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Verify lockfile
+        run: uv lock --check
+
+      - name: Sync locked workspace
+        run: uv sync --locked --all-packages --dev
+
+      - name: Check formatting and lint
+        run: make check
+
+      - name: Run tests
+        run: make test
+
+      - name: Validate distributed Skill
+        run: make skill-check
+
+      - name: Check release contents
+        run: make release-check

@@ -1,0 +1,215 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+CHECKER = ROOT / "scripts" / "check_release.py"
+
+from scripts.check_release import Finding, check_release, main
+
+
+def _git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+def _write(root: Path, relative: str, content: str | bytes) -> Path:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+    else:
+        path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _clean_tree(tmp_path: Path) -> Path:
+    _write(tmp_path, ".gitignore", ".asset-mania/\n.cache/\n")
+    _write(tmp_path, "README.md", "# Example\n\n[Guide](docs/guide.md)\n")
+    _write(tmp_path, "docs/guide.md", "# Guide\n")
+    _write(tmp_path, "THIRD_PARTY_NOTICES.md", "# Third-Party Notices\n\nNone.\n")
+    _write(
+        tmp_path,
+        "tests/fixtures/PROVENANCE.md",
+        "# Fixture provenance\n\nBinary fixtures are generated at test runtime.\n",
+    )
+    schema = '{"$schema":"https://json-schema.org/draft/2020-12/schema"}\n'
+    _write(
+        tmp_path,
+        "packages/contracts/src/asset_mania_contracts/schema/manifest-v1.schema.json",
+        schema,
+    )
+    _write(
+        tmp_path,
+        "skills/asset-mania/references/manifest-v1.schema.json",
+        schema,
+    )
+    _git(tmp_path, "init", "--quiet")
+    _git(tmp_path, "add", ".")
+    return tmp_path
+
+
+def _track(root: Path, relative: str, content: str | bytes) -> None:
+    _write(root, relative, content)
+    _git(root, "add", "--force", "--", relative)
+
+
+def _findings_with_code(root: Path, code: str) -> list[Finding]:
+    return [finding for finding in check_release(root) if finding.code == code]
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        ".env",
+        "private/token.json",
+        "private/cookies.txt",
+        "weights/model.safetensors",
+        ".cache/download.bin",
+    ],
+)
+def test_forbidden_tracked_paths_are_reported(tmp_path: Path, relative: str) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, relative, b"not for publication")
+
+    findings = _findings_with_code(root, "FORBIDDEN_TRACKED_PATH")
+
+    assert [finding.path for finding in findings] == [relative]
+
+
+def test_absolute_home_string_is_reported_without_echoing_it(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    private_path = str(Path.home() / "private-source.png")
+    _track(root, "notes.txt", f"local source: {private_path}\n")
+
+    findings = _findings_with_code(root, "ABSOLUTE_HOME_PATH")
+
+    assert findings == [
+        Finding(
+            code="ABSOLUTE_HOME_PATH",
+            path="notes.txt",
+            message="tracked text contains an absolute home path",
+        )
+    ]
+    assert private_path not in findings[0].message
+
+
+@pytest.mark.parametrize("name", ["api_" + "token", "session_" + "cookie"])
+def test_secret_like_assignments_are_reported_without_echoing_values(
+    tmp_path: Path, name: str
+) -> None:
+    root = _clean_tree(tmp_path)
+    secret = "Ab9_" * 8
+    _track(root, "settings.txt", f"{name}={secret}\n")
+
+    findings = _findings_with_code(root, "COMMON_SECRET_PATTERN")
+
+    assert [finding.path for finding in findings] == ["settings.txt"]
+    assert secret not in findings[0].message
+
+
+@pytest.mark.parametrize("suffix", [".png", ".bin"])
+def test_binary_fixture_requires_a_provenance_entry(tmp_path: Path, suffix: str) -> None:
+    root = _clean_tree(tmp_path)
+    relative = f"tests/fixtures/example{suffix}"
+    _track(root, relative, b"\x00synthetic binary")
+
+    findings = _findings_with_code(root, "FIXTURE_PROVENANCE_MISSING")
+
+    assert [finding.path for finding in findings] == [relative]
+
+
+def test_third_party_file_requires_a_notice_entry(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, "third_party/example.py", "VALUE = 1\n")
+
+    findings = _findings_with_code(root, "THIRD_PARTY_NOTICE_MISSING")
+
+    assert [finding.path for finding in findings] == ["third_party/example.py"]
+
+
+def test_broken_relative_markdown_link_is_reported(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, "docs/broken.md", "[Missing](missing-page.md)\n")
+
+    findings = _findings_with_code(root, "MARKDOWN_LINK_BROKEN")
+
+    assert [finding.path for finding in findings] == ["docs/broken.md"]
+
+
+def test_skill_schema_must_match_the_contract_schema(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    _track(
+        root,
+        "skills/asset-mania/references/manifest-v1.schema.json",
+        '{"title":"stale copy"}\n',
+    )
+
+    findings = _findings_with_code(root, "SKILL_SCHEMA_MISMATCH")
+
+    assert [finding.path for finding in findings] == [
+        "skills/asset-mania/references/manifest-v1.schema.json"
+    ]
+
+
+def test_minimal_clean_tree_has_no_findings(tmp_path: Path) -> None:
+    assert check_release(_clean_tree(tmp_path)) == []
+
+
+def test_checker_does_not_match_its_own_home_path_pattern(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, "scripts/check_release.py", CHECKER.read_text(encoding="utf-8"))
+
+    assert _findings_with_code(root, "ABSOLUTE_HOME_PATH") == []
+
+
+def test_ignored_run_outputs_and_external_symlink_targets_are_not_opened(tmp_path: Path) -> None:
+    root = _clean_tree(tmp_path)
+    _write(root, ".asset-mania/report.md", "[Missing](private-file.md)\n")
+    external = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+    external.write_text(str(Path.home() / "private-source.png"), encoding="utf-8")
+    linked = root / "linked-private.txt"
+    linked.symlink_to(external)
+    _git(root, "add", "linked-private.txt")
+    try:
+        assert check_release(root) == []
+    finally:
+        external.unlink()
+
+
+def test_command_prints_sorted_findings_and_returns_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, "z-token.json", b"private")
+    _track(root, "a.env", b"private")
+
+    exit_code = main([os.fspath(root)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == ""
+    assert captured.out.splitlines() == sorted(captured.out.splitlines())
+    assert captured.out.splitlines() == [
+        "FORBIDDEN_TRACKED_PATH a.env: tracked release path is forbidden",
+        "FORBIDDEN_TRACKED_PATH z-token.json: tracked release path is forbidden",
+    ]
+
+
+def test_command_is_silent_and_returns_zero_for_a_clean_tree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main([os.fspath(_clean_tree(tmp_path))])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == ""
+    assert captured.err == ""

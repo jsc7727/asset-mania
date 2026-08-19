@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a scoped, safety-conscious improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user outcome and safety boundaries without attaching private assets. Asset
+        Mania v0.1 is an offline inspection and planning foundation; generation, uploads, model
+        downloads, Blender execution, paid compute, and cloud providers are not implied.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should be solved, and who encounters it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe observable inputs, outputs, diagnostics, and failure behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Primary area
+      options:
+        - Offline inspection
+        - Portable manifest or report
+        - Agent Skill
+        - Documentation
+        - Future workflow research
+        - Release tooling
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Privacy, licensing, and external-action impact
+      description: Explain data handling, source mutation, network, model, provider, cost, and license implications.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I did not attach private assets, real-person imagery, credentials, weights, datasets, or run outputs.
+          required: true
+        - label: I understand that external uploads, downloads, paid actions, and provider use require explicit design and approval gates.
+          required: true

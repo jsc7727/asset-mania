@@ -1,8 +1,7 @@
 # Asset Mania
 
-> **Pre-alpha — implementation in progress.** Asset Mania is not ready to install or run yet.
-> The initial release is being built as an offline inspection and planning foundation; this
-> repository currently has no executable CLI quickstart.
+> **Pre-alpha.** Asset Mania provides a working offline inspection and planning foundation. It
+> does not generate images or 3D assets yet.
 
 Asset Mania is an open-source Agent Skill and CLI project for two future, connected workflows:
 turning an image into an editable 3D asset, and using a Blender scene to guide image generation.
@@ -13,19 +12,40 @@ boundary—not a claim that generation already works.
 
 | Capability | v0.1 target |
 | --- | --- |
-| Offline image and .blend inspection | In development |
-| Versioned manifest and report | In development |
+| Offline image and .blend inspection | Available |
+| Versioned manifest and report | Available |
 | Image to 3D generation | Planned |
 | Blender scene to GPT Image | Planned |
 | Face/head reconstruction | Research |
 | Asset Mania Cloud | Later |
 
-The planned `inspect` contract accepts a local image or `.blend` input, records only portable
-metadata and hashes, and writes a new run directory. It will not alter the input, upload it,
-invoke Blender, download a model, or perform generation. Its intended flags and stream/exit
-contract are documented in [Getting started](docs/getting-started.md) and
-[Run manifests](docs/concepts/run-manifest.md); they are design targets, not runnable commands
-at this stage.
+The `inspect` command accepts a local PNG, JPEG, WebP, or `.blend` header input, records only
+portable allowlisted metadata and hashes, and writes a new run directory. It does not alter or
+embed the input, upload it, invoke Blender, download a model, or perform generation.
+
+## Verified quickstart
+
+Install [uv](https://docs.astral.sh/uv/), clone the repository, and run `make setup`. The commands
+below create a synthetic 8 x 6 PNG outside the repository and inspect it with the real CLI:
+
+```console
+$ uv run python -c 'from PIL import Image; Image.new("RGBA", (8, 6), (20, 40, 60, 80)).save("/tmp/asset-mania-example.png")'
+$ uv run asset-mania inspect /tmp/asset-mania-example.png --out /tmp/asset-mania-runs --format text
+Asset Mania inspection: succeeded
+Workflow: image-to-3d
+Kind: object
+Input: input-1
+Media type: image/png
+SHA-256: 04efed53ff617ce02ad91b51461b5f0130eec0c36c1fef9f10f79486c957f81a
+Diagnostics: WORKFLOW_NOT_IMPLEMENTED
+Warnings: none
+```
+
+`WORKFLOW_NOT_IMPLEMENTED` is expected: inspection succeeded, while image-to-3D generation
+remains planned. Each invocation creates a new child directory under the selected output parent
+with canonical `manifest.json` and `report.json` files and an empty `logs/` directory. See
+[Getting started](docs/getting-started.md) for flags and [Run manifests](docs/concepts/run-manifest.md)
+for the stream and exit-code contract.
 
 ## Project guide
 

@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible Asset Mania defect using synthetic, privacy-safe evidence.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Use a tiny synthetic input when possible. Do not attach
+        private source assets, real-person imagery, credentials, cookies, tokens, model weights,
+        run directories, or logs containing absolute paths. Report security or privacy exposure
+        through the private route in SECURITY.md instead of this public form.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the released version or commit SHA that you tested.
+      placeholder: 0.1.0 or a full commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Provide the operating system, architecture, Python version, and uv version.
+      placeholder: Ubuntu 24.04, x86_64, Python 3.12, uv 0.8.10
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Privacy-safe reproduction
+      description: List minimal steps using a synthetic input and redact local paths.
+      placeholder: |
+        1. Create a synthetic 8 x 6 PNG.
+        2. Run the inspect command with a temporary output directory.
+        3. Observe the sanitized diagnostic shown below.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include only stable diagnostic codes and redacted text, not source files or runs.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-report safety
+      options:
+        - label: I used synthetic data and removed private paths, metadata, credentials, and identifiers.
+          required: true
+        - label: This report does not include a source asset, run directory, model weight, or dataset.
+          required: true
+        - label: This is not a vulnerability or suspected privacy exposure requiring private reporting.
+          required: true
