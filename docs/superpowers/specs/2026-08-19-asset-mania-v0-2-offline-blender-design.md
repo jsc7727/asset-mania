@@ -425,15 +425,107 @@ armature/nullable action labels plus `selection_digest`), `asset_kind`, `subject
 `expected_artifact_roles` in stable order, `overwrite_policy: create_only`, and `plan_sha256`.
 `render_profile` contains every binding table value rather than relying on Blender defaults.
 
+`selection` is exactly `{ "camera_label": portable label, "target_label": portable label,
+"armature_label": portable label | null, "action_label": portable label | null,
+"selection_digest": sha256 }`. `expected_artifact_roles` is the ordered list
+`conditioning_bundle`, `beauty_exr`, `beauty_preview`, `depth_exr`, `depth_preview`, `normal_exr`,
+`normal_preview`, `object_index_exr`, `mask_png`, `scene_state_blend`.
+
+`render_profile` is exactly:
+
+```json
+{
+  "profile_id": "blender-5.2.0-cpu-v1",
+  "blender_version": "5.2.0",
+  "engine": "CYCLES",
+  "device": "CPU",
+  "threads": 1,
+  "samples": 16,
+  "seed": 0,
+  "adaptive_sampling": false,
+  "denoise": false,
+  "animated_seed": false,
+  "motion_blur": false,
+  "depth_of_field": false,
+  "render_border": false,
+  "crop_to_border": false,
+  "film_transparent": true,
+  "pixel_aspect": [1.0, 1.0],
+  "working_color_space": "scene_linear",
+  "preview_color_space": "srgb",
+  "target_object_index": 1,
+  "pass_alpha_threshold": 0.5,
+  "atlas_size": [1024, 1024],
+  "bake_margin": 16,
+  "color_padding": 8,
+  "minimum_coverage": 0.15,
+  "depth_absolute_tolerance_meters": 0.0001,
+  "depth_relative_tolerance": 0.0002,
+  "ray_epsilon_scale": 0.0000001,
+  "ray_epsilon_min_meters": 0.0000001,
+  "ray_epsilon_max_meters": 0.001,
+  "matrix_decimal_places": 9,
+  "worker_timeout_seconds": 300,
+  "worker_response_max_bytes": 1048576,
+  "dependency_policy": "packed_only",
+  "unknown_texels": "transparent",
+  "animation_profile": "selected_action_range_or_none"
+}
+```
+
+The fixture workflow changes top-level resolution to `[64,64]`; its render profile changes only
+`profile_id` to `blender-5.2.0-cpu-v1-fixture`, atlas size to `[64,64]`, bake margin to `2`, color
+padding to `1`, and minimum coverage to `0.25`. All other keys and values remain identical.
+
 #### `provider-evidence-v1`
 
 Required fields are: `schema_id: asset-mania/provider-evidence`, `schema_version: 1.0`,
-`provider: openai`, nonempty sorted official HTTPS `source_urls`, `retrieved_at`, `expires_at` exactly
-24 hours later, `content_digest`, the complete data-policy record below, `pricing` with currency,
-text/cached-text/image/cached-image/output token rates as nonnegative decimal strings per one million
-tokens, pricing retrieval timestamp/digest, and `evidence_sha256`. This command's manifest records
-the explicit network action; the evidence file contains no credential or account usage.
+`provider: openai`, `model_snapshot: gpt-image-2-2026-04-21`, URL-sorted `sources`, aggregate
+`retrieved_at`, `expires_at` exactly 24 hours later, aggregate `content_digest`, `data_policy`,
+`pricing`, and `evidence_sha256`. This command's manifest records the explicit network action; the
+evidence file contains no credential or account usage.
 Allowed source hosts are exactly `developers.openai.com` and `platform.openai.com` in this profile.
+
+`sources` is a URL-sorted array of `{ "url": exact HTTPS URL, "retrieved_at": timestamp,
+"content_sha256": sha256, "parser_profile": "openai-gpt-image-2-v1" }`. `data_policy` is exactly
+`{ "training_default": "not_used_unless_opted_in", "application_state": "none",
+"abuse_monitoring_days": 30, "zdr": "eligible_with_approval", "csam_review_exception": true,
+"effective_region": "unknown" | documented region }`.
+
+`pricing` is exactly:
+
+```json
+{
+  "currency": "USD",
+  "rate_mode": "standard",
+  "per_million_tokens": {
+    "text_input": "5.000000",
+    "cached_text_input": "1.250000",
+    "image_input": "8.000000",
+    "cached_image_input": "2.000000",
+    "image_output": "30.000000"
+  },
+  "output_cost_rows": [
+    {"quality": "low", "size": "1024x1024", "usd": "0.006000"},
+    {"quality": "low", "size": "1024x1536", "usd": "0.005000"},
+    {"quality": "low", "size": "1536x1024", "usd": "0.005000"},
+    {"quality": "medium", "size": "1024x1024", "usd": "0.053000"},
+    {"quality": "medium", "size": "1024x1536", "usd": "0.041000"},
+    {"quality": "medium", "size": "1536x1024", "usd": "0.041000"},
+    {"quality": "high", "size": "1024x1024", "usd": "0.211000"},
+    {"quality": "high", "size": "1024x1536", "usd": "0.165000"},
+    {"quality": "high", "size": "1536x1024", "usd": "0.165000"}
+  ],
+  "retrieved_at": "RFC3339 UTC timestamp",
+  "content_sha256": "pricing-page sha256"
+}
+```
+
+Rows are canonical in quality order `low`, `medium`, `high`, then size order `1024x1024`,
+`1024x1536`, `1536x1024`; duplicate or reordered semantic rows are rejected by the builder. Decimal
+strings use exactly six fractional digits. The concrete numbers are evidence data and must match the
+fresh official source parser; a later price change creates a new evidence digest and invalidates old
+plans rather than changing an existing artifact.
 
 #### `provider-plan-v1`
 
@@ -444,6 +536,14 @@ Required fields are: `schema_id: asset-mania/provider-plan`, `schema_version: 1.
 eligibility; optional API `mask` is absent), `prompt_sha256`, closed `controls`,
 `subject`, `policy_evidence`, `cost_estimate`, `expected_view`, `required_gates` in gate order,
 `overwrite_policy: create_only`, and `plan_sha256`.
+
+Each attachment is `{ "role": fixed role, "multipart_field": "image[]", "index": 0..3,
+"sha256": sha256, "byte_size": positive integer, "media_type": "image/png",
+"upload_eligible": true }`. `expected_view` is `{ "count": 1, "width": positive integer,
+"height": positive integer, "media_type": "image/png" | "image/jpeg" | "image/webp",
+"origin": "generated", "alignment_issuer": "provider" }` and must match controls. Required gates
+are `["external_egress","paid_compute"]` for non-person/synthetic input and
+`["face_rights","external_egress","paid_compute"]` for real-person input; unknown is invalid.
 
 `controls` is `{ "n": 1, "size": "WIDTHxHEIGHT", "quality": "low" | "medium" | "high",
 "background": "auto" | "opaque", "output_format": "png" |
@@ -484,6 +584,43 @@ camera projection/lens/sensor/shift/clip fields, scene unit scale, depth semanti
 space/channel convention, mask/index semantics, complete binding render profile, Blender fingerprint,
 and pass artifacts ordered beauty/depth/normal/object-index/mask with relative paths and hashes.
 
+The closed nested shapes are:
+
+- `digests`: `{ "source_scene": sha256, "evaluated_geometry": sha256, "uv": sha256,
+  "pose": sha256 }`.
+- `selection`: the same portable-label object as workflow-plan v1, without private identifiers.
+- `axes`: `{ "world": { "handedness": "right", "up": "+Z", "forward": "-Y" },
+  "camera": { "right": "+X", "up": "+Y", "view": "-Z" } }`.
+- `matrices`: `{ "layout": "row_major", "camera_to_world": 16 finite numbers,
+  "world_to_camera": 16 finite numbers, "projection": 16 finite numbers,
+  "world_to_clip": 16 finite numbers }`, quantized to the profile decimals.
+- `camera`: `{ "projection_type": "perspective" | "orthographic", "lens_mm": positive number |
+  null, "sensor_fit": "AUTO" | "HORIZONTAL" | "VERTICAL", "sensor_width_mm": positive number,
+  "sensor_height_mm": positive number, "shift_x": finite number, "shift_y": finite number,
+  "clip_start_meters": positive number, "clip_end_meters": greater number, "ortho_scale": positive
+  number | null }`; lens is required only for perspective and ortho scale only for orthographic.
+- `depth`: `{ "space": "camera_euclidean_distance", "unit": "meters",
+  "background": "invalid_by_mask", "valid_min_meters": nonnegative finite number,
+  "valid_max_meters": greater finite number }`.
+- `normal`: `{ "space": "world", "channels": ["x","y","z"],
+  "encoding": "float32_linear", "foreground_unit_expected": true }`.
+- `mask`: `{ "target_object_index": 1, "foreground": 255, "background": 0,
+  "pass_alpha_threshold": 0.5, "antialiasing": "none" }`.
+- `blender`: `{ "profile": profile ID, "version": "5.2.0", "build_hash": nonempty ASCII,
+  "executable_sha256": sha256 }`.
+
+Top-level `frame` is integer, `resolution` is `[width,height]`, `pixel_aspect` is `[1.0,1.0]`,
+`pixel_origin` is `top_left`, `scene_unit_scale_meters` is positive, and `render_profile` is the
+exact resolved object above. `passes` is ordered by roles `beauty_exr`, `beauty_preview`,
+`depth_exr`, `depth_preview`, `normal_exr`, `normal_preview`, `object_index_exr`, `mask_png`. Each is
+`{ "role": role, "path": relative_path, "sha256": sha256, "byte_size": nonnegative integer,
+"media_type": exact MIME, "color_space": "scene_linear" | "srgb" | "data",
+"upload_eligible": true }`. The final top-level field is `bundle_sha256`.
+
+Role mappings are fixed: every `_exr` role uses `image/x-exr`; every preview and mask uses
+`image/png`. `beauty_exr` is `scene_linear`; beauty/normal/depth previews are `srgb`; depth/normal/
+object-index EXR and mask PNG are `data`. No other role/MIME/color-space tuple is valid.
+
 #### `view-v1`
 
 Required fields are: `schema_id: asset-mania/view`, `schema_version: 1.0`, `image_sha256`, dimensions,
@@ -492,6 +629,14 @@ Required fields are: `schema_id: asset-mania/view`, `schema_version: 1.0`, `imag
 `alignment: { "transform": "identity", "attestation_sha256": sha256, "issuer": "user" |
 "provider", "status": "declared_unverified" | "verified_fixture" }`, nullable
 `rights_basis_manifest_sha256`, sensitivity, upload eligibility, validation, and `view_sha256`.
+
+The dimension fields are `width` and `height` positive integers. `origin` is `observed`, `generated`,
+or `unknown`; `subject` uses the closed subject enum. `sensitivity` is `user-content` for user input
+and `portable` only for the synthetic fixture; provider output remains `user-content`.
+`upload_eligible` is `false` in v0.2 because this artifact is consumed locally. `validation` is the
+common validation object with profile `view-v1`, status `valid` only for mechanically valid declared
+input, and `semantic_digest` equal to the normalized decoded-pixel digest. Alignment status remains
+`declared_unverified` unless it is the synthetic fiducial fixture.
 
 #### `blender-response-v1`
 
@@ -502,6 +647,31 @@ diagnostics, portable labels, output records ordered by relative path, closed nu
 `response_sha256`. An output record has only role, relative staging path, sha256, byte size, media
 type, and validation. No timestamps, absolute paths, source names, exception strings, or raw logs are
 allowed. Each operation has its own metrics `oneOf`; unknown metrics fail validation.
+
+`portable_labels` is sorted and contains only values matching
+`^(camera|mesh|armature|action|bone)-[1-9][0-9]*$`.
+The metrics `oneOf` shapes are exact, all counts nonnegative integers and all digests sha256:
+
+- preflight: `{ "kind": "preflight", "object_count", "mesh_count", "camera_count",
+  "armature_count", "action_count", "target_vertex_count", "target_triangle_count",
+  "target_uv_layer_count", "target_bone_count", "external_dependency_count",
+  "scene_semantic_digest" }`;
+- condition: `{ "kind": "condition", "width", "height", "foreground_pixel_count",
+  "finite_foreground_depth_count", "interior_unit_normal_count", "projection_max_error_pixels",
+  "geometry_digest", "uv_digest", "pose_digest" }`;
+- bake: `{ "kind": "bake", "atlas_width", "atlas_height", "observed_texel_count",
+  "padded_texel_count", "finite_texel_count", "coverage_ratio", "texture_semantic_digest" }`;
+- export: `{ "kind": "export", "format_count", "mesh_count", "bone_count", "action_count",
+  "camera_count", "material_count", "texture_count", "scene_semantic_digest" }`;
+- validate: `{ "kind": "validate", "profile": nonempty ASCII, "checked_artifact_count",
+  "error_count", "warning_count", "semantic_digest" }`.
+
+Ratios/errors are finite JSON numbers with `coverage_ratio` in `0..1`; projection error is
+nonnegative or null when the non-fixture input has no fiducial oracle. An output record is
+`{ "role": nonempty ASCII, "path": relative_path, "sha256": sha256,
+"byte_size": nonnegative integer, "media_type": valid MIME, "validation": common validation
+object }`. Failed responses have no outputs that claim valid publication; partial outputs are marked
+incomplete.
 
 ### Private worker envelope
 
