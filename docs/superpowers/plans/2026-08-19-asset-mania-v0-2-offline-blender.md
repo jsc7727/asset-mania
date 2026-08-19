@@ -537,14 +537,17 @@ CLI wheel has no runtime dependency on it even though the root development works
   controls to `n`, `size`, `quality`, `background`, `output_format`, `output_compression`, and
   `moderation`; reject transparent background, compression with PNG, `input_fidelity`, invalid
   custom dimensions, `n != 1`, `size=auto`, size unequal to conditioning resolution, conditioning
-  resolution outside GPT Image 2 bounds, compression outside integer `0..100`, and every unknown
-  field before approval.
+  resolution outside `1024x1024`/`1024x1536`/`1536x1024`, compression outside integer `0..100`, and
+  every unknown field before approval. Do not estimate arbitrary custom sizes.
 - [ ] Test the approval disclosure snapshot: official source URLs, retrieval timestamp and
   source-version/digest; default no-training-unless-opt-in; no application state; default 30-day
   abuse-monitoring retention; Zero Data Retention eligibility/approval; potential-CSAM review
   exception; effective region or explicit `unknown`; currency/rate timestamp and text/image input,
   output-token, `n`, size, and quality estimate assumptions. A stale or changed evidence digest must
   invalidate approval.
+- [ ] Parse only the official standard token rates and published size/quality output-cost rows into a
+  versioned estimator table. Reject missing/duplicate/unit-changed rows and never depend on an
+  interactive calculator or an invented arbitrary-dimension formula.
 - [ ] Fix executable evidence TTL at 24 hours. Test fail-closed `PROVIDER_EVIDENCE_STALE` before
   credential access and prove there is no implicit refresh. Implement the explicit
   `provider evidence refresh openai` command separately with an official-host allowlist and a new

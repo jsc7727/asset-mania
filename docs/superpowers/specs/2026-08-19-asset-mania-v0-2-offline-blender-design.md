@@ -448,9 +448,10 @@ eligibility; optional API `mask` is absent), `prompt_sha256`, closed `controls`,
 `controls` is `{ "n": 1, "size": "WIDTHxHEIGHT", "quality": "auto" |
 "low" | "medium" | "high", "background": "auto" | "opaque", "output_format": "png" |
 "jpeg" | "webp", "output_compression": integer 0..100 | null, "moderation": "auto" | "low" }`.
-Size must equal the conditioning bundle resolution. Its edges are at most 3840, divisible by 16,
-aspect ratio at most 3:1, and total pixels 655360..8294400; a conditioning bundle outside those
-limits is rejected before provider planning. Compression is null for PNG and required/allowed only
+Size must equal the conditioning bundle resolution and be one of the official cost-table sizes in
+this estimator profile: `1024x1024`, `1024x1536`, or `1536x1024`. Other API-valid custom sizes are
+not executable because the official docs do not provide a stable arbitrary-dimension token/cost
+formula; they fail before provider planning. Compression is null for PNG and required/allowed only
 for JPEG/WebP.
 
 `policy_evidence` is `{ "artifact_sha256": sha256, "source_urls": nonempty sorted HTTPS official
@@ -890,8 +891,8 @@ snapshot, attachment hashes, prompt hash, closed output controls, policy/pricing
 ceiling, and expected outputs. GPT Image 2 output controls are exactly:
 
 - `n`, fixed to `1` in this single-view profile;
-- `size` as an explicit width/height equal to the conditioning bundle and allowed by the current API
-  contract; `auto` is rejected in this aligned-view profile;
+- `size` as an explicit `1024x1024`, `1024x1536`, or `1536x1024` value equal to the conditioning
+  bundle; `auto` and other custom sizes are rejected in this aligned-view/cost profile;
 - `quality`: `auto`, `low`, `medium`, or `high`;
 - `background`: `auto` or `opaque`; `transparent` is rejected for GPT Image 2;
 - `output_format`: `png`, `jpeg`, or `webp`;
@@ -912,6 +913,11 @@ The estimate record includes currency, timestamped rate basis, text/image input 
 output-token estimate, `n`, size, and quality. Returned token usage and actual/billed cost, when the
 provider exposes them, are recorded separately from the preflight estimate and ceiling. A stale or
 changed policy/pricing evidence digest invalidates approval.
+
+The estimator uses only the size/quality output-cost rows explicitly published in the evidence
+artifact plus documented token rates for declared text/reference-image input assumptions. It never
+scrapes the interactive calculator or invents an arbitrary-size formula. The exact estimator table
+and source digest are approval-bound.
 
 Provider policy/pricing evidence has a 24-hour TTL for an executable paid plan. It is never refreshed
 implicitly. A maintainer or user must run the explicit, networked
