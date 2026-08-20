@@ -1,4 +1,4 @@
-.PHONY: setup check test skill-check release-check license-check
+.PHONY: setup check test skill-check release-check license-check schema-check publication-check
 
 setup:
 	uv sync --locked --all-packages --dev
@@ -18,3 +18,9 @@ release-check:
 
 license-check:
 	uv run python scripts/check_license_boundary.py
+
+schema-check:
+	uv run python scripts/check_schema_distribution.py
+
+publication-check:
+	uv run python scripts/check_publication.py

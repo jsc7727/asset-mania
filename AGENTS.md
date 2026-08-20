@@ -22,5 +22,5 @@ code or documentation.
 ## Valid commands
 
 The repository commands are `make setup`, `make check`, `make test`, `make skill-check`,
-`make release-check`, and `make license-check`. Use only the targets that exist for the task at hand and report their
+`make release-check`, `make license-check`, `make schema-check`, and `make publication-check`. Use only the targets that exist for the task at hand and report their
 results.

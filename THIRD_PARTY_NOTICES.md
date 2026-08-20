@@ -37,6 +37,7 @@ nor their sources. `tools/` records the pinned acquisition metadata each one nee
 | Component | Pinned target | License | Notice and redistribution status |
 | --- | --- | --- | --- |
 | Blender | `5.2.0 LTS` — see `tools/blender-5.2.0.json` | GPL-2.0-or-later (see [blender.org/about/license](https://www.blender.org/about/license/)) | Invoked as a subprocess from a user-supplied install; no binary, library, or Python module is redistributed. |
+| Gitleaks | `8.30.1` — see `tools/gitleaks.json` | MIT | Invoked as a subprocess for secret scanning; not redistributed. |
 | Khronos glTF-Validator | see `tools/gltf-validator.json` | Apache-2.0 (see [KhronosGroup/glTF-Validator](https://github.com/KhronosGroup/glTF-Validator)) | Invoked as a subprocess for export validation; not redistributed. Absent until Task 9 pins a verified release. |
 
 ## Runtime dependency

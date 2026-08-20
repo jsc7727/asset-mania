@@ -59,5 +59,14 @@ jobs:
       - name: Validate distributed Skill
         run: make skill-check
 
+      - name: Verify schema distribution
+        run: make schema-check
+
+      - name: Verify the Apache/GPL boundary
+        run: make license-check
+
+      - name: Verify publication gates
+        run: make publication-check
+
       - name: Check release contents
         run: make release-check
