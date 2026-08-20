@@ -21,6 +21,14 @@ licensed GPL-3.0-or-later rather than Apache-2.0 and is therefore inventoried he
   never appears inside an Apache wheel or sdist;
   `scripts/check_license_boundary.py` fails the build if it does.
 
+## Optional separately distributed component
+
+`packages/provider-openai/` is this repository's own Apache-2.0 code, published as its own
+optional wheel `asset-mania-provider-openai`. The CLI wheel has no runtime dependency on
+it; it is discovered through the `asset_mania.providers` entry point, and the root
+development workspace installs it only to run its fake-transport tests. It adds no
+third-party runtime dependency of its own.
+
 ## External tools used but never redistributed
 
 Asset Mania invokes these tools as separate processes and bundles neither their binaries
