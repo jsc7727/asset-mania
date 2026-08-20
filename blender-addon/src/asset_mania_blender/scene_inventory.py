@@ -483,6 +483,40 @@ def semantic_digest(description: dict) -> str:
 # --- Deep preflight ------------------------------------------------------------
 
 
+def selection_matches_request(
+    request: dict,
+    *,
+    target: bpy.types.Object,
+    camera: bpy.types.Object,
+    rig: bpy.types.Object | None,
+) -> bool:
+    """Recompute the salted selection digest against the file that was actually opened.
+
+    Every stage that opens a source must call this, not just preflight: a plan whose labels
+    or private identity were edited after approval must fail with `PLAN_TAMPERED` before any
+    artifact is produced. A request that carries no salt or portable selection is not
+    plan-bound and is accepted as-is.
+    """
+    salt_hex = request.get("selection_salt")
+    portable_selection = request.get("portable_selection")
+    if not salt_hex or not portable_selection:
+        return True
+
+    from .selection import verify_selection
+
+    identity = {
+        "source_scene_sha256": request.get("source_scene_sha256", ""),
+        "camera": camera.name,
+        "target": target.name,
+        "target_type": target.type,
+        "armature": rig.name if rig is not None else None,
+        "action": request.get("action_name"),
+    }
+    return verify_selection(
+        salt_hex=str(salt_hex), identity=identity, portable_selection=portable_selection
+    )
+
+
 def preflight(request: dict) -> tuple[dict | None, list[str], dict]:
     """Run every closed-profile check and return metrics, diagnostics, and labels.
 
@@ -530,23 +564,8 @@ def preflight(request: dict) -> tuple[dict | None, list[str], dict]:
     if diagnostics or target is None or camera is None:
         return None, sorted(diagnostics), {"portable_labels": portable_labels}
 
-    salt_hex = request.get("selection_salt")
-    portable_selection = request.get("portable_selection")
-    if salt_hex and portable_selection:
-        from .selection import verify_selection
-
-        identity = {
-            "source_scene_sha256": request.get("source_scene_sha256", ""),
-            "camera": camera.name,
-            "target": target.name,
-            "target_type": target.type,
-            "armature": rig.name if rig is not None else None,
-            "action": request.get("action_name"),
-        }
-        if not verify_selection(
-            salt_hex=str(salt_hex), identity=identity, portable_selection=portable_selection
-        ):
-            return None, [PLAN_TAMPERED], {"portable_labels": portable_labels}
+    if not selection_matches_request(request, target=target, camera=camera, rig=rig):
+        return None, [PLAN_TAMPERED], {"portable_labels": portable_labels}
 
     description = scene_semantic_description(
         label_maps=label_maps, target=target, camera=camera, rig=rig

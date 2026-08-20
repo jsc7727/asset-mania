@@ -373,3 +373,207 @@ def test_real_person_requires_a_plan_bound_face_rights_receipt() -> None:
         require_rights_receipt(subject="real_person", receipt=receipt, plan_sha256=PLAN, now=NOW)
         == receipt
     )
+
+
+# --- Conditioning authorization, before any worker is launched ----------------
+
+
+def test_a_non_person_run_is_authorized_without_a_receipt(tmp_path: Path) -> None:
+    from asset_mania_pipeline import authorize_conditioning
+
+    journal = ConsumptionJournal(tmp_path / "approvals")
+    assert (
+        authorize_conditioning(
+            subject="non_person",
+            plan_sha256=PLAN,
+            receipt=None,
+            journal=journal,
+            now=NOW,
+        )
+        is None
+    )
+    assert not (tmp_path / "approvals").exists()
+
+
+def test_an_undeclared_subject_fails_before_the_receipt_is_examined(tmp_path: Path) -> None:
+    from asset_mania_pipeline import authorize_conditioning
+
+    class RefusingJournal:
+        def consume(self, *args, **kwargs):
+            raise AssertionError("the receipt must not be examined for an unknown subject")
+
+    with pytest.raises(SubjectDeclarationRequired, match="SUBJECT_DECLARATION_REQUIRED"):
+        authorize_conditioning(
+            subject="unknown",
+            plan_sha256=PLAN,
+            receipt=_receipt("face_rights"),
+            journal=RefusingJournal(),
+            consumption_id="consumption-1",
+            consumed_at="2026-08-19T09:40:00Z",
+            now=NOW,
+        )
+
+
+def test_a_real_person_run_without_a_receipt_is_refused(tmp_path: Path) -> None:
+    from asset_mania_pipeline import authorize_conditioning
+
+    with pytest.raises(ApprovalRejected, match="FACE_RIGHTS_CONFIRMATION_REQUIRED"):
+        authorize_conditioning(
+            subject="real_person",
+            plan_sha256=PLAN,
+            receipt=None,
+            journal=ConsumptionJournal(tmp_path / "approvals"),
+            consumption_id="consumption-1",
+            consumed_at="2026-08-19T09:40:00Z",
+            now=NOW,
+        )
+
+
+def test_a_real_person_run_consumes_its_receipt_atomically(tmp_path: Path) -> None:
+    from asset_mania_pipeline import authorize_conditioning
+
+    journal = ConsumptionJournal(tmp_path / "approvals")
+    receipt = _receipt("face_rights")
+    record = authorize_conditioning(
+        subject="real_person",
+        plan_sha256=PLAN,
+        receipt=receipt,
+        journal=journal,
+        consumption_id="consumption-face-rights-1",
+        consumed_at="2026-08-19T09:40:00Z",
+        now=NOW,
+    )
+    assert record == {
+        "gate": "face_rights",
+        "receipt_sha256": receipt["receipt_sha256"],
+        "consumption_id": "consumption-face-rights-1",
+        "consumed_at": "2026-08-19T09:40:00Z",
+    }
+
+    with pytest.raises(ReceiptAlreadyConsumed):
+        authorize_conditioning(
+            subject="real_person",
+            plan_sha256=PLAN,
+            receipt=receipt,
+            journal=journal,
+            consumption_id="consumption-face-rights-2",
+            consumed_at="2026-08-19T09:41:00Z",
+            now=NOW,
+        )
+
+
+def test_a_real_person_run_needs_a_journal_to_spend_its_receipt() -> None:
+    from asset_mania_pipeline import authorize_conditioning
+
+    with pytest.raises(ApprovalRejected, match="consumption journal"):
+        authorize_conditioning(
+            subject="real_person",
+            plan_sha256=PLAN,
+            receipt=_receipt("face_rights"),
+            journal=None,
+            consumption_id="consumption-1",
+            consumed_at="2026-08-19T09:40:00Z",
+            now=NOW,
+        )
+
+
+def test_a_blocked_authorization_maps_to_the_needs_approval_exit_code() -> None:
+    from asset_mania_contracts import exit_code_for
+
+    assert exit_code_for("needs_approval") == 5
+
+
+def test_a_blocked_subject_never_reaches_the_launcher(tmp_path: Path) -> None:
+    from asset_mania_pipeline import launch_if_authorized
+
+    launched: list[str] = []
+
+    def launch():
+        launched.append("worker")
+        return "response"
+
+    with pytest.raises(SubjectDeclarationRequired):
+        launch_if_authorized(
+            subject="unknown",
+            plan_sha256=PLAN,
+            receipt=None,
+            journal=ConsumptionJournal(tmp_path / "approvals"),
+            now=NOW,
+            launch=launch,
+        )
+    assert launched == []
+
+
+def test_a_real_person_run_without_a_receipt_never_reaches_the_launcher(
+    tmp_path: Path,
+) -> None:
+    from asset_mania_pipeline import launch_if_authorized
+
+    launched: list[str] = []
+    with pytest.raises(ApprovalRejected, match="FACE_RIGHTS_CONFIRMATION_REQUIRED"):
+        launch_if_authorized(
+            subject="real_person",
+            plan_sha256=PLAN,
+            receipt=None,
+            journal=ConsumptionJournal(tmp_path / "approvals"),
+            consumption_id="consumption-1",
+            consumed_at="2026-08-19T09:40:00Z",
+            now=NOW,
+            launch=lambda: launched.append("worker"),
+        )
+    assert launched == []
+
+
+def test_a_wrong_gate_receipt_never_reaches_the_launcher(tmp_path: Path) -> None:
+    from asset_mania_pipeline import launch_if_authorized
+
+    launched: list[str] = []
+    with pytest.raises(ApprovalRejected, match="gate"):
+        launch_if_authorized(
+            subject="real_person",
+            plan_sha256=PLAN,
+            receipt=_receipt("external_egress"),
+            journal=ConsumptionJournal(tmp_path / "approvals"),
+            consumption_id="consumption-1",
+            consumed_at="2026-08-19T09:40:00Z",
+            now=NOW,
+            launch=lambda: launched.append("worker"),
+        )
+    assert launched == []
+
+
+def test_an_authorized_run_reaches_the_launcher_exactly_once(tmp_path: Path) -> None:
+    from asset_mania_pipeline import launch_if_authorized
+
+    launched: list[str] = []
+    record, result = launch_if_authorized(
+        subject="real_person",
+        plan_sha256=PLAN,
+        receipt=_receipt("face_rights"),
+        journal=ConsumptionJournal(tmp_path / "approvals"),
+        consumption_id="consumption-face-rights-1",
+        consumed_at="2026-08-19T09:40:00Z",
+        now=NOW,
+        launch=lambda: (launched.append("worker"), "response")[1],
+    )
+    assert launched == ["worker"]
+    assert result == "response"
+    assert record["gate"] == "face_rights"
+
+
+def test_a_non_person_run_reaches_the_launcher_without_a_journal_write(
+    tmp_path: Path,
+) -> None:
+    from asset_mania_pipeline import launch_if_authorized
+
+    record, result = launch_if_authorized(
+        subject="non_person",
+        plan_sha256=PLAN,
+        receipt=None,
+        journal=ConsumptionJournal(tmp_path / "approvals"),
+        now=NOW,
+        launch=lambda: "response",
+    )
+    assert record is None
+    assert result == "response"
+    assert not (tmp_path / "approvals").exists()

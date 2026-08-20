@@ -221,9 +221,11 @@ def _build_camera() -> bpy.types.Object:
     camera_data.dof.use_dof = False
 
     camera = bpy.data.objects.new(CAMERA_NAME, camera_data)
-    camera.location = Vector((1.5, -7.0, 1.4))
+    # Looking straight down at the ribbon's footprint, so the target covers a usable share
+    # of the frame instead of being seen edge-on.
+    camera.location = Vector((1.5, 0.0, 4.6))
     camera.rotation_mode = "XYZ"
-    camera.rotation_euler = Euler((math.radians(84.0), 0.0, 0.0), "XYZ")
+    camera.rotation_euler = Euler((0.0, 0.0, 0.0), "XYZ")
     bpy.context.collection.objects.link(camera)
     bpy.context.scene.camera = camera
     return camera

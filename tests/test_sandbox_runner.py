@@ -6,7 +6,6 @@ because a general-purpose Python interpreter needs far more allowances than the 
 profile grants, which would test the harness instead of the boundary.
 """
 
-import importlib.util
 import platform
 import shutil
 import subprocess
@@ -14,14 +13,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from asset_mania_blender_client import isolation as sandbox
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run_blender_sandboxed.py"
-
-_spec = importlib.util.spec_from_file_location("run_blender_sandboxed", RUNNER)
-assert _spec is not None and _spec.loader is not None
-sandbox = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(sandbox)
 
 IS_MACOS = platform.system() == "Darwin"
 SANDBOX_EXEC = Path("/usr/bin/sandbox-exec")
@@ -288,3 +283,95 @@ def test_network_access_is_denied(enforced) -> None:
     _, _, profile = enforced
     completed = _sandboxed(profile, "/usr/bin/nc -w 3 -z 1.1.1.1 80")
     assert completed.returncode != 0
+
+
+# --- What the macOS backend can and cannot run --------------------------------
+
+
+@requires_macos_sandbox
+def test_blender_boots_and_renders_under_isolation(tree, tmp_path: Path) -> None:
+    """Boot, open, render, and write are all reachable inside the boundary."""
+    blender = Path("/Applications/Blender.app/Contents/MacOS/Blender")
+    if not blender.exists():
+        pytest.skip("the pinned Blender install is unavailable")
+
+    source, staging = tree
+    sys.path.insert(0, str(ROOT / "packages" / "blender-client" / "src"))
+    from asset_mania_blender_client.launcher import build_environment
+
+    script = tmp_path / "stages.py"
+    script.write_text(
+        "import os, sys\n"
+        "import bpy\n"
+        "target = sys.argv[sys.argv.index('--') + 1]\n"
+        "scene = bpy.context.scene\n"
+        "scene.render.engine = 'CYCLES'\n"
+        "scene.cycles.device = 'CPU'\n"
+        "scene.cycles.samples = 1\n"
+        "scene.render.resolution_x = scene.render.resolution_y = 8\n"
+        "bpy.ops.render.render(write_still=False)\n"
+        "print('STAGE rendered')\n"
+        "import numpy, OpenImageIO as oiio\n"
+        "spec = oiio.ImageSpec(2, 2, 1, oiio.FLOAT)\n"
+        "spec.channelnames = ('Y',)\n"
+        "out = oiio.ImageOutput.create(target)\n"
+        "out.open(target, spec)\n"
+        "out.write_image(numpy.zeros((2, 2, 1), dtype=numpy.float32))\n"
+        "out.close()\n"
+        "print('STAGE wrote', os.path.getsize(target))\n",
+        encoding="utf-8",
+    )
+    written = staging / "probe.exr"
+
+    command = sandbox.build_command(
+        backend=sandbox.MACOS_BACKEND,
+        source=source,
+        staging=staging,
+        executable=blender,
+        argv=[
+            "--background",
+            "--factory-startup",
+            "--disable-autoexec",
+            "--offline-mode",
+            "--threads",
+            "1",
+            "--python",
+            str(script),
+            "--",
+            str(written),
+        ],
+    )
+    completed = subprocess.run(
+        command,
+        env=build_environment(staging_root=staging),
+        cwd=staging,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr[-500:]
+    assert "STAGE rendered" in completed.stdout
+    assert "STAGE wrote" in completed.stdout
+    assert written.is_file()
+    assert source.read_text().strip() == "blendbytes"
+
+
+def test_the_macos_backend_documents_its_compositor_limit() -> None:
+    """Recorded limit, measured: the Metal compositor needs writes we will not grant.
+
+    Blender 5.2's compositor is Metal-backed. Rendering with a compositor graph makes the
+    Metal frontend build a shader module and write it into the darwin user cache, outside
+    staging. Granting even a narrow write allowance on exactly that subtree was tried and
+    still fails, because the frontend needs more than a file rule; granting what it wants
+    would mean broad system access, which would void the staging-only write property this
+    profile exists to enforce.
+
+    So an isolated *conditioning* run is the Linux bubblewrap profile's job -- the platform
+    the design already makes authoritative -- and the macOS backend covers every other
+    stage. This test pins the documented statement so the limit cannot be quietly dropped.
+    """
+    documentation = sandbox.build_macos_profile.__doc__
+    assert "does **not** confine reads" in documentation
+    assert sandbox.MACOS_COMPOSITOR_LIMIT
+    assert "Metal" in sandbox.MACOS_COMPOSITOR_LIMIT
+    assert "bubblewrap" in sandbox.MACOS_COMPOSITOR_LIMIT

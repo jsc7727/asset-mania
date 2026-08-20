@@ -9,6 +9,17 @@ from .discover import (
     fingerprint_executable,
 )
 from .envelope import REQUEST_NAME, RESPONSE_NAME, PrivateEnvelope
+from .isolation import (
+    BACKENDS,
+    LINUX_BACKEND,
+    MACOS_BACKEND,
+    MACOS_COMPOSITOR_LIMIT,
+    IsolationUnavailable,
+    build_command,
+    build_macos_profile,
+    detect_backend,
+    install_root,
+)
 from .launcher import (
     DEFAULT_TIMEOUT_SECONDS,
     ENVIRONMENT_KEYS,
@@ -25,10 +36,14 @@ from .redaction import MAX_REDACTED_BYTES, redact
 from .response import MAX_RESPONSE_BYTES, ResponseInvalid, load_response
 
 __all__ = [
+    "BACKENDS",
     "DEFAULT_TIMEOUT_SECONDS",
     "ENVIRONMENT_KEYS",
     "FIXED_PATH",
     "FIXTURE_PROFILE_ID",
+    "LINUX_BACKEND",
+    "MACOS_BACKEND",
+    "MACOS_COMPOSITOR_LIMIT",
     "MAX_REDACTED_BYTES",
     "MAX_RESPONSE_BYTES",
     "PLATFORM_INJECTED_KEYS",
@@ -41,13 +56,18 @@ __all__ = [
     "BlenderFingerprint",
     "BlenderNotFound",
     "BlenderVersionMismatch",
+    "IsolationUnavailable",
     "PrivateEnvelope",
     "ResponseInvalid",
     "WorkerLaunchFailed",
     "build_argv",
+    "build_command",
     "build_environment",
+    "build_macos_profile",
+    "detect_backend",
     "discover_blender",
     "fingerprint_executable",
+    "install_root",
     "launch_worker",
     "load_response",
     "redact",

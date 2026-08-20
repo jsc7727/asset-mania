@@ -5,7 +5,7 @@ provider, or a boolean flag can never stand in for it.
 """
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -197,6 +197,69 @@ def require_subject_declaration(subject: str) -> str:
             f"{_SUBJECT_REQUIRED}: declare non_person, synthetic_person, or real_person"
         )
     return subject
+
+
+def authorize_conditioning(
+    *,
+    subject: str,
+    plan_sha256: str,
+    receipt: Mapping[str, Any] | None,
+    journal: "ConsumptionJournal | None" = None,
+    consumption_id: str | None = None,
+    consumed_at: str | None = None,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Decide whether a conditioning run may open the source at all.
+
+    Everything happens before any worker is launched: an undeclared subject fails before
+    the receipt is even looked at, a `real_person` subject without an exact plan-bound
+    `face_rights` receipt fails, and a valid receipt is consumed atomically here -- so a
+    blocked run never reaches Blender and never spends its receipt twice.
+
+    Returns the consumption record for a `real_person` run, or None when no gate applies.
+    """
+    require_subject_declaration(subject)
+    validated = require_rights_receipt(
+        subject=subject, receipt=receipt, plan_sha256=plan_sha256, now=now
+    )
+    if validated is None:
+        return None
+
+    if journal is None:
+        raise ApprovalRejected("a real_person run needs a consumption journal to spend its receipt")
+    if consumption_id is None or consumed_at is None:
+        raise ApprovalRejected("a consumption record needs an identifier and a timestamp")
+
+    return journal.consume(validated, consumption_id=consumption_id, consumed_at=consumed_at)
+
+
+def launch_if_authorized(
+    *,
+    subject: str,
+    plan_sha256: str,
+    receipt: Mapping[str, Any] | None,
+    journal: "ConsumptionJournal | None" = None,
+    consumption_id: str | None = None,
+    consumed_at: str | None = None,
+    now: datetime,
+    launch: "Callable[[], Any]",
+) -> tuple[dict[str, Any] | None, Any]:
+    """Authorize, then launch. The launcher is unreachable until the gate passes.
+
+    Composing the two here is what makes the ordering testable: a blocked subject or a
+    missing receipt raises before `launch` is ever called, so no worker starts and no
+    source file is opened on a path that was never authorized.
+    """
+    record = authorize_conditioning(
+        subject=subject,
+        plan_sha256=plan_sha256,
+        receipt=receipt,
+        journal=journal,
+        consumption_id=consumption_id,
+        consumed_at=consumed_at,
+        now=now,
+    )
+    return record, launch()
 
 
 def require_rights_receipt(

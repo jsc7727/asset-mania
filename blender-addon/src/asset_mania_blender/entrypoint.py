@@ -133,8 +133,50 @@ def _run_fixture(request: dict) -> dict:
     }
 
 
+def _run_condition(request: dict) -> dict:
+    from . import conditioning, scene_inventory
+
+    request_id = str(request["request_id"])
+    staging_root = str(request["staging_root"])
+
+    try:
+        _open_source(str(request["source_path"]))
+    except (RuntimeError, OSError):
+        return protocol.failure(
+            request_id=request_id, operation="condition", diagnostics=[_BLEND_HEADER_INVALID]
+        )
+
+    scene_inventory.sanitize_write_surfaces(staging_root)
+
+    try:
+        result = conditioning.condition(request)
+    except conditioning.ConditioningFailed as failure:
+        return protocol.failure(
+            request_id=request_id, operation="condition", diagnostics=failure.diagnostics
+        )
+
+    return {
+        "schema_id": protocol.SCHEMA_ID,
+        "schema_version": protocol.SCHEMA_VERSION,
+        "request_id": request_id,
+        "operation": "condition",
+        "status": "succeeded",
+        "diagnostics": [],
+        "portable_labels": sorted(
+            value
+            for key, value in request["portable_selection"].items()
+            if key.endswith("_label") and value
+        ),
+        "outputs": result["outputs"],
+        "metrics": result["metrics"],
+        "response_sha256": "",
+        "_bundle": result["bundle"],
+    }
+
+
 _OPERATIONS = {
     "preflight": _run_preflight,
+    "condition": _run_condition,
     "fixture": _run_fixture,
 }
 

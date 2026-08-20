@@ -117,6 +117,8 @@ def launch_worker(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     environment: Mapping[str, str] | None = None,
     argv: Sequence[str] | None = None,
+    isolation: str | None = None,
+    source_path: Path | None = None,
 ) -> None:
     """Run the worker to completion, revealing nothing it printed.
 
@@ -141,6 +143,22 @@ def launch_worker(
     worker_environment = dict(
         environment if environment is not None else build_environment(staging_root=staging_root)
     )
+
+    if isolation is not None:
+        # Isolation wraps the vector; the environment still comes from this launcher,
+        # because Blender cannot even read its home file if HOME is not writable.
+        from .isolation import build_command, detect_backend
+
+        if source_path is None:
+            raise ValueError("an isolated launch needs the source path to keep it read-only")
+        backend = detect_backend() if isolation == "auto" else isolation
+        vector = build_command(
+            backend=backend,
+            source=source_path,
+            staging=staging_root,
+            executable=Path(vector[0]),
+            argv=vector[1:],
+        )
 
     try:
         completed = subprocess.run(
