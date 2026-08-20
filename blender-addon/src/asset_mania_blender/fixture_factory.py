@@ -65,7 +65,10 @@ def _build_mesh() -> bpy.types.Object:
         vertices.append((x, -half_width, z))
         vertices.append((x, half_width, z))
 
-    faces = [(index, index + 1, index + 3, index + 2) for index in range(0, 6, 2)]
+    # Wound so the face normals point toward +Z, which is where the camera sits. A ribbon
+    # wound the other way still renders, but every texel would be rejected as backfacing
+    # during reprojection.
+    faces = [(index, index + 2, index + 3, index + 1) for index in range(0, 6, 2)]
 
     mesh = bpy.data.meshes.new(f"{TARGET_NAME}_Mesh")
     mesh.from_pydata(vertices, [], faces)
@@ -75,7 +78,7 @@ def _build_mesh() -> bpy.types.Object:
     uv_layer = mesh.uv_layers.new(name="Robot_Strip_UV")
     for face_index, polygon in enumerate(mesh.polygons):
         u_low, u_high, v_low, v_high = _UV_ISLANDS[face_index]
-        corners = ((u_low, v_low), (u_high, v_low), (u_high, v_high), (u_low, v_high))
+        corners = ((u_low, v_low), (u_low, v_high), (u_high, v_high), (u_high, v_low))
         for corner_index, loop_index in enumerate(polygon.loop_indices):
             uv_layer.data[loop_index].uv = corners[corner_index]
 

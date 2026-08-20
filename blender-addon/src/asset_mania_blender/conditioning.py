@@ -280,8 +280,40 @@ def encode_srgb(linear: numpy.ndarray) -> numpy.ndarray:
     return numpy.where(clipped <= 0.0031308, low, high)
 
 
+def euclidean_depth_scale(
+    scene: bpy.types.Scene, camera: bpy.types.Object, width: int, height: int
+) -> numpy.ndarray:
+    """Per-pixel factor converting Cycles' planar Z pass to Euclidean distance.
+
+    Measured, not assumed: Cycles' `Depth` pass records distance along the camera's view
+    axis, not radial distance from the camera origin. The bundle declares
+    `camera_euclidean_distance`, so the pass has to be converted rather than the
+    declaration weakened -- a downstream reprojection compares |camera - point| against
+    this pass, and a planar value is short by 1/cos(angle) toward the frame edges.
+
+    The factor is `|d| / |d.z|` for the camera-space ray `d` through each pixel centre,
+    taken from Blender's own view frame so the lens, sensor fit, and shift are all
+    included.
+    """
+    top_right, bottom_right, bottom_left, top_left = camera.data.view_frame(scene=scene)
+    scale = numpy.empty((height, width), dtype=numpy.float32)
+    for y in range(height):
+        v = (y + 0.5) / height
+        left = top_left.lerp(bottom_left, v)
+        right = top_right.lerp(bottom_right, v)
+        for x in range(width):
+            direction = left.lerp(right, (x + 0.5) / width)
+            axis = abs(direction.z)
+            scale[y, x] = (direction.length / axis) if axis > 0.0 else 1.0
+    return scale
+
+
 def convert_passes(
-    *, containers: dict[str, Path], artifact_directory: Path, depth_range: tuple[float, float]
+    *,
+    containers: dict[str, Path],
+    artifact_directory: Path,
+    depth_range: tuple[float, float],
+    depth_scale: numpy.ndarray,
 ) -> dict[str, dict]:
     """Rewrite every pass as a canonical single-layer artifact plus its preview.
 
@@ -290,7 +322,10 @@ def convert_passes(
     """
     artifact_directory.mkdir(parents=True, exist_ok=True)
     beauty = read_pass(containers["beauty"])
-    depth = read_pass(containers["depth"])[:, :, :1]
+    planar_depth = read_pass(containers["depth"])[:, :, :1]
+    if planar_depth.shape[:2] != depth_scale.shape:
+        raise ConditioningFailed(["PASS_INVALID"])
+    depth = planar_depth * depth_scale[:, :, None]
     normal = read_pass(containers["normal"])[:, :, :3]
     index = read_pass(containers["object-index"])[:, :, :1]
 
@@ -677,6 +712,9 @@ def condition(request: dict) -> dict:
         containers=containers,
         artifact_directory=staging_root / CONDITIONING_DIRECTORY,
         depth_range=depth_range,
+        depth_scale=euclidean_depth_scale(
+            scene, camera_object, scene.render.resolution_x, scene.render.resolution_y
+        ),
     )
 
     camera_data, matrices = camera_record(scene, camera_object)

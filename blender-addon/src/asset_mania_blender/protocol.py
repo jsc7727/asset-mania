@@ -72,6 +72,14 @@ def write_response(path: Path, response: dict) -> None:
         raise
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def failure(*, request_id: str, operation: str, diagnostics: list[str]) -> dict:
     """A closed failure response: stable codes only, no traceback and no raw log."""
     return {

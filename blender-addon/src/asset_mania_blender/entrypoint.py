@@ -174,9 +174,83 @@ def _run_condition(request: dict) -> dict:
     }
 
 
+def _run_bake(request: dict) -> dict:
+    from . import reprojection, scene_inventory
+
+    request_id = str(request["request_id"])
+    staging_root = str(request["staging_root"])
+
+    try:
+        _open_source(str(request["source_path"]))
+    except (RuntimeError, OSError):
+        return protocol.failure(
+            request_id=request_id, operation="bake", diagnostics=[_BLEND_HEADER_INVALID]
+        )
+
+    scene_inventory.sanitize_write_surfaces(staging_root)
+
+    try:
+        result = reprojection.bake(request)
+    except reprojection.ReprojectionFailed as failure:
+        return protocol.failure(
+            request_id=request_id, operation="bake", diagnostics=failure.diagnostics
+        )
+
+    incomplete = bool(result["diagnostics"])
+    outputs = []
+    for relative in result["artifacts"]:
+        path = Path(staging_root) / relative
+        if not path.is_file():
+            return protocol.failure(
+                request_id=request_id, operation="bake", diagnostics=["BAKE_CONTEXT_INVALID"]
+            )
+        outputs.append(
+            {
+                "role": relative.rsplit("/", 1)[-1].replace("-", "_").replace(".", "_"),
+                "path": relative,
+                "sha256": protocol.sha256_file(path),
+                "byte_size": path.stat().st_size,
+                "media_type": _MEDIA_TYPES.get(path.suffix, "application/octet-stream"),
+                "validation": {
+                    "profile": "baked-texture-v1",
+                    # Low coverage keeps its artifacts, marked incomplete; it never
+                    # presents itself as a publishable result.
+                    "status": "incomplete" if incomplete else "valid",
+                    "diagnostics": sorted(result["diagnostics"]),
+                    "semantic_digest": result["metrics"]["texture_semantic_digest"],
+                },
+            }
+        )
+
+    return {
+        "schema_id": protocol.SCHEMA_ID,
+        "schema_version": protocol.SCHEMA_VERSION,
+        "request_id": request_id,
+        "operation": "bake",
+        "status": "failed" if incomplete else "succeeded",
+        "diagnostics": sorted(result["diagnostics"]),
+        "portable_labels": sorted(
+            value
+            for key, value in request["portable_selection"].items()
+            if key.endswith("_label") and value
+        ),
+        "outputs": sorted(outputs, key=lambda item: item["path"]),
+        "metrics": result["metrics"],
+        "response_sha256": "",
+        "_rejected": result["rejected"],
+    }
+
+
+_MEDIA_TYPES = {
+    ".exr": "image/x-exr",
+    ".png": "image/png",
+    ".blend": "application/x-blender",
+}
+
 _OPERATIONS = {
     "preflight": _run_preflight,
     "condition": _run_condition,
+    "bake": _run_bake,
     "fixture": _run_fixture,
 }
 
