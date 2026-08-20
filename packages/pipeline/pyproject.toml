@@ -5,7 +5,10 @@ description = "Immutable stage storage, lineage, plans, and approvals for Asset 
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
-dependencies = ["asset-mania-contracts"]
+dependencies = [
+  "asset-mania-contracts",
+  "Pillow>=11.3,<13",
+]
 
 [tool.uv.sources]
 asset-mania-contracts = { workspace = true }

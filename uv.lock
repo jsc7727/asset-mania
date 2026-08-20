@@ -52,10 +52,14 @@ version = "0.1.0"
 source = { editable = "packages/pipeline" }
 dependencies = [
     { name = "asset-mania-contracts" },
+    { name = "pillow" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "asset-mania-contracts", editable = "packages/contracts" }]
+requires-dist = [
+    { name = "asset-mania-contracts", editable = "packages/contracts" },
+    { name = "pillow", specifier = ">=11.3,<13" },
+]
 
 [[package]]
 name = "asset-mania-workspace"
