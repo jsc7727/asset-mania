@@ -35,11 +35,6 @@ def _tracked() -> list[str]:
 # --- The boundary as it stands -------------------------------------------------
 
 
-def test_the_repository_satisfies_the_boundary() -> None:
-    completed = _run()
-    assert completed.returncode == 0, completed.stdout
-
-
 def _imported_roots(source: str) -> set[str]:
     roots: set[str] = set()
     for node in ast.walk(ast.parse(source)):
@@ -48,6 +43,11 @@ def _imported_roots(source: str) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             roots.add(node.module.split(".")[0])
     return roots
+
+
+def test_the_repository_satisfies_the_boundary() -> None:
+    completed = _run()
+    assert completed.returncode == 0, completed.stdout
 
 
 def test_no_apache_source_imports_a_blender_module() -> None:
@@ -63,20 +63,30 @@ def test_no_apache_source_imports_a_blender_module() -> None:
     assert offenders == []
 
 
+APACHE_PACKAGES = frozenset(
+    {
+        "asset_mania",
+        "asset_mania_contracts",
+        "asset_mania_pipeline",
+        "asset_mania_blender_client",
+        "asset_mania_provider_openai",
+    }
+)
+
+
 def test_the_gpl_tree_imports_no_apache_package() -> None:
-    """Only real imports count; a docstring may explain why the boundary exists."""
+    """Only real imports count, and the GPL tree may import its own package.
+
+    A docstring may name an Apache package to explain the boundary, and
+    `asset_mania_blender_client` shares a prefix with the GPL `asset_mania_blender`, so
+    the check matches exact root names rather than a prefix.
+    """
     offenders = []
     for path in sorted(ADDON.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                names = [node.module or ""]
-            else:
-                continue
-            if any(name.startswith("asset_mania_") for name in names):
-                offenders.append((path.relative_to(ROOT).as_posix(), names))
+        roots = _imported_roots(path.read_text(encoding="utf-8"))
+        forbidden = sorted(roots & APACHE_PACKAGES)
+        if forbidden:
+            offenders.append((path.relative_to(ROOT).as_posix(), forbidden))
     assert offenders == []
 
 

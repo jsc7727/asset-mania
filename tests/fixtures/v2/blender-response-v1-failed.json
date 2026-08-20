@@ -1,0 +1,17 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-preflight-2",
+  "operation": "preflight",
+  "status": "failed",
+  "diagnostics": [
+    "CAMERA_NOT_FOUND",
+    "UV_MISSING_OR_INVALID"
+  ],
+  "portable_labels": [
+    "mesh-1"
+  ],
+  "outputs": [],
+  "metrics": null,
+  "response_sha256": "cbef8c0e43984e5127c38235e602812dfe89ecf9add3b9c0be58e4768522286b"
+}

@@ -21,7 +21,16 @@ ROOT = Path(__file__).resolve().parents[1]
 GPL_TREE = PurePosixPath("blender-addon")
 GPL_SOURCE = GPL_TREE / "src"
 GPL_MODULES = frozenset({"bpy", "mathutils", "bpy_extras", "bmesh", "gpu", "aud"})
-APACHE_PREFIX = "asset_mania_"
+GPL_PACKAGES = frozenset({"asset_mania_blender"})
+APACHE_PACKAGES = frozenset(
+    {
+        "asset_mania",
+        "asset_mania_contracts",
+        "asset_mania_pipeline",
+        "asset_mania_blender_client",
+        "asset_mania_provider_openai",
+    }
+)
 APACHE_PACKAGE_ROOT = PurePosixPath("packages")
 SPDX_HEADER = "# SPDX-License-Identifier: GPL-3.0-or-later"
 GPL_LICENSE = GPL_TREE / "LICENSE"
@@ -92,7 +101,7 @@ def check_sources(paths: list[PurePosixPath]) -> list[Finding]:
                 )
             )
 
-        apache_imports = sorted(root for root in roots if root.startswith(APACHE_PREFIX))
+        apache_imports = sorted(roots & APACHE_PACKAGES)
         if apache_imports and in_gpl:
             findings.append(
                 Finding(

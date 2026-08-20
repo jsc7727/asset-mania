@@ -406,6 +406,9 @@
               "pattern": "^[a-f0-9]{64}$"
             }
           }
+        },
+        {
+          "type": "null"
         }
       ]
     },
@@ -429,71 +432,78 @@
       "then": {
         "properties": {
           "metrics": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "action_count",
-              "armature_count",
-              "camera_count",
-              "external_dependency_count",
-              "kind",
-              "mesh_count",
-              "object_count",
-              "scene_semantic_digest",
-              "target_bone_count",
-              "target_triangle_count",
-              "target_uv_layer_count",
-              "target_vertex_count"
-            ],
-            "properties": {
-              "kind": {
-                "const": "preflight"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action_count",
+                  "armature_count",
+                  "camera_count",
+                  "external_dependency_count",
+                  "kind",
+                  "mesh_count",
+                  "object_count",
+                  "scene_semantic_digest",
+                  "target_bone_count",
+                  "target_triangle_count",
+                  "target_uv_layer_count",
+                  "target_vertex_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "preflight"
+                  },
+                  "object_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mesh_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "camera_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "armature_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "action_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_vertex_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_triangle_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_uv_layer_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_bone_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "external_dependency_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "scene_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
               },
-              "object_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "mesh_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "camera_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "armature_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "action_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "target_vertex_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "target_triangle_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "target_uv_layer_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "target_bone_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "external_dependency_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "scene_semantic_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+              {
+                "type": "null"
               }
-            }
+            ]
           }
         }
       }
@@ -512,68 +522,75 @@
       "then": {
         "properties": {
           "metrics": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "finite_foreground_depth_count",
-              "foreground_pixel_count",
-              "geometry_digest",
-              "height",
-              "interior_unit_normal_count",
-              "kind",
-              "pose_digest",
-              "projection_max_error_pixels",
-              "uv_digest",
-              "width"
-            ],
-            "properties": {
-              "kind": {
-                "const": "condition"
-              },
-              "width": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "height": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "foreground_pixel_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "finite_foreground_depth_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "interior_unit_normal_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "projection_max_error_pixels": {
-                "oneOf": [
-                  {
-                    "type": "number",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "finite_foreground_depth_count",
+                  "foreground_pixel_count",
+                  "geometry_digest",
+                  "height",
+                  "interior_unit_normal_count",
+                  "kind",
+                  "pose_digest",
+                  "projection_max_error_pixels",
+                  "uv_digest",
+                  "width"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "condition"
+                  },
+                  "width": {
+                    "type": "integer",
                     "minimum": 0
                   },
-                  {
-                    "type": "null"
+                  "height": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "foreground_pixel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "finite_foreground_depth_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "interior_unit_normal_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "projection_max_error_pixels": {
+                    "oneOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "geometry_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "uv_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "pose_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
                   }
-                ]
+                }
               },
-              "geometry_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "uv_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "pose_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+              {
+                "type": "null"
               }
-            }
+            ]
           }
         }
       }
@@ -592,52 +609,59 @@
       "then": {
         "properties": {
           "metrics": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "atlas_height",
-              "atlas_width",
-              "coverage_ratio",
-              "finite_texel_count",
-              "kind",
-              "observed_texel_count",
-              "padded_texel_count",
-              "texture_semantic_digest"
-            ],
-            "properties": {
-              "kind": {
-                "const": "bake"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "atlas_height",
+                  "atlas_width",
+                  "coverage_ratio",
+                  "finite_texel_count",
+                  "kind",
+                  "observed_texel_count",
+                  "padded_texel_count",
+                  "texture_semantic_digest"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "bake"
+                  },
+                  "atlas_width": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "atlas_height": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "observed_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "padded_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "finite_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "coverage_ratio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "texture_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
               },
-              "atlas_width": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "atlas_height": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "observed_texel_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "padded_texel_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "finite_texel_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "coverage_ratio": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1
-              },
-              "texture_semantic_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+              {
+                "type": "null"
               }
-            }
+            ]
           }
         }
       }
@@ -656,56 +680,63 @@
       "then": {
         "properties": {
           "metrics": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "action_count",
-              "bone_count",
-              "camera_count",
-              "format_count",
-              "kind",
-              "material_count",
-              "mesh_count",
-              "scene_semantic_digest",
-              "texture_count"
-            ],
-            "properties": {
-              "kind": {
-                "const": "export"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action_count",
+                  "bone_count",
+                  "camera_count",
+                  "format_count",
+                  "kind",
+                  "material_count",
+                  "mesh_count",
+                  "scene_semantic_digest",
+                  "texture_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "export"
+                  },
+                  "format_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mesh_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "bone_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "action_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "camera_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "material_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "texture_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "scene_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
               },
-              "format_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "mesh_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "bone_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "action_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "camera_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "material_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "texture_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "scene_semantic_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+              {
+                "type": "null"
               }
-            }
+            ]
           }
         }
       }
@@ -724,40 +755,68 @@
       "then": {
         "properties": {
           "metrics": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "checked_artifact_count",
-              "error_count",
-              "kind",
-              "profile",
-              "semantic_digest",
-              "warning_count"
-            ],
-            "properties": {
-              "kind": {
-                "const": "validate"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "checked_artifact_count",
+                  "error_count",
+                  "kind",
+                  "profile",
+                  "semantic_digest",
+                  "warning_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "validate"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+                  },
+                  "checked_artifact_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "error_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "warning_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
               },
-              "profile": {
-                "type": "string",
-                "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
-              },
-              "checked_artifact_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "error_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "warning_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "semantic_digest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+              {
+                "type": "null"
               }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "not": {
+              "type": "null"
             }
           }
         }

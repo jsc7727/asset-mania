@@ -31,8 +31,16 @@ def canonical_digest(value: object) -> str:
 
 
 def seal_response(response: dict) -> dict:
-    """Attach `response_sha256` over every other field of the response."""
-    preimage = {key: item for key, item in response.items() if key != "response_sha256"}
+    """Attach `response_sha256` over every other field of the response.
+
+    Keys beginning with an underscore are worker-local scratch, not part of the closed
+    contract, so they are dropped before the digest rather than leaking into it.
+    """
+    preimage = {
+        key: item
+        for key, item in response.items()
+        if key != "response_sha256" and not key.startswith("_")
+    }
     return {**preimage, "response_sha256": canonical_digest(preimage)}
 
 

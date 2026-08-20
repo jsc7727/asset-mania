@@ -16,8 +16,24 @@ def response_validator(validator_for):
 
 def test_every_operation_has_one_normative_example() -> None:
     assert example_names("blender-response-v1-") == sorted(
-        f"blender-response-v1-{operation}" for operation in OPERATIONS
+        [f"blender-response-v1-{operation}" for operation in OPERATIONS]
+        + ["blender-response-v1-failed"]
     )
+
+
+def test_a_failed_response_reports_no_metrics(response_validator) -> None:
+    """A failed run has no inventory; null is honest where zeroed counts would not be."""
+    response = load_example("blender-response-v1-failed")
+    assert list(response_validator.iter_errors(response)) == []
+    assert response["status"] == "failed"
+    assert response["metrics"] is None
+    assert response["outputs"] == []
+    assert response["diagnostics"] == sorted(response["diagnostics"])
+
+
+def test_a_succeeded_response_may_not_report_null_metrics(response_validator) -> None:
+    response = load_example("blender-response-v1-preflight")
+    assert list(response_validator.iter_errors({**response, "metrics": None}))
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)

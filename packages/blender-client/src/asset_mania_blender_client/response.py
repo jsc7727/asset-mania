@@ -32,9 +32,19 @@ def _closed_keys(schema: Mapping[str, Any]) -> tuple[frozenset[str], frozenset[s
 
 
 def _metrics_shape(operation: str) -> dict[str, Any]:
+    """The closed metrics object one operation may report.
+
+    The schema wraps each branch in `oneOf` with null, because a failed run reports no
+    metrics; this returns the object branch itself.
+    """
     for branch in _schema()["allOf"]:
-        if branch["if"]["properties"]["operation"]["const"] == operation:
-            return branch["then"]["properties"]["metrics"]
+        condition = branch["if"]["properties"].get("operation")
+        if condition is None or condition["const"] != operation:
+            continue
+        shape = branch["then"]["properties"]["metrics"]
+        for candidate in shape.get("oneOf", [shape]):
+            if candidate.get("type") != "null":
+                return candidate
     raise ResponseInvalid(f"{_INVALID}: {operation!r} is not a worker operation")
 
 
@@ -95,12 +105,17 @@ def load_response(
 
     metrics_shape = _metrics_shape(operation)
     metrics = response["metrics"]
-    _require(isinstance(metrics, dict), "metrics must be an object")
-    _require(
-        set(metrics) == set(metrics_shape["properties"]),
-        f"metrics keys must be exactly {sorted(metrics_shape['properties'])}",
-    )
-    _require(metrics.get("kind") == operation, "metrics describe another operation")
+    if response["status"] == "failed" and metrics is None:
+        # A failed run has no inventory to report. Null is the honest value; fabricating
+        # zeroed counts would look like a measurement that never happened.
+        pass
+    else:
+        _require(isinstance(metrics, dict), "metrics must be an object")
+        _require(
+            set(metrics) == set(metrics_shape["properties"]),
+            f"metrics keys must be exactly {sorted(metrics_shape['properties'])}",
+        )
+        _require(metrics.get("kind") == operation, "metrics describe another operation")
 
     _validate_outputs(response, staging_root=staging_root)
     return response
