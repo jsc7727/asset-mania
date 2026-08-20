@@ -13,19 +13,6 @@
   ],
   "outputs": [
     {
-      "role": "beauty_exr",
-      "path": "passes/beauty.exr",
-      "sha256": "3030303030303030303030303030303030303030303030303030303030303030",
-      "byte_size": 4096,
-      "media_type": "image/x-exr",
-      "validation": {
-        "profile": "conditioning-pass-v1",
-        "status": "valid",
-        "diagnostics": [],
-        "semantic_digest": null
-      }
-    },
-    {
       "role": "beauty_preview",
       "path": "passes/beauty-preview.png",
       "sha256": "3131313131313131313131313131313131313131313131313131313131313131",
@@ -39,10 +26,10 @@
       }
     },
     {
-      "role": "depth_exr",
-      "path": "passes/depth.exr",
-      "sha256": "3232323232323232323232323232323232323232323232323232323232323232",
-      "byte_size": 4098,
+      "role": "beauty_exr",
+      "path": "passes/beauty.exr",
+      "sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+      "byte_size": 4096,
       "media_type": "image/x-exr",
       "validation": {
         "profile": "conditioning-pass-v1",
@@ -65,11 +52,24 @@
       }
     },
     {
-      "role": "normal_exr",
-      "path": "passes/normal.exr",
-      "sha256": "3434343434343434343434343434343434343434343434343434343434343434",
-      "byte_size": 4100,
+      "role": "depth_exr",
+      "path": "passes/depth.exr",
+      "sha256": "3232323232323232323232323232323232323232323232323232323232323232",
+      "byte_size": 4098,
       "media_type": "image/x-exr",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "mask_png",
+      "path": "passes/mask.png",
+      "sha256": "3737373737373737373737373737373737373737373737373737373737373737",
+      "byte_size": 4103,
+      "media_type": "image/png",
       "validation": {
         "profile": "conditioning-pass-v1",
         "status": "valid",
@@ -91,10 +91,10 @@
       }
     },
     {
-      "role": "object_index_exr",
-      "path": "passes/object-index.exr",
-      "sha256": "3636363636363636363636363636363636363636363636363636363636363636",
-      "byte_size": 4102,
+      "role": "normal_exr",
+      "path": "passes/normal.exr",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+      "byte_size": 4100,
       "media_type": "image/x-exr",
       "validation": {
         "profile": "conditioning-pass-v1",
@@ -104,11 +104,11 @@
       }
     },
     {
-      "role": "mask_png",
-      "path": "passes/mask.png",
-      "sha256": "3737373737373737373737373737373737373737373737373737373737373737",
-      "byte_size": 4103,
-      "media_type": "image/png",
+      "role": "object_index_exr",
+      "path": "passes/object-index.exr",
+      "sha256": "3636363636363636363636363636363636363636363636363636363636363636",
+      "byte_size": 4102,
+      "media_type": "image/x-exr",
       "validation": {
         "profile": "conditioning-pass-v1",
         "status": "valid",
@@ -129,5 +129,5 @@
     "uv_digest": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
     "pose_digest": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
   },
-  "response_sha256": "d4ffa78d5bb18c2040179cdbaafc4b21dd20be7e97cae9274ca57502f6487dc2"
+  "response_sha256": "1ff69420c273f71044ce20cc60c5b63ac04156933eeb2b2a69dd912ecb5f1ab2"
 }

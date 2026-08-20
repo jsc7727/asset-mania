@@ -8,6 +8,29 @@
   identify the source, link the license, and indicate modification. Status: all three appear in
   the file; no separate upstream NOTICE file is supplied with the v2.1 text.
 
+## Separately distributed GPL component
+
+`blender-addon/` is this repository's own code, not a vendored third party, but it is
+licensed GPL-3.0-or-later rather than Apache-2.0 and is therefore inventoried here.
+
+- `blender-addon/LICENSE` — the verbatim FSF GNU General Public License v3, 29 June 2007.
+  It covers every file under `blender-addon/`, which is the only tree permitted to import
+  `bpy` or `mathutils`. Required notice: keep this license text with any distribution of
+  that tree and state the license change relative to the Apache-2.0 packages.
+- The tree is built and published as its own archive. It is not a uv workspace member and
+  never appears inside an Apache wheel or sdist;
+  `scripts/check_license_boundary.py` fails the build if it does.
+
+## External tools used but never redistributed
+
+Asset Mania invokes these tools as separate processes and bundles neither their binaries
+nor their sources. `tools/` records the pinned acquisition metadata each one needs.
+
+| Component | Pinned target | License | Notice and redistribution status |
+| --- | --- | --- | --- |
+| Blender | `5.2.0 LTS` — see `tools/blender-5.2.0.json` | GPL-2.0-or-later (see [blender.org/about/license](https://www.blender.org/about/license/)) | Invoked as a subprocess from a user-supplied install; no binary, library, or Python module is redistributed. |
+| Khronos glTF-Validator | see `tools/gltf-validator.json` | Apache-2.0 (see [KhronosGroup/glTF-Validator](https://github.com/KhronosGroup/glTF-Validator)) | Invoked as a subprocess for export validation; not redistributed. Absent until Task 9 pins a verified release. |
+
 ## Runtime dependency
 
 | Component | Locked version and source | License | Notice and redistribution status |

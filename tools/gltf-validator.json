@@ -1,0 +1,24 @@
+{
+  "schema_id": "asset-mania/tool-inventory",
+  "schema_version": "1.0",
+  "tool": "gltf-validator",
+  "required_version": null,
+  "required_release": null,
+  "license": {
+    "spdx": "Apache-2.0",
+    "url": "https://github.com/KhronosGroup/glTF-Validator",
+    "redistributed": false,
+    "notice": "The Khronos glTF-Validator is invoked as a separate process for export validation. Its binary and sources are not bundled, vendored, or redistributed by Asset Mania."
+  },
+  "acquisition": {
+    "policy": "user_supplied_install",
+    "network_boundary": "Acquisition happens before the network-deny boundary. No Asset Mania stage downloads the validator.",
+    "official_source": "https://github.com/KhronosGroup/glTF-Validator/releases",
+    "official_archives": [],
+    "official_archives_status": "unverified",
+    "official_archives_note": "No release, revision, URL, or SHA-256 is recorded because none has been fetched and verified. Task 9 consumes this tool and must pin an exact release with its digest first; until then GLB validation reports an unvalidated profile rather than a passing one."
+  },
+  "verified_installs": [],
+  "verified_installs_status": "not_installed",
+  "verified_installs_note": "No glTF-Validator executable was found on this machine, so no version or digest could be verified."
+}
