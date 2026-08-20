@@ -1,0 +1,956 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/conditioning-bundle-v1.schema.json",
+  "title": "Asset Mania conditioning bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "digests",
+    "selection",
+    "frame",
+    "resolution",
+    "pixel_aspect",
+    "pixel_origin",
+    "axes",
+    "matrices",
+    "camera",
+    "scene_unit_scale_meters",
+    "depth",
+    "normal",
+    "mask",
+    "render_profile",
+    "blender",
+    "passes",
+    "bundle_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/conditioning-bundle"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_scene",
+        "evaluated_geometry",
+        "uv",
+        "pose"
+      ],
+      "properties": {
+        "source_scene": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "evaluated_geometry": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "uv": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "pose": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "camera_label",
+        "target_label",
+        "armature_label",
+        "action_label",
+        "selection_digest"
+      ],
+      "properties": {
+        "camera_label": {
+          "type": "string",
+          "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+        },
+        "target_label": {
+          "type": "string",
+          "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+        },
+        "armature_label": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action_label": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selection_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "frame": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048574
+    },
+    "resolution": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4096
+      }
+    },
+    "pixel_aspect": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "const": 1.0
+      }
+    },
+    "pixel_origin": {
+      "const": "top_left"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "world",
+        "camera"
+      ],
+      "properties": {
+        "world": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "handedness",
+            "up",
+            "forward"
+          ],
+          "properties": {
+            "handedness": {
+              "const": "right"
+            },
+            "up": {
+              "const": "+Z"
+            },
+            "forward": {
+              "const": "-Y"
+            }
+          }
+        },
+        "camera": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "right",
+            "up",
+            "view"
+          ],
+          "properties": {
+            "right": {
+              "const": "+X"
+            },
+            "up": {
+              "const": "+Y"
+            },
+            "view": {
+              "const": "-Z"
+            }
+          }
+        }
+      }
+    },
+    "matrices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layout",
+        "camera_to_world",
+        "world_to_camera",
+        "projection",
+        "world_to_clip"
+      ],
+      "properties": {
+        "layout": {
+          "const": "row_major"
+        },
+        "camera_to_world": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number"
+          }
+        },
+        "world_to_camera": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number"
+          }
+        },
+        "projection": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number"
+          }
+        },
+        "world_to_clip": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projection_type",
+        "lens_mm",
+        "sensor_fit",
+        "sensor_width_mm",
+        "sensor_height_mm",
+        "shift_x",
+        "shift_y",
+        "clip_start_meters",
+        "clip_end_meters",
+        "ortho_scale"
+      ],
+      "properties": {
+        "projection_type": {
+          "enum": [
+            "perspective",
+            "orthographic"
+          ]
+        },
+        "lens_mm": {
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sensor_fit": {
+          "enum": [
+            "AUTO",
+            "HORIZONTAL",
+            "VERTICAL"
+          ]
+        },
+        "sensor_width_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sensor_height_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "shift_x": {
+          "type": "number"
+        },
+        "shift_y": {
+          "type": "number"
+        },
+        "clip_start_meters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "clip_end_meters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ortho_scale": {
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "projection_type": {
+                "const": "perspective"
+              }
+            },
+            "required": [
+              "projection_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lens_mm": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "ortho_scale": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "lens_mm": {
+                "type": "null"
+              },
+              "ortho_scale": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scene_unit_scale_meters": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "depth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "space",
+        "unit",
+        "background",
+        "valid_min_meters",
+        "valid_max_meters"
+      ],
+      "properties": {
+        "space": {
+          "const": "camera_euclidean_distance"
+        },
+        "unit": {
+          "const": "meters"
+        },
+        "background": {
+          "const": "invalid_by_mask"
+        },
+        "valid_min_meters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "valid_max_meters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "normal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "space",
+        "channels",
+        "encoding",
+        "foreground_unit_expected"
+      ],
+      "properties": {
+        "space": {
+          "const": "world"
+        },
+        "channels": {
+          "const": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "encoding": {
+          "const": "float32_linear"
+        },
+        "foreground_unit_expected": {
+          "const": true
+        }
+      }
+    },
+    "mask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_object_index",
+        "foreground",
+        "background",
+        "pass_alpha_threshold",
+        "antialiasing"
+      ],
+      "properties": {
+        "target_object_index": {
+          "const": 1
+        },
+        "foreground": {
+          "const": 255
+        },
+        "background": {
+          "const": 0
+        },
+        "pass_alpha_threshold": {
+          "const": 0.5
+        },
+        "antialiasing": {
+          "const": "none"
+        }
+      }
+    },
+    "render_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "blender_version",
+        "engine",
+        "device",
+        "threads",
+        "samples",
+        "seed",
+        "adaptive_sampling",
+        "denoise",
+        "animated_seed",
+        "motion_blur",
+        "depth_of_field",
+        "render_border",
+        "crop_to_border",
+        "film_transparent",
+        "pixel_aspect",
+        "working_color_space",
+        "preview_color_space",
+        "target_object_index",
+        "pass_alpha_threshold",
+        "atlas_size",
+        "bake_margin",
+        "color_padding",
+        "minimum_coverage",
+        "depth_absolute_tolerance_meters",
+        "depth_relative_tolerance",
+        "ray_epsilon_scale",
+        "ray_epsilon_min_meters",
+        "ray_epsilon_max_meters",
+        "matrix_decimal_places",
+        "worker_timeout_seconds",
+        "worker_response_max_bytes",
+        "dependency_policy",
+        "unknown_texels",
+        "animation_profile"
+      ],
+      "properties": {
+        "profile_id": {
+          "enum": [
+            "blender-5.2.0-cpu-v1",
+            "blender-5.2.0-cpu-v1-fixture"
+          ]
+        },
+        "blender_version": {
+          "const": "5.2.0"
+        },
+        "engine": {
+          "const": "CYCLES"
+        },
+        "device": {
+          "const": "CPU"
+        },
+        "threads": {
+          "const": 1
+        },
+        "samples": {
+          "const": 16
+        },
+        "seed": {
+          "const": 0
+        },
+        "adaptive_sampling": {
+          "const": false
+        },
+        "denoise": {
+          "const": false
+        },
+        "animated_seed": {
+          "const": false
+        },
+        "motion_blur": {
+          "const": false
+        },
+        "depth_of_field": {
+          "const": false
+        },
+        "render_border": {
+          "const": false
+        },
+        "crop_to_border": {
+          "const": false
+        },
+        "film_transparent": {
+          "const": true
+        },
+        "pixel_aspect": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "const": 1.0
+          }
+        },
+        "working_color_space": {
+          "const": "scene_linear"
+        },
+        "preview_color_space": {
+          "const": "srgb"
+        },
+        "target_object_index": {
+          "const": 1
+        },
+        "pass_alpha_threshold": {
+          "const": 0.5
+        },
+        "atlas_size": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          }
+        },
+        "bake_margin": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "color_padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "minimum_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "depth_absolute_tolerance_meters": {
+          "const": 0.0001
+        },
+        "depth_relative_tolerance": {
+          "const": 0.0002
+        },
+        "ray_epsilon_scale": {
+          "const": 1e-07
+        },
+        "ray_epsilon_min_meters": {
+          "const": 1e-07
+        },
+        "ray_epsilon_max_meters": {
+          "const": 0.001
+        },
+        "matrix_decimal_places": {
+          "const": 9
+        },
+        "worker_timeout_seconds": {
+          "const": 300
+        },
+        "worker_response_max_bytes": {
+          "const": 1048576
+        },
+        "dependency_policy": {
+          "const": "packed_only"
+        },
+        "unknown_texels": {
+          "const": "transparent"
+        },
+        "animation_profile": {
+          "const": "selected_action_range_or_none"
+        }
+      }
+    },
+    "blender": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "version",
+        "build_hash",
+        "executable_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+        },
+        "version": {
+          "const": "5.2.0"
+        },
+        "build_hash": {
+          "type": "string",
+          "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "passes": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "beauty_exr"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/x-exr"
+            },
+            "color_space": {
+              "const": "scene_linear"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "beauty_preview"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/png"
+            },
+            "color_space": {
+              "const": "srgb"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "depth_exr"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/x-exr"
+            },
+            "color_space": {
+              "const": "data"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "depth_preview"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/png"
+            },
+            "color_space": {
+              "const": "srgb"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "normal_exr"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/x-exr"
+            },
+            "color_space": {
+              "const": "data"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "normal_preview"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/png"
+            },
+            "color_space": {
+              "const": "srgb"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "object_index_exr"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/x-exr"
+            },
+            "color_space": {
+              "const": "data"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "path",
+            "sha256",
+            "byte_size",
+            "media_type",
+            "color_space",
+            "upload_eligible"
+          ],
+          "properties": {
+            "role": {
+              "const": "mask_png"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "media_type": {
+              "const": "image/png"
+            },
+            "color_space": {
+              "const": "data"
+            },
+            "upload_eligible": {
+              "const": true
+            }
+          }
+        }
+      ],
+      "items": false
+    },
+    "bundle_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

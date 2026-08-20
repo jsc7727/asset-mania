@@ -1,0 +1,31 @@
+{
+  "schema_id": "asset-mania/view",
+  "schema_version": "1.0",
+  "image_sha256": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+  "width": 1024,
+  "height": 1024,
+  "media_type": "image/png",
+  "color_space": "srgb",
+  "alpha": "straight",
+  "condition_manifest_sha256": "589980d5eff3f0c7a32e2c2173f5ec1eb863afb1a61ce255957b1964563a0e2c",
+  "conditioning_bundle_sha256": "1a1b36a9716223d12d6525a10839e5d2b91afdffe05e2f86cf69d0880c19daa5",
+  "camera_digest": "c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5",
+  "origin": "observed",
+  "subject": "synthetic_person",
+  "alignment": {
+    "transform": "identity",
+    "attestation_sha256": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+    "issuer": "user",
+    "status": "declared_unverified"
+  },
+  "rights_basis_manifest_sha256": null,
+  "sensitivity": "user-content",
+  "upload_eligible": false,
+  "validation": {
+    "profile": "view-v1",
+    "status": "valid",
+    "diagnostics": [],
+    "semantic_digest": "4141414141414141414141414141414141414141414141414141414141414141"
+  },
+  "view_sha256": "fe4fe7e3bb52540c9a3e962059316ffcf93be0b86d8f97e947f9de398eb34c4a"
+}

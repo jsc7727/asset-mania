@@ -5,6 +5,14 @@ from .diagnostics import DiagnosticCode, ResultStatus
 
 _V1_WORKFLOWS = {"image-to-3d", "scene-to-image"}
 _V1_IMAGE_KINDS = {"object", "character", "face-head"}
+_V1_RESULT_STATUSES = frozenset(
+    {
+        ResultStatus.SUCCEEDED,
+        ResultStatus.FAILED,
+        ResultStatus.UNSUPPORTED,
+        ResultStatus.NEEDS_APPROVAL,
+    }
+)
 
 
 def canonical_json(value: object) -> str:
@@ -41,6 +49,9 @@ def build_manifest(
     result_status: ResultStatus,
     diagnostics: list[DiagnosticCode],
 ) -> dict[str, object]:
+    if result_status not in _V1_RESULT_STATUSES:
+        raise ValueError(f"{result_status.value!r} is not a v1 result status")
+
     safe_parameters = _validate_v1_parameters(parameters)
 
     return {

@@ -26,6 +26,23 @@ Read [the CLI contract](references/cli-contract.md) for options, streams, run fi
 Use [the manifest schema](references/manifest-v1.schema.json) when machine-readable field details
 matter.
 
+## Machine-readable contracts
+
+Use [the v1 manifest schema](references/manifest-v1.schema.json) for the schema of a run this
+skill can actually produce today.
+
+The remaining schemas are published contracts for the planned v0.2 execution stages. They describe
+field shapes only; no stage below is executable, so read them to answer a question about the format
+and never to imply the workflow runs:
+
+- [run manifest v2](references/manifest-v2.schema.json)
+- [workflow plan v1](references/workflow-plan-v1.schema.json)
+- [conditioning bundle v1](references/conditioning-bundle-v1.schema.json)
+- [view v1](references/view-v1.schema.json)
+- [provider evidence v1](references/provider-evidence-v1.schema.json)
+- [provider plan v1](references/provider-plan-v1.schema.json)
+- [approval receipt v1](references/approval-receipt-v1.schema.json)
+
 ## Stop at the v0.1 boundary
 
 For any request to generate images or 3D, upload data, download a model, use a remote provider, or

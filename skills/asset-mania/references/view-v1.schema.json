@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/view-v1.schema.json",
+  "title": "Asset Mania view v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "image_sha256",
+    "width",
+    "height",
+    "media_type",
+    "color_space",
+    "alpha",
+    "condition_manifest_sha256",
+    "conditioning_bundle_sha256",
+    "camera_digest",
+    "origin",
+    "subject",
+    "alignment",
+    "rights_basis_manifest_sha256",
+    "sensitivity",
+    "upload_eligible",
+    "validation",
+    "view_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/view"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "image_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "media_type": {
+      "const": "image/png"
+    },
+    "color_space": {
+      "const": "srgb"
+    },
+    "alpha": {
+      "enum": [
+        "straight",
+        "none"
+      ]
+    },
+    "condition_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "conditioning_bundle_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "camera_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "origin": {
+      "enum": [
+        "observed",
+        "generated",
+        "unknown"
+      ]
+    },
+    "subject": {
+      "enum": [
+        "non_person",
+        "synthetic_person",
+        "real_person",
+        "unknown"
+      ]
+    },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transform",
+        "attestation_sha256",
+        "issuer",
+        "status"
+      ],
+      "properties": {
+        "transform": {
+          "const": "identity"
+        },
+        "attestation_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "issuer": {
+          "enum": [
+            "user",
+            "provider"
+          ]
+        },
+        "status": {
+          "enum": [
+            "declared_unverified",
+            "verified_fixture"
+          ]
+        }
+      }
+    },
+    "rights_basis_manifest_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sensitivity": {
+      "enum": [
+        "portable",
+        "user-content"
+      ]
+    },
+    "upload_eligible": {
+      "const": false
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "status",
+        "diagnostics",
+        "semantic_digest"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+        },
+        "status": {
+          "enum": [
+            "valid",
+            "invalid",
+            "incomplete",
+            "unvalidated"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/diagnostic_code"
+          }
+        },
+        "semantic_digest": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "view_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "diagnostic_code": {
+      "enum": [
+        "BAKE_CONTEXT_INVALID",
+        "BLENDER_EXECUTION_FAILED",
+        "BLENDER_NOT_FOUND",
+        "BLENDER_RESPONSE_INVALID",
+        "BLENDER_VERSION_MISMATCH",
+        "BLEND_HEADER_INVALID",
+        "CAMERA_CALIBRATION_MISSING",
+        "CAMERA_NOT_FOUND",
+        "DEPSGRAPH_TOPOLOGY_CHANGED",
+        "EXIF_SENSITIVE_METADATA_PRESENT",
+        "EXPORT_OPERATOR_UNAVAILABLE",
+        "FACE_RIGHTS_CONFIRMATION_REQUIRED",
+        "GLTF_VALIDATION_FAILED",
+        "INPUT_NOT_FOUND",
+        "INPUT_UNREADABLE",
+        "INTERNAL_ERROR",
+        "MISSING_LINKED_ASSET",
+        "OUTPUT_COLLISION",
+        "PARENT_MANIFEST_MISMATCH",
+        "PASS_INVALID",
+        "PLAN_TAMPERED",
+        "POSE_NONFINITE",
+        "PROVIDER_EVIDENCE_STALE",
+        "REPROJECTION_LOW_COVERAGE",
+        "RIG_NOT_FOUND",
+        "ROUNDTRIP_MISMATCH",
+        "SELECTION_AMBIGUOUS",
+        "SOURCE_CHANGED_DURING_RUN",
+        "SOURCE_POSE_UNKNOWN",
+        "SUBJECT_DECLARATION_REQUIRED",
+        "TARGET_MESH_NOT_FOUND",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "UNTRUSTED_AUTOEXEC_REQUIRED",
+        "UV_MISSING_OR_INVALID",
+        "VIEW_ALIGNMENT_MISMATCH",
+        "WORKFLOW_NOT_IMPLEMENTED"
+      ]
+    }
+  }
+}

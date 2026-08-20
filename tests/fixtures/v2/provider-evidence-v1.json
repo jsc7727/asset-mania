@@ -1,0 +1,92 @@
+{
+  "schema_id": "asset-mania/provider-evidence",
+  "schema_version": "1.0",
+  "provider": "openai",
+  "model_snapshot": "gpt-image-2-2026-04-21",
+  "sources": [
+    {
+      "url": "https://developers.openai.com/docs/guides/image-generation",
+      "retrieved_at": "2026-08-19T08:00:00Z",
+      "content_sha256": "5151515151515151515151515151515151515151515151515151515151515151",
+      "parser_profile": "openai-gpt-image-2-v1"
+    },
+    {
+      "url": "https://platform.openai.com/docs/pricing",
+      "retrieved_at": "2026-08-19T08:00:00Z",
+      "content_sha256": "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2",
+      "parser_profile": "openai-gpt-image-2-v1"
+    }
+  ],
+  "retrieved_at": "2026-08-19T08:00:00Z",
+  "expires_at": "2026-08-20T08:00:00Z",
+  "content_digest": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+  "data_policy": {
+    "training_default": "not_used_unless_opted_in",
+    "application_state": "none",
+    "abuse_monitoring_days": 30,
+    "zdr": "eligible_with_approval",
+    "csam_review_exception": true,
+    "effective_region": "unknown"
+  },
+  "pricing": {
+    "currency": "USD",
+    "rate_mode": "standard",
+    "per_million_tokens": {
+      "text_input": "5.000000",
+      "cached_text_input": "1.250000",
+      "image_input": "8.000000",
+      "cached_image_input": "2.000000",
+      "image_output": "30.000000"
+    },
+    "output_cost_rows": [
+      {
+        "quality": "low",
+        "size": "1024x1024",
+        "usd": "0.006000"
+      },
+      {
+        "quality": "low",
+        "size": "1024x1536",
+        "usd": "0.005000"
+      },
+      {
+        "quality": "low",
+        "size": "1536x1024",
+        "usd": "0.005000"
+      },
+      {
+        "quality": "medium",
+        "size": "1024x1024",
+        "usd": "0.053000"
+      },
+      {
+        "quality": "medium",
+        "size": "1024x1536",
+        "usd": "0.041000"
+      },
+      {
+        "quality": "medium",
+        "size": "1536x1024",
+        "usd": "0.041000"
+      },
+      {
+        "quality": "high",
+        "size": "1024x1024",
+        "usd": "0.211000"
+      },
+      {
+        "quality": "high",
+        "size": "1024x1536",
+        "usd": "0.165000"
+      },
+      {
+        "quality": "high",
+        "size": "1536x1024",
+        "usd": "0.165000"
+      }
+    ],
+    "retrieved_at": "2026-08-19T08:00:00Z",
+    "content_sha256": "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2"
+  },
+  "evidence_sha256": "03fdb582fa2235d7006a38ab7ac3d55c9d89aacfebe7835ab408409cf2af0c7e"
+}

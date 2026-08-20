@@ -1,0 +1,78 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-approval-1",
+  "command": "approval.issue",
+  "stage": "approval-issue",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:35:00Z",
+  "inputs": [
+    {
+      "label": "input-1",
+      "role": "provider_plan",
+      "sha256": "be0d716a6d9fd4b98322182a32d3c0f403e0dca569c29a8b1f744c6540f03bd7",
+      "byte_size": 4096,
+      "media_type": "application/json",
+      "content_origin": "derived",
+      "sensitivity": "portable"
+    }
+  ],
+  "parents": [
+    {
+      "run_id": "run-provider-plan-1",
+      "manifest_sha256": "263bbf14d7a2da4c155214069259c96989cb5ae9f355b84d4b95811ca69c8d32",
+      "relationship": "planned_from"
+    }
+  ],
+  "parameters": {
+    "plan_sha256": "3bd34dbe24c70e14c55b6eff81642b6ce329800e4ba94204baf9ae0389535122",
+    "gate": "external_egress",
+    "expires_at": "2026-08-19T10:35:00Z",
+    "acknowledgement_digest": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"
+  },
+  "plan_sha256": "3bd34dbe24c70e14c55b6eff81642b6ce329800e4ba94204baf9ae0389535122",
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": null
+  },
+  "capabilities": {
+    "network": "denied",
+    "filesystem": "source_read_staging_write",
+    "blender": "not_required",
+    "provider": "approval_gated"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "approval_receipt",
+      "path": "approval-receipt.json",
+      "sha256": "861b0ea84798af88dcb6618ff47a365a9550da91b4bcad2c2f640f20910489ce",
+      "byte_size": 1024,
+      "media_type": "application/json",
+      "parents": [
+        {
+          "sha256": "be0d716a6d9fd4b98322182a32d3c0f403e0dca569c29a8b1f744c6540f03bd7",
+          "relationship": "consumed"
+        }
+      ],
+      "operation": "approval-issue",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": false,
+      "validation": {
+        "profile": "approval-receipt-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "2adccf05362cffb57f7171fd05bd986ded82cd45d7827d699c8d1ed1f5a824b9"
+      }
+    }
+  ],
+  "result": {
+    "status": "succeeded",
+    "diagnostics": [],
+    "provider_state": "approval_required"
+  },
+  "warnings": []
+}

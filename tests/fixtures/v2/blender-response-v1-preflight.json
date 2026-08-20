@@ -1,0 +1,44 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-preflight-1",
+  "operation": "preflight",
+  "status": "succeeded",
+  "diagnostics": [],
+  "portable_labels": [
+    "action-1",
+    "armature-1",
+    "camera-1",
+    "mesh-1"
+  ],
+  "outputs": [
+    {
+      "role": "scene_inventory",
+      "path": "scene-inventory.json",
+      "sha256": "2121212121212121212121212121212121212121212121212121212121212121",
+      "byte_size": 2048,
+      "media_type": "application/json",
+      "validation": {
+        "profile": "scene-inventory-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
+      }
+    }
+  ],
+  "metrics": {
+    "kind": "preflight",
+    "object_count": 4,
+    "mesh_count": 1,
+    "camera_count": 1,
+    "armature_count": 1,
+    "action_count": 1,
+    "target_vertex_count": 482,
+    "target_triangle_count": 960,
+    "target_uv_layer_count": 1,
+    "target_bone_count": 12,
+    "external_dependency_count": 0,
+    "scene_semantic_digest": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
+  },
+  "response_sha256": "7eda764fb72cea78fb0a14e9c83055fa99b3650882d67d334c882a21548db3f8"
+}

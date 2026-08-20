@@ -1,0 +1,14 @@
+{
+  "schema_id": "asset-mania/approval-receipt",
+  "schema_version": "1.0",
+  "receipt_id": "receipt-external-egress-1",
+  "plan_sha256": "3bd34dbe24c70e14c55b6eff81642b6ce329800e4ba94204baf9ae0389535122",
+  "gate": "external_egress",
+  "issued_at": "2026-08-19T09:35:00Z",
+  "expires_at": "2026-08-19T10:35:00Z",
+  "scope": "single_run",
+  "disclosure_digest": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3",
+  "issuer_type": "user",
+  "acknowledgement_digest": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+  "receipt_sha256": "2adccf05362cffb57f7171fd05bd986ded82cd45d7827d699c8d1ed1f5a824b9"
+}
