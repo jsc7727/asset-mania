@@ -14,7 +14,7 @@ members = [
 
 [[package]]
 name = "asset-mania-blender-client"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/blender-client" }
 dependencies = [
     { name = "asset-mania-contracts" },
@@ -29,27 +29,29 @@ requires-dist = [
 
 [[package]]
 name = "asset-mania-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "asset-mania-contracts" },
+    { name = "asset-mania-pipeline" },
     { name = "pillow" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "asset-mania-contracts", editable = "packages/contracts" },
+    { name = "asset-mania-pipeline", editable = "packages/pipeline" },
     { name = "pillow", specifier = ">=11.3,<13" },
 ]
 
 [[package]]
 name = "asset-mania-contracts"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/contracts" }
 
 [[package]]
 name = "asset-mania-pipeline"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/pipeline" }
 dependencies = [
     { name = "asset-mania-contracts" },
@@ -64,7 +66,7 @@ requires-dist = [
 
 [[package]]
 name = "asset-mania-provider-openai"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/provider-openai" }
 dependencies = [
     { name = "asset-mania-contracts" },
@@ -79,7 +81,7 @@ requires-dist = [
 
 [[package]]
 name = "asset-mania-workspace"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

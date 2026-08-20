@@ -2,7 +2,7 @@
 # it; the root development workspace installs it only to run its fake-transport tests.
 [project]
 name = "asset-mania-provider-openai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Optional approval-gated GPT Image adapter for Asset Mania"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

@@ -1,6 +1,6 @@
 [project]
 name = "asset-mania-pipeline"
-version = "0.1.0"
+version = "0.2.0"
 description = "Immutable stage storage, lineage, plans, and approvals for Asset Mania runs"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

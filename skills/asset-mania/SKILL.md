@@ -5,8 +5,9 @@ description: Use when a request involves Asset Mania preflight, image-to-3D or B
 
 # Asset Mania
 
-Asset Mania v0.1 performs deterministic, local, source-read-only inspection. It cannot generate
-images or 3D assets.
+Asset Mania performs deterministic, local, source-read-only work: inspection, scene preflight,
+conditioning, aligned-view ingest, reprojection and bake, and validated export. It does not
+generate images itself. External generation stays behind exact, plan-bound approval.
 
 ## Inspect
 
@@ -43,15 +44,44 @@ and never to imply the workflow runs:
 - [provider plan v1](references/provider-plan-v1.schema.json)
 - [approval receipt v1](references/approval-receipt-v1.schema.json)
 
-## Stop at the v0.1 boundary
+## Local stage routing
 
-For any request to generate images or 3D, upload data, download a model, use a remote provider, or
-spend paid compute:
+These stages run locally and touch no network. Route a request to the one that matches, and
+report the manifest status, diagnostics, and capability limits it returns:
 
-1. Local inspection may run when an input is available.
-2. State that the requested execution is unavailable in v0.1.
-3. Stop without requesting approval and without any network, upload, download, Blender, GPU, or
-   paid action. Do not substitute another provider, model, quality, or workflow.
+| Request | Stage |
+| --- | --- |
+| "what is in this .blend?" | `scene preflight` |
+| "set up a render for this camera and frame" | `scene plan`, then `scene condition` |
+| "use this image as the texture source" | `view ingest` |
+| "bake that view into the UVs" | `texture bake` |
+| "give me a GLB / FBX / editable file" | `export` |
+
+Rules that hold for every stage:
+
+- Never modify, move, overwrite, embed, or upload the source.
+- A subject category is a user declaration. `unknown` is blocked; never infer it from pixels
+  or geometry.
+- `real_person` needs a rights receipt bound to the exact plan digest before anything runs.
+- An alignment claim needs the exact `CONDITION_SHA256:VIEW_SHA256` string. There is no
+  boolean shortcut, and a same-sized image is not evidence of alignment.
+- Report low coverage as incomplete. Do not present an incomplete bake as a finished asset.
+
+## Stop at the external-action boundary
+
+For any request to upload data, download a model, use a remote provider, or spend paid
+compute:
+
+1. Local stages may run when an input is available.
+2. State that external generation requires an explicit, plan-bound approval for each gate:
+   external egress, paid compute, and face rights where the subject is a real person.
+3. Do not request or imply approval on the user's behalf, and take no network, upload,
+   download, GPU, or paid action without it. Never substitute another provider, model,
+   revision, quality, or workflow.
+
+The GPT Image 2 adapter is **experimental and contract-verified only**: it has been exercised
+against a fake transport with sockets denied and has never made a live call. Do not describe
+it as working or live-verified.
 
 Read [safety and licenses](references/safety-and-licenses.md) only when explaining current or
 future external-action, face-rights, privacy, provenance, or licensing boundaries. Maintainers can

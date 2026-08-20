@@ -1,6 +1,6 @@
 [project]
 name = "asset-mania-contracts"
-version = "0.1.0"
+version = "0.2.0"
 description = "Portable contracts for Asset Mania inspection runs"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

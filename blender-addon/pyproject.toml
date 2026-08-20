@@ -2,7 +2,7 @@
 # and scripts/check_license_boundary.py enforce that separation.
 [project]
 name = "asset-mania-blender-addon"
-version = "0.1.0"
+version = "0.2.0"
 description = "GPL Blender worker for Asset Mania; the only tree that imports bpy"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]

@@ -1,23 +1,42 @@
 # Asset Mania
 
-> **Pre-alpha.** Asset Mania provides a working offline inspection and planning foundation. It
-> does not generate images or 3D assets yet.
+> **Pre-alpha.** Asset Mania performs a real local Blender round trip: inspect, preflight,
+> condition, ingest an aligned view, reproject and bake, and export validated BLEND, GLB, and
+> FBX. It does not generate images itself; the optional GPT Image adapter is
+> contract-verified against a fake transport and has never made a live call.
 
 Asset Mania is an open-source Agent Skill and CLI project for two future, connected workflows:
 turning an image into an editable 3D asset, and using a Blender scene to guide image generation.
 Its durable foundation is a portable manifest, deterministic report, and explicit approval
 boundary—not a claim that generation already works.
 
-## v0.1 target
+## Verified capability
 
-| Capability | v0.1 target |
-| --- | --- |
-| Offline image and .blend inspection | Available |
-| Versioned manifest and report | Available |
-| Image to 3D generation | Planned |
-| Blender scene to GPT Image | Planned |
-| Face/head reconstruction | Research |
-| Asset Mania Cloud | Later |
+Each row states what has actually been verified, and by what. Nothing here is a plan.
+
+| Capability | State | Evidence |
+| --- | --- | --- |
+| Offline image and `.blend` inspection | Available | v1 contract tests, byte-identical source checks |
+| Versioned manifest and report | Available | closed schemas, canonical digest tests |
+| Scene preflight | Available | real Blender 5.2.0 E2E, 15 negative and malicious variants |
+| Conditioning bundle | Available | real Cycles render; matrices cross-checked against Blender's own projection to 1.5e-06 px |
+| Aligned view ingest | Available | decode, normalize, and reject tests; no implicit resize or rotation |
+| Reprojection and bake | Available | coverage 40.5% against a UV island area of 41.4% on the fixture |
+| BLEND / GLB / FBX export | Available | container checks plus fresh-process reimport in a separate Blender |
+| GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
+| Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
+| Face/head reconstruction | Research | not implemented; `real_person` needs a plan-bound rights receipt |
+| Asset Mania Cloud | Later | — |
+
+Two limits are worth stating plainly:
+
+- The macOS Seatbelt profile enforces read-only sources, staging-only writes, and denied
+  network, all verified by running `sandbox-exec`. It cannot confine *reads*, and Blender's
+  Metal-backed compositor cannot run under it at all, so an isolated conditioning run is the
+  Linux bubblewrap backend's job.
+- The pinned Blender and glTF Validator inventories in `tools/` record only what was
+  verified locally. No official archive URL or digest is asserted, because none has been
+  fetched and verified.
 
 The `inspect` command accepts a local PNG, JPEG, WebP, or `.blend` header input, records only
 portable allowlisted metadata and hashes, and writes a new run directory. It does not alter or
