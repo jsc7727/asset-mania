@@ -241,16 +241,158 @@ def _run_bake(request: dict) -> dict:
     }
 
 
+def _run_export(request: dict) -> dict:
+    from . import exporting, scene_inventory
+
+    request_id = str(request["request_id"])
+    staging_root = str(request["staging_root"])
+
+    try:
+        _open_source(str(request["source_path"]))
+    except (RuntimeError, OSError):
+        return protocol.failure(
+            request_id=request_id, operation="export", diagnostics=[_BLEND_HEADER_INVALID]
+        )
+
+    scene_inventory.sanitize_write_surfaces(staging_root)
+
+    try:
+        result = exporting.export(request)
+    except exporting.ExportFailed as failure:
+        return protocol.failure(
+            request_id=request_id, operation="export", diagnostics=failure.diagnostics
+        )
+
+    outputs = []
+    for relative in result["artifacts"]:
+        path = Path(staging_root) / relative
+        if not path.is_file():
+            return protocol.failure(
+                request_id=request_id,
+                operation="export",
+                diagnostics=["EXPORT_OPERATOR_UNAVAILABLE"],
+            )
+        outputs.append(
+            {
+                "role": relative.rsplit("/", 1)[-1].replace(".", "_"),
+                "path": relative,
+                "sha256": protocol.sha256_file(path),
+                "byte_size": path.stat().st_size,
+                "media_type": _MEDIA_TYPES.get(path.suffix, "application/octet-stream"),
+                "validation": {
+                    "profile": "roundtrip-v1",
+                    # A structural check and a fresh-process reimport happen on the Apache
+                    # side, so nothing here claims more than "exported".
+                    "status": "incomplete",
+                    "diagnostics": [],
+                    "semantic_digest": protocol.canonical_digest(result["fingerprint"]),
+                },
+            }
+        )
+
+    return {
+        "schema_id": protocol.SCHEMA_ID,
+        "schema_version": protocol.SCHEMA_VERSION,
+        "request_id": request_id,
+        "operation": "export",
+        "status": "succeeded",
+        "diagnostics": [],
+        "portable_labels": sorted(
+            value
+            for key, value in request["portable_selection"].items()
+            if key.endswith("_label") and value
+        ),
+        "outputs": sorted(outputs, key=lambda item: item["path"]),
+        "metrics": {
+            "kind": "export",
+            "format_count": len(
+                [name for name in result["artifacts"] if not name.endswith(".png")]
+            ),
+            "mesh_count": result["fingerprint"]["mesh_count"],
+            "bone_count": result["fingerprint"]["bone_count"],
+            "action_count": result["fingerprint"]["action_count"],
+            "camera_count": result["fingerprint"]["camera_count"],
+            "material_count": result["fingerprint"]["material_count"],
+            "texture_count": result["fingerprint"]["texture_count"],
+            "scene_semantic_digest": protocol.canonical_digest(result["fingerprint"]),
+        },
+        "response_sha256": "",
+        "_fingerprint": result["fingerprint"],
+        "_animated": result["animated"],
+        "_sample_frames": result["sample_frames"],
+    }
+
+
+def _run_reimport(request: dict) -> dict:
+    """Reimport one exported file in this fresh process and report its fingerprint."""
+    from . import exporting
+
+    request_id = str(request["request_id"])
+    staging_root = str(request["staging_root"])
+    try:
+        fingerprint = exporting.reimport_fingerprint(request)
+    except (exporting.ExportFailed, RuntimeError) as failure:
+        diagnostics = getattr(failure, "diagnostics", ["ROUNDTRIP_MISMATCH"])
+        return protocol.failure(
+            request_id=request_id, operation="validate", diagnostics=diagnostics
+        )
+
+    written = Path(staging_root) / exporting.REIMPORT_FINGERPRINT_NAME
+    outputs = (
+        [
+            {
+                "role": "reimport_fingerprint",
+                "path": exporting.REIMPORT_FINGERPRINT_NAME,
+                "sha256": protocol.sha256_file(written),
+                "byte_size": written.stat().st_size,
+                "media_type": "application/json",
+                "validation": {
+                    "profile": f"reimport-{request['import_kind']}-v1",
+                    "status": "valid",
+                    "diagnostics": [],
+                    "semantic_digest": protocol.canonical_digest(fingerprint),
+                },
+            }
+        ]
+        if written.is_file()
+        else []
+    )
+    return {
+        "schema_id": protocol.SCHEMA_ID,
+        "schema_version": protocol.SCHEMA_VERSION,
+        "request_id": request_id,
+        "operation": "validate",
+        "status": "succeeded",
+        "diagnostics": [],
+        "portable_labels": [],
+        "outputs": outputs,
+        "metrics": {
+            "kind": "validate",
+            "profile": f"reimport-{request['import_kind']}-v1",
+            "checked_artifact_count": 1,
+            "error_count": 0,
+            "warning_count": 0,
+            "semantic_digest": protocol.canonical_digest(fingerprint),
+        },
+        "response_sha256": "",
+        "_fingerprint": fingerprint,
+    }
+
+
 _MEDIA_TYPES = {
     ".exr": "image/x-exr",
     ".png": "image/png",
     ".blend": "application/x-blender",
+    ".glb": "model/gltf-binary",
+    ".fbx": "application/octet-stream",
 }
 
 _OPERATIONS = {
     "preflight": _run_preflight,
     "condition": _run_condition,
     "bake": _run_bake,
+    "export": _run_export,
+    "reimport": _run_reimport,
     "fixture": _run_fixture,
 }
 

@@ -36,7 +36,11 @@ def _static_prop() -> None:
     target = _target()
     for modifier in list(target.modifiers):
         target.modifiers.remove(modifier)
+    # Clearing the parent must not move the mesh: dropping it without restoring the world
+    # matrix would silently reframe the target and make the render miss it.
+    world = target.matrix_world.copy()
     target.parent = None
+    target.matrix_world = world
     for group in list(target.vertex_groups):
         target.vertex_groups.remove(group)
 

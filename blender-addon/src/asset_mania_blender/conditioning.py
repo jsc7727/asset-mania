@@ -52,8 +52,30 @@ MASK_PATH = "mask.png"
 
 #: A silhouette pixel averages foreground and background samples, so its normal is not a
 #: unit vector. The unit-length requirement therefore applies to the eroded interior of the
-#: mask, which is what `interior_unit_normal_count` counts.
+#: object-index mask, which is what `interior_unit_normal_count` counts.
 NORMAL_UNIT_TOLERANCE = 1e-2
+#: Headroom for float32 accumulation in the render passes.
+FLOAT32_SLACK = 1e-5
+
+
+def normal_unit_tolerance(samples: int) -> float:
+    """How far an interior normal may fall short of unit length.
+
+    Measured: the object-index pass is non-antialiased -- a pixel is index 1 or it is not --
+    while the normal pass averages every sample in the pixel. So a pixel can sit inside the
+    eroded index mask and still have a sample or two miss the geometry, in which case its
+    normal is the covered fraction of a unit vector. With 16 samples the observed shortfall
+    is exactly 15/16, which no fixed 1e-2 tolerance can accommodate.
+
+    The tolerance therefore admits one sample's worth of partial coverage and nothing more.
+    A normal in the wrong space, or interpolated without normalizing, deviates far beyond
+    that and is still rejected.
+    """
+    quantum = 1.0 / max(int(samples), 1)
+    # The pass is float32, so the observed shortfall lands a few ULPs beyond the exact
+    # quantum (0.06250006 rather than 0.0625). Without this slack the check would reject a
+    # perfectly correct render on rounding alone.
+    return max(NORMAL_UNIT_TOLERANCE, quantum) + FLOAT32_SLACK
 
 
 def erode(mask: "numpy.ndarray") -> "numpy.ndarray":
@@ -314,6 +336,7 @@ def convert_passes(
     artifact_directory: Path,
     depth_range: tuple[float, float],
     depth_scale: numpy.ndarray,
+    samples: int,
 ) -> dict[str, dict]:
     """Rewrite every pass as a canonical single-layer artifact plus its preview.
 
@@ -347,8 +370,9 @@ def convert_passes(
         raise ConditioningFailed(["PASS_INVALID"])
 
     interior = erode(foreground)
+    tolerance = normal_unit_tolerance(samples)
     lengths = numpy.linalg.norm(normal[interior], axis=-1)
-    if lengths.size and float(numpy.abs(lengths - 1.0).max()) > NORMAL_UNIT_TOLERANCE:
+    if lengths.size and float(numpy.abs(lengths - 1.0).max()) > tolerance:
         raise ConditioningFailed(["PASS_INVALID"])
 
     write_exr(artifact_directory / "beauty.exr", beauty, ("R", "G", "B", "A"))
@@ -390,7 +414,7 @@ def convert_passes(
         "interior_unit_normal_count": int(
             numpy.logical_and(
                 interior,
-                numpy.abs(numpy.linalg.norm(normal, axis=-1) - 1.0) <= NORMAL_UNIT_TOLERANCE,
+                numpy.abs(numpy.linalg.norm(normal, axis=-1) - 1.0) <= tolerance,
             ).sum()
         ),
         "depth_observed_min": float(foreground_depth.min()),
@@ -715,6 +739,7 @@ def condition(request: dict) -> dict:
         depth_scale=euclidean_depth_scale(
             scene, camera_object, scene.render.resolution_x, scene.render.resolution_y
         ),
+        samples=int(render_profile["samples"]),
     )
 
     camera_data, matrices = camera_record(scene, camera_object)
