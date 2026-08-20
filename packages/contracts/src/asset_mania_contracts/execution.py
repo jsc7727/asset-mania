@@ -34,6 +34,19 @@ NULL_PLAN_STAGES: frozenset[str] = frozenset({"scene-preflight", "provider-evide
 OFFICIAL_HOST_STAGE = "provider-evidence"
 
 GATES: list[str] = [gate.value for gate in ApprovalGate]
+PARENT_RELATIONSHIPS: list[str] = [
+    "planned_from",
+    "evidenced_from",
+    "approved_by",
+    "conditioned_from",
+    "view_from",
+    "generated_from",
+    "baked_from",
+    "exported_from",
+]
+ARTIFACT_PARENT_RELATIONSHIPS: list[str] = ["consumed", "derived_from", "generated_from"]
+CONTENT_ORIGINS: list[str] = ["observed", "derived", "generated", "unknown"]
+SENSITIVITIES: list[str] = ["portable", "user-content", "local-sensitive"]
 SUBJECTS: list[str] = ["non_person", "synthetic_person", "real_person", "unknown"]
 DECLARABLE_SUBJECTS: list[str] = [subject for subject in SUBJECTS if subject != "unknown"]
 ASSET_KINDS: list[str] = ["object", "character", "face_head"]

@@ -6,6 +6,7 @@ requires-python = ">=3.11, <3.14"
 members = [
     "asset-mania-cli",
     "asset-mania-contracts",
+    "asset-mania-pipeline",
     "asset-mania-workspace",
 ]
 
@@ -28,6 +29,17 @@ requires-dist = [
 name = "asset-mania-contracts"
 version = "0.1.0"
 source = { editable = "packages/contracts" }
+
+[[package]]
+name = "asset-mania-pipeline"
+version = "0.1.0"
+source = { editable = "packages/pipeline" }
+dependencies = [
+    { name = "asset-mania-contracts" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "asset-mania-contracts", editable = "packages/contracts" }]
 
 [[package]]
 name = "asset-mania-workspace"
