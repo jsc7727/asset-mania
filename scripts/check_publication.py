@@ -65,7 +65,15 @@ PUBLIC_CLAIM_FILES = ("README.md", "skills/asset-mania/SKILL.md")
 #: A capability row may only leave `Planned` when a recorded run backs it. Each entry maps a
 #: README row label to the evidence phrase that must accompany a non-`Planned` state.
 PLANNED_CAPABILITIES = {
-    "Generic image to 3D": "no engine is cleared, downloaded, or executed",
+    # This row left `Planned` once a reconstruction actually ran, so the phrase it must carry
+    # changed with it. The previous requirement -- "no engine is cleared, downloaded, or
+    # executed" -- became false the moment an engine was downloaded and executed, and leaving
+    # it in place would have turned this gate into a check that enforced a stale claim.
+    #
+    # What still needs saying is the part that has not changed: an engine running on a
+    # developer's machine is not an engine cleared for a user's, and nothing here ships a
+    # weight or accepts a licence on anyone's behalf.
+    "Generic image to 3D": "clearance is user-issued and unissued here",
 }
 
 GUARDED_CLAIMS = {

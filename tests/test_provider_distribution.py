@@ -121,6 +121,29 @@ def _imported_roots(source: str) -> set[str]:
     return roots
 
 
+#: Reaching a network or a hub client. Forbidden everywhere in the engine package: this is
+#: how uncleared weights arrive, whichever layer does it.
+ACQUISITION_IMPORTS = frozenset(
+    {"huggingface_hub", "urllib", "requests", "httpx", "socket", "subprocess"}
+)
+
+#: Running a model. Forbidden in the adapter layer, which decides *whether* a run may happen,
+#: and expected in `ports/`, which performs it. Banning these outright would not remove the
+#: loader -- it would only push it somewhere the check does not look.
+EXECUTION_IMPORTS = frozenset({"torch", "rembg", "onnxruntime"})
+
+
+def _engine_sources() -> tuple[list[Path], list[Path]]:
+    """The engine package split into the layer that gates and the layer that executes."""
+    source_root = ROOT / "packages" / "engine-triposr" / "src"
+    everything = sorted(source_root.rglob("*.py"))
+    ports = [p for p in everything if p.parent.name == "ports"]
+    adapter = [p for p in everything if p.parent.name != "ports"]
+    assert adapter, "no adapter-layer sources found"
+    assert ports, "no ports-layer sources found; the split below would check nothing"
+    return adapter, ports
+
+
 def test_the_engine_adapter_bundles_no_weight_or_downloader() -> None:
     """An engine adapter that grows a downloader is how uncleared weights arrive.
 
@@ -128,21 +151,26 @@ def test_the_engine_adapter_bundles_no_weight_or_downloader() -> None:
     `requests` is not the `requests` library, and a check that cannot tell the difference
     trains people to ignore it.
     """
-    source_root = ROOT / "packages" / "engine-triposr" / "src"
-    forbidden = {
-        "huggingface_hub",
-        "torch",
-        "rembg",
-        "onnxruntime",
-        "urllib",
-        "requests",
-        "httpx",
-        "subprocess",
-        "socket",
-    }
-    for path in sorted(source_root.rglob("*.py")):
+    adapter, _ = _engine_sources()
+    forbidden = ACQUISITION_IMPORTS | EXECUTION_IMPORTS
+    for path in adapter:
         roots = _imported_roots(path.read_text(encoding="utf-8"))
         assert not (roots & forbidden), f"{path}: {sorted(roots & forbidden)}"
+
+
+def test_the_engine_ports_load_but_never_acquire() -> None:
+    """A port loads a checkpoint that is already on disk; it does not go and fetch one.
+
+    The distinction is the whole ordering guarantee. If a port could download, acquisition
+    would become a side effect of pressing run, and the user would read the licences after
+    the bytes had already landed rather than before.
+    """
+    _, ports = _engine_sources()
+    for path in ports:
+        roots = _imported_roots(path.read_text(encoding="utf-8"))
+        assert not (roots & ACQUISITION_IMPORTS), (
+            f"{path}: {sorted(roots & ACQUISITION_IMPORTS)}"
+        )
 
 
 def test_the_engine_adapter_names_no_download_url() -> None:
@@ -235,21 +263,49 @@ def test_the_planned_capability_gate_catches_an_unbacked_claim(tmp_path: Path) -
     # Available with the evidence phrase present: accepted.
     (clone / "README.md").write_text(
         "| Generic image to 3D | Available | see below |\n"
-        "no engine is cleared, downloaded, or executed\n",
+        "clearance is user-issued and unissued here\n",
         encoding="utf-8",
     )
     assert "UNBACKED_CAPABILITY_CLAIM" not in run().stdout
 
 
-def test_the_readme_still_reports_generic_image_to_3d_as_planned() -> None:
+def test_the_readme_qualifies_generic_image_to_3d_with_what_is_still_missing() -> None:
+    """The row left `Planned` when a reconstruction ran. It has to keep saying what did not.
+
+    A working engine on a developer's machine is not a cleared engine on a user's, and the
+    wheels still bundle nothing. Both halves stay in the row: the previous assertion here --
+    that the row said `Planned` -- would now be enforcing a claim weaker than the truth,
+    which is its own kind of wrong.
+    """
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     row = next(line for line in readme.splitlines() if line.startswith("| Generic image to 3D |"))
-    assert "Planned" in row
-    assert "no engine is cleared, downloaded, or executed" in row
+    assert "Planned" not in row, "a reconstruction has run; the row is no longer a plan"
+    assert "clearance is user-issued and unissued here" in row
+    assert "no wheel ships an engine or a weight" in row
+
+
+def test_the_readme_reports_the_reconstruction_as_open_not_watertight() -> None:
+    """The measured surface is open, and the README must not round that up.
+
+    An open mesh is the kind of result that reads as success -- a file exists, the triangle
+    count is large -- until something downstream needs a closed volume.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "open, not watertight" in readme
+    assert "boundary edges" in readme
 
 
 def test_the_skill_refuses_generic_image_to_3d() -> None:
+    """The skill must refuse the request without misstating why.
+
+    It previously asserted nothing had ever run, which stopped being true. The refusal now
+    rests on the fact that survives: no clearance exists in the user's installation, and the
+    skill is forbidden from writing one. Overstating the blocker is as much a defect as
+    overstating the capability -- it just fails in the flattering direction.
+    """
     skill = (ROOT / "skills" / "asset-mania" / "SKILL.md").read_text(encoding="utf-8")
-    assert "does not generate 3D geometry" in skill
+    assert "do not generate 3D geometry" in skill
     assert "no cleared engine" in skill.lower()
     assert "make this person 3D" in skill
+    assert "Never issue that clearance" in skill
+    assert "open, not watertight" in skill

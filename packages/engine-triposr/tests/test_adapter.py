@@ -92,6 +92,28 @@ def _run(plan, clearance, image, staging, **overrides):
 # --- The adapter builds no execution machinery of its own -----------------------------
 
 
+def adapter_layer_sources() -> list[Path]:
+    """Every module that must stay free of an engine.
+
+    `ports/` is excluded on purpose. Something has to load the checkpoint eventually, and
+    pretending otherwise would only mean the loader hides somewhere less obvious. The split
+    is the guarantee: this layer decides *whether* a run may happen, `ports/` performs it,
+    and each is checked for the failure it can actually have. A port importing torch is its
+    job; a port acquiring its own weights is not, and `test_port_triposr.py` scans for that.
+    """
+    return [p for p in sorted(SOURCE.rglob("*.py")) if p.parent.name != "ports"]
+
+
+def test_the_adapter_layer_excludes_only_the_ports_package() -> None:
+    """If `ports/` were renamed or the tree reshaped, the scan above would quietly cover
+    nothing, so the partition itself is asserted rather than assumed."""
+    scanned = {p.relative_to(SOURCE).as_posix() for p in adapter_layer_sources()}
+    everything = {p.relative_to(SOURCE).as_posix() for p in SOURCE.rglob("*.py")}
+    assert "adapter.py" in scanned
+    assert scanned, "the adapter layer scan covers no files"
+    assert all(p.startswith("ports/") for p in everything - scanned)
+
+
 def test_the_adapter_imports_no_process_socket_or_loader() -> None:
     """The easiest way a weights download appears is an adapter growing one quietly."""
     forbidden = {
@@ -107,7 +129,7 @@ def test_the_adapter_imports_no_process_socket_or_loader() -> None:
         "rembg",
         "onnxruntime",
     }
-    for path in sorted(SOURCE.rglob("*.py")):
+    for path in adapter_layer_sources():
         tree = ast.parse(path.read_text(encoding="utf-8"))
         roots: set[str] = set()
         for node in ast.walk(tree):
@@ -119,7 +141,7 @@ def test_the_adapter_imports_no_process_socket_or_loader() -> None:
 
 
 def test_the_adapter_mentions_no_download_url() -> None:
-    for path in sorted(SOURCE.rglob("*.py")):
+    for path in adapter_layer_sources():
         text = path.read_text(encoding="utf-8")
         assert "http://" not in text
         assert "https://" not in text

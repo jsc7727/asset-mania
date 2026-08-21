@@ -25,9 +25,34 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | BLEND / GLB / FBX export | Available | container checks plus fresh-process reimport in a separate Blender |
 | GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
-| Generic image to 3D | **Planned** | contracts and a fail-closed clearance gate exist; **no engine is cleared, downloaded, or executed** |
+| Generic image to 3D | Runs, unbundled | measured below; **clearance is user-issued and unissued here**, and no wheel ships an engine or a weight |
 | Face/head reconstruction | Research | not implemented; `real_person` needs a plan-bound rights receipt |
 | Asset Mania Cloud | Later | — |
+
+The reconstruction row above is backed by a run, so here is the run. A synthetic 512×512 RGBA
+input, TripoSR at `107cefdc` with `stabilityai/TripoSR` weights at `5b521936` (sha256
+`429e2c6b…`, checked against the digest the registry publishes), CPU, marching cubes at 128:
+
+| Measured | Value |
+| --- | --- |
+| Wall clock | 15.8 s |
+| Triangles / vertices | 82,948 / 41,613 |
+| Extent | 0.980 × 0.998 × 1.013 |
+| Winding | consistent, outward (signed volume +0.273) |
+| Surface | **open, not watertight** — 548 boundary edges, Euler number −135 |
+| Vertex colour | present |
+
+The open surface is the honest headline. Marching cubes on a density field does not owe you a
+closed manifold, and `manifold` reports `open` rather than rounding up to `closed`. Anything
+downstream that needs watertightness needs a repair pass that does not exist yet.
+
+Four licences are involved, each read from its source rather than from memory: the engine code
+(MIT), the weights (MIT), and a ViT architecture config that TripoSR fetches at runtime from
+`facebook/dino-vitb16` (Apache-2.0) — that last one appears in no requirements file and only
+surfaced by running the thing. A background remover is deliberately absent: upstream reaches
+for rembg, whose package licence is not the licence of the weights it downloads, so a
+foreground mask is required instead. Run `scripts/acquire_engine_assets.py` to fetch and
+digest-verify the assets and print every licence declaration.
 
 Two limits are worth stating plainly:
 

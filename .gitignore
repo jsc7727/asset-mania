@@ -12,3 +12,7 @@ weights/
 models/
 datasets/
 *.zip
+vendor-triposr/
+vendor-triposr-weights/
+.asset-mania/
+.omc/

@@ -69,20 +69,29 @@ Rules that hold for every stage:
   boolean shortcut, and a same-sized image is not evidence of alignment.
 - Report low coverage as incomplete. Do not present an incomplete bake as a finished asset.
 
-## Generic image-to-3D is not available
+## Generic image-to-3D runs, but not through this skill
 
 For any request to turn a photo or a single image into a 3D model, mesh, or figure —
 including "make this person 3D":
 
-1. State plainly that Asset Mania does not generate 3D geometry. It projects a supplied,
-   camera-aligned image onto a mesh the user already owns; it requires the 3D model as an
-   **input**.
-2. State that the generic image-to-3D path is contracted but has **no cleared engine**: no
-   engine code, model weight, or preprocessing model has been downloaded, executed, or
-   license-cleared in this repository.
-3. Do not describe the capability as working, coming soon, or a matter of effort. The blocker
-   is license clearance across the engine's whole dependency closure, not implementation.
-4. If the user has a UV-mapped mesh, offer the local stages above instead, which do work.
+1. State plainly that the stages this skill drives do not generate 3D geometry. They project a
+   supplied, camera-aligned image onto a mesh the user already owns; they require the 3D model
+   as an **input**.
+2. Separately, an engine adapter exists and has produced a mesh from an image on a developer
+   machine. Say so — it is true, and claiming otherwise to stay on the safe side is its own
+   inaccuracy. Then say what stops it here: there is **no cleared engine** in the user's
+   installation. No engine code or weight ships in any wheel, and the adapter refuses to run
+   until the user issues an `engine-clearance-v1` artifact covering the engine code, the
+   weights, the architecture config TripoSR fetches at runtime, and every runtime dependency.
+3. Never issue that clearance, draft it as though it were issued, or run the adapter with a
+   clearance the user did not author. Accepting third-party licence terms is the user's
+   decision, and `cleared_by` accepts `user` for exactly that reason.
+4. Do not describe the remaining work as larger than it is. The blocker is clearance and
+   acquisition, which the user can do by reading `scripts/acquire_engine_assets.py` output and
+   deciding — not missing implementation.
+5. A mesh from that path is **open, not watertight**. Do not offer it for any use that needs a
+   closed volume without saying so.
+6. If the user has a UV-mapped mesh, offer the local stages above instead, which do work.
 
 A `real_person` subject additionally needs a rights receipt bound to the exact plan digest,
 and that receipt is a user assertion. Never issue or imply one on the user's behalf.
