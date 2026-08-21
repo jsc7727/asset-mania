@@ -19,10 +19,12 @@ SKILL_DIRECTORY = ROOT / "skills" / "asset-mania" / "references"
 DISTRIBUTED = (
     "approval-receipt-v1",
     "conditioning-bundle-v1",
+    "engine-clearance-v1",
     "manifest-v1",
     "manifest-v2",
     "provider-evidence-v1",
     "provider-plan-v1",
+    "reconstruction-plan-v1",
     "view-v1",
     "workflow-plan-v1",
 )

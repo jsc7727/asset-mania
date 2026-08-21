@@ -43,6 +43,8 @@ and never to imply the workflow runs:
 - [provider evidence v1](references/provider-evidence-v1.schema.json)
 - [provider plan v1](references/provider-plan-v1.schema.json)
 - [approval receipt v1](references/approval-receipt-v1.schema.json)
+- [engine clearance v1](references/engine-clearance-v1.schema.json)
+- [reconstruction plan v1](references/reconstruction-plan-v1.schema.json)
 
 ## Local stage routing
 

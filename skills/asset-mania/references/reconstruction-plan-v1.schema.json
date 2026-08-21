@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/reconstruction-plan-v1.schema.json",
+  "title": "Asset Mania reconstruction plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "engine",
+    "engine_profile",
+    "clearance_sha256",
+    "source_image_sha256",
+    "source_width",
+    "source_height",
+    "color_space",
+    "alpha",
+    "mask_sha256",
+    "background_removal_clearance_sha256",
+    "asset_kind",
+    "subject",
+    "rights_receipt_sha256",
+    "expected_output",
+    "overwrite_policy",
+    "plan_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/reconstruction-plan"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "engine": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "engine_profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "clearance_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_image_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "source_height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "color_space": {
+      "const": "srgb"
+    },
+    "alpha": {
+      "enum": [
+        "straight",
+        "none"
+      ]
+    },
+    "mask_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "background_removal_clearance_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "asset_kind": {
+      "enum": [
+        "object",
+        "character",
+        "face_head"
+      ]
+    },
+    "subject": {
+      "enum": [
+        "non_person",
+        "synthetic_person",
+        "real_person"
+      ]
+    },
+    "rights_receipt_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expected_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mesh_format",
+        "textured",
+        "unit_scale_meters"
+      ],
+      "properties": {
+        "mesh_format": {
+          "enum": [
+            "glb",
+            "obj",
+            "ply"
+          ]
+        },
+        "textured": {
+          "type": "boolean"
+        },
+        "unit_scale_meters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "overwrite_policy": {
+      "const": "create_only"
+    },
+    "plan_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "mask_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "mask_sha256"
+          ]
+        },
+        {
+          "properties": {
+            "background_removal_clearance_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "background_removal_clearance_sha256"
+          ]
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "subject": {
+            "const": "real_person"
+          }
+        },
+        "required": [
+          "subject"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rights_receipt_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "rights_receipt_sha256": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

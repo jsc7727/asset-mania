@@ -1,0 +1,24 @@
+{
+  "schema_id": "asset-mania/reconstruction-plan",
+  "schema_version": "1.0",
+  "engine": "triposr-local",
+  "engine_profile": "triposr-local-cpu-v1",
+  "clearance_sha256": "d55b755efd5f4a31466df4929c1b8da8e894f876901fd2f2775a92b2a2a613dd",
+  "source_image_sha256": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+  "source_width": 1024,
+  "source_height": 1024,
+  "color_space": "srgb",
+  "alpha": "straight",
+  "mask_sha256": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+  "background_removal_clearance_sha256": null,
+  "asset_kind": "object",
+  "subject": "non_person",
+  "rights_receipt_sha256": null,
+  "expected_output": {
+    "mesh_format": "glb",
+    "textured": false,
+    "unit_scale_meters": 1.0
+  },
+  "overwrite_policy": "create_only",
+  "plan_sha256": "8a4c9fba5e4c018e25fcc4b2a7aacff0f6274dc3e609a38406d2bb0583aab00e"
+}

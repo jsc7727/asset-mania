@@ -191,7 +191,20 @@ _SCHEMA_FILES: dict[tuple[str, str], str] = {
     ("conditioning-bundle", "1.0"): "conditioning-bundle-v1.schema.json",
     ("view", "1.0"): "view-v1.schema.json",
     ("blender-response", "1.0"): "blender-response-v1.schema.json",
+    ("engine-clearance", "1.0"): "engine-clearance-v1.schema.json",
+    ("reconstruction-plan", "1.0"): "reconstruction-plan-v1.schema.json",
 }
+
+#: Every component role a clearance must cover, in the order the schema pins.
+CLEARANCE_COMPONENT_ROLES: list[str] = [
+    "engine_code",
+    "model_weights",
+    "preprocessing_model",
+]
+#: Only `cleared` permits execution. `unknown` fails with `prohibited`, because an unchecked
+#: license is not a smaller problem than a forbidding one.
+COMMERCIAL_USE_STATES: list[str] = ["cleared", "prohibited", "unknown"]
+MESH_FORMATS: list[str] = ["glb", "obj", "ply"]
 
 
 def schema_names() -> list[tuple[str, str]]:
@@ -509,6 +522,115 @@ def build_provider_plan(
             "cost_estimate": dict(cost_estimate),
             "expected_view": dict(expected_view),
             "required_gates": required_gates_for(subject),
+            "overwrite_policy": "create_only",
+            "plan_sha256": "",
+        },
+        "plan_sha256",
+    )
+
+
+def build_engine_clearance(
+    *,
+    engine: str,
+    components: Sequence[Mapping[str, Any]],
+    runtime_dependencies: Sequence[Mapping[str, Any]],
+    cleared_at: str,
+    expires_at: str,
+) -> dict[str, Any]:
+    """Seal one engine clearance artifact.
+
+    Only a user clears an engine: a maintainer cannot accept a third party's license terms
+    on someone else's behalf, so `cleared_by` is fixed rather than accepted.
+    """
+    roles = [str(item.get("role")) for item in components]
+    if roles != CLEARANCE_COMPONENT_ROLES:
+        raise ValueError(
+            f"clearance components must be exactly {CLEARANCE_COMPONENT_ROLES} in that order"
+        )
+    if not runtime_dependencies:
+        raise ValueError(
+            "a clearance with no runtime dependencies is never true for an inference engine"
+        )
+    if expires_at <= cleared_at:
+        raise ValueError("expires_at must fall after cleared_at")
+
+    return _seal(
+        {
+            "schema_id": "asset-mania/engine-clearance",
+            "schema_version": "1.0",
+            "engine": engine,
+            "components": [dict(item) for item in components],
+            "runtime_dependencies": sorted(
+                (dict(item) for item in runtime_dependencies),
+                key=lambda item: item["name"],
+            ),
+            "cleared_by": "user",
+            "cleared_at": cleared_at,
+            "expires_at": expires_at,
+            "clearance_sha256": "",
+        },
+        "clearance_sha256",
+    )
+
+
+def build_reconstruction_plan(
+    *,
+    engine: str,
+    engine_profile: str,
+    clearance_sha256: str,
+    source_image_sha256: str,
+    source_width: int,
+    source_height: int,
+    alpha: str,
+    mask_sha256: str | None,
+    background_removal_clearance_sha256: str | None,
+    asset_kind: str,
+    subject: str,
+    rights_receipt_sha256: str | None,
+    expected_output: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Seal one immutable reconstruction plan.
+
+    A mask or an audited background-removal clearance is mandatory: a single-image
+    reconstructor handed a full scene reconstructs the scene, so "no mask" is not a
+    permissive default but a different job.
+    """
+    _require_declared_subject(subject)
+    if asset_kind not in ASSET_KINDS:
+        raise ValueError(f"asset_kind {asset_kind!r} is not a declared kind")
+    if mask_sha256 is None and background_removal_clearance_sha256 is None:
+        raise ValueError(
+            f"{DiagnosticCode.MASK_REQUIRED.value}: supply a mask or an audited "
+            "background-removal clearance"
+        )
+    if subject == "real_person" and rights_receipt_sha256 is None:
+        raise ValueError(
+            f"{DiagnosticCode.FACE_RIGHTS_CONFIRMATION_REQUIRED.value}: real_person needs a "
+            "plan-bound rights receipt"
+        )
+    if subject != "real_person" and rights_receipt_sha256 is not None:
+        raise ValueError(f"a rights receipt does not apply to subject {subject!r}")
+    if expected_output["mesh_format"] not in MESH_FORMATS:
+        raise ValueError(f"mesh_format must be one of {MESH_FORMATS}")
+
+    return _seal(
+        {
+            "schema_id": "asset-mania/reconstruction-plan",
+            "schema_version": "1.0",
+            "engine": engine,
+            "engine_profile": engine_profile,
+            "clearance_sha256": clearance_sha256,
+            "source_image_sha256": source_image_sha256,
+            "source_width": int(source_width),
+            "source_height": int(source_height),
+            "color_space": "srgb",
+            "alpha": alpha,
+            "mask_sha256": mask_sha256,
+            "background_removal_clearance_sha256": background_removal_clearance_sha256,
+            "asset_kind": asset_kind,
+            "subject": subject,
+            "rights_receipt_sha256": rights_receipt_sha256,
+            "expected_output": dict(expected_output),
             "overwrite_policy": "create_only",
             "plan_sha256": "",
         },
