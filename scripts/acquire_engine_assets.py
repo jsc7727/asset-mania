@@ -22,6 +22,26 @@ only covered what the documentation mentioned would have passed a fetch it never
 
 Every download is checked against the digest the registry reports for the revision, so a
 truncated or substituted file fails here rather than surfacing as a strange mesh later.
+
+The runtime stack is a separate, deliberate install and is never pinned by this repository --
+the whole point is that the user chooses it. Measured working set on macOS arm64, Python 3.12:
+
+    uv pip install torch torchvision omegaconf==2.3.0 einops==0.7.0 \
+        transformers==4.35.0 huggingface-hub imageio
+    CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    CMAKE_PREFIX_PATH="$(python -c 'import torch,os;print(os.path.join(os.path.dirname(torch.__file__),"share","cmake"))');$(python -c 'import pybind11;print(pybind11.get_cmake_dir())')" \
+    uv pip install --no-build-isolation "torchmcubes @ git+https://github.com/tatsy/torchmcubes.git"
+
+Notes from getting that to work, none of which are in upstream's requirements.txt:
+
+* `imageio` is imported at module scope by `tsr/utils.py` for a video-writing branch the port
+  never takes, so it is required to import the engine at all.
+* `xatlas==0.0.9` is in requirements.txt and fails to build under cmake 4, which dropped
+  support for `cmake_minimum_required` below 3.5. It is only used for UV unwrapping during
+  texture baking, so the port does not need it.
+* `torchmcubes` has no wheel and needs Torch's and pybind11's cmake config directories on
+  CMAKE_PREFIX_PATH; with build isolation on, the build environment cannot see the installed
+  torch.
 """
 
 from __future__ import annotations
