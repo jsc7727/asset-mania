@@ -78,6 +78,11 @@ class DiagnosticCode(StrEnum):
     OUTPUT_COLLISION = "OUTPUT_COLLISION"
     SUBJECT_DECLARATION_REQUIRED = "SUBJECT_DECLARATION_REQUIRED"
     FACE_RIGHTS_CONFIRMATION_REQUIRED = "FACE_RIGHTS_CONFIRMATION_REQUIRED"
+    #: A `face_head` plan declared a subject that cannot own a face. Distinct from
+    #: FACE_RIGHTS_CONFIRMATION_REQUIRED on purpose: that one means a receipt is missing, this
+    #: one means the declaration itself cannot be true, and conflating them would hide the
+    #: only route by which the rights gate can be walked around.
+    SUBJECT_KIND_INCOHERENT = "SUBJECT_KIND_INCOHERENT"
     PROVIDER_EVIDENCE_STALE = "PROVIDER_EVIDENCE_STALE"
 
     # v0.3 generic image-to-3D clearance diagnostics.

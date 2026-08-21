@@ -26,7 +26,7 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
 | Generic image to 3D | Runs, unbundled | measured below; **clearance is user-issued and unissued here**, and no wheel ships an engine or a weight |
-| Face/head reconstruction | Research | not implemented; `real_person` needs a plan-bound rights receipt |
+| Face/head reconstruction | Gated, unmeasured | `face_head` + `non_person` now refused (it sealed with no receipt before); every mesh carries a `likeness-disclosure-v1`; **no face accuracy has been measured** |
 | Asset Mania Cloud | Later | — |
 
 The reconstruction row above is backed by a run, so here is the run. A synthetic 512×512 RGBA
@@ -78,10 +78,13 @@ Two limits are worth stating plainly:
 - The pinned Blender and glTF Validator inventories in `tools/` record only what was
   verified locally. No official archive URL or digest is asserted, because none has been
   fetched and verified.
-- Generic image-to-3D does not work here. Asset Mania needs a 3D model as input; it does not
-  generate geometry. The v0.3 clearance contract and gate are in place, but no inference
-  engine has been cleared, downloaded, or run, and the blocker is license clearance across an
-  engine's entire dependency closure rather than implementation effort.
+- Generic image-to-3D runs, but not for a user of this repository. The engine is not bundled,
+  no clearance is issued here, and the adapter refuses until a user issues one. The local
+  Blender stages are a different thing entirely: they need a 3D model as *input* and generate no
+  geometry at all.
+- No face accuracy has been measured. The 6.0% figure above is a rendered geometric subject
+  against its own source mesh, and it does not transfer to a human face. `face_head` meshes
+  carry a `likeness-disclosure-v1` saying so.
 
 The `inspect` command accepts a local PNG, JPEG, WebP, or `.blend` header input, records only
 portable allowlisted metadata and hashes, and writes a new run directory. It does not alter or
@@ -124,6 +127,7 @@ for the stream and exit-code contract.
 
 The CLI/core, Skill instructions, schemas, and documentation are licensed under
 [Apache-2.0](LICENSE), except the adapted Contributor Covenant text identified in
-[third-party notices](THIRD_PARTY_NOTICES.md). A future Blender `bpy` add-on, if published, will
-be a separate GPL-3.0-or-later package. Inputs and generated outputs are not relicensed by this
+[third-party notices](THIRD_PARTY_NOTICES.md). The Blender add-on under `blender-addon/` is a separate
+GPL-3.0-or-later package, because a module that imports `bpy` is a derived work of Blender;
+`scripts/check_license_boundary.py` enforces the split in both directions. Inputs and generated outputs are not relicensed by this
 repository.

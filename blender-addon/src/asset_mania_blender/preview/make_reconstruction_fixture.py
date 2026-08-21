@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render a known solid in Blender to make a reconstruction input whose answer is known.
 
 Run through Blender:

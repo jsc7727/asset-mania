@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render a reconstructed mesh in Blender, so a result can be looked at rather than described.
 
 Run through Blender, not through the project venv:

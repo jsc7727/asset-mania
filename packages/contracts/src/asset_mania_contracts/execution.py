@@ -51,6 +51,19 @@ SUBJECTS: list[str] = ["non_person", "synthetic_person", "real_person", "unknown
 DECLARABLE_SUBJECTS: list[str] = [subject for subject in SUBJECTS if subject != "unknown"]
 ASSET_KINDS: list[str] = ["object", "character", "face_head"]
 
+#: Subjects that can own a face. `face_head` with any other subject is refused.
+#:
+#: The rights gate keys off `subject`, and `asset_kind` was not consulted, so a `face_head`
+#: plan declaring `non_person` sealed with no receipt at all -- one field on a call that has to
+#: be filled in anyway. Subject is a declaration by design, never inferred from pixels, which
+#: makes the declaration the only thing between an engine and a stranger's face; a combination
+#: with no legitimate reading is exactly the shape a bypass takes.
+#:
+#: `synthetic_person` is here and needs no receipt: a synthetic face has no subject to obtain
+#: rights from, and a gate that punished the honest declaration would teach callers to
+#: mislabel.
+FACE_CAPABLE_SUBJECTS: list[str] = ["real_person", "synthetic_person"]
+
 PROVIDER_STATE_ORDER: list[str] = [
     ProviderState.PLANNED.value,
     ProviderState.APPROVAL_REQUIRED.value,
@@ -193,6 +206,7 @@ _SCHEMA_FILES: dict[tuple[str, str], str] = {
     ("blender-response", "1.0"): "blender-response-v1.schema.json",
     ("engine-clearance", "1.0"): "engine-clearance-v1.schema.json",
     ("reconstruction-plan", "1.0"): "reconstruction-plan-v1.schema.json",
+    ("likeness-disclosure", "1.0"): "likeness-disclosure-v1.schema.json",
 }
 
 #: Every component role a clearance must cover, in the order the schema pins.
@@ -427,6 +441,23 @@ def build_manifest_v2(
     }
 
 
+def _require_coherent_kind_and_subject(asset_kind: str, subject: str) -> None:
+    """Refuse a declaration that cannot be true, before any other gate is considered.
+
+    See `FACE_CAPABLE_SUBJECTS` for why this exists. Shared by every plan builder that accepts
+    both fields: the bypass was present in each of them, and a check written twice is a check
+    that will eventually be present in only one.
+    """
+    if asset_kind not in ASSET_KINDS:
+        raise ValueError(f"asset_kind {asset_kind!r} is not a declared kind")
+    if asset_kind == "face_head" and subject not in FACE_CAPABLE_SUBJECTS:
+        raise ValueError(
+            f"{DiagnosticCode.SUBJECT_KIND_INCOHERENT.value}: asset_kind 'face_head' with "
+            f"subject {subject!r} declares a face belonging to nothing. Declare "
+            f"{' or '.join(FACE_CAPABLE_SUBJECTS)}."
+        )
+
+
 def build_workflow_plan(
     *,
     source_scene_sha256: str,
@@ -441,8 +472,7 @@ def build_workflow_plan(
 ) -> dict[str, Any]:
     """Seal the immutable workflow plan for one conditioning run."""
     _require_declared_subject(subject)
-    if asset_kind not in ASSET_KINDS:
-        raise ValueError(f"asset_kind {asset_kind!r} is not a declared kind")
+    _require_coherent_kind_and_subject(asset_kind, subject)
 
     if action_range is not None:
         start, end = action_range
@@ -529,6 +559,95 @@ def build_provider_plan(
     )
 
 
+#: Every claim a likeness disclosure asserts has *not* been substantiated. Enumerated rather
+#: than described in prose so a consumer can check for them mechanically, and fixed rather than
+#: caller-supplied so a caller cannot narrow the list by omission.
+PROHIBITED_LIKENESS_CLAIMS: list[str] = [
+    "identification_grade_likeness",
+    "biometric_record",
+    "match_to_a_specific_person",
+]
+
+#: What has actually been measured about this engine's geometric accuracy, and on what.
+#:
+#: The subject is named because the number does not travel. It comes from a subdivided Suzanne
+#: compared against the mesh that rendered its input image -- smooth, symmetric, textureless,
+#: controlled light. Quoting it beside the word "likeness" would be carrying a figure across a
+#: gap it does not span, so the disclosure records the subject alongside the value and leaves
+#: `face_benchmark` null until faces with reference scans have been measured.
+NON_FACE_ACCURACY_REFERENCE: dict[str, Any] = {
+    "subject": "subdivided Suzanne, single rendered view, marching cubes 256",
+    "symmetric_mean_distance": 0.06012,
+    "unit": "fraction of the subject's longest axis",
+}
+
+_NO_FACE_BENCHMARK_NOTE = (
+    "No face accuracy has been measured. The non-face reference figure was obtained on a "
+    "rendered geometric subject and does not transfer to a human face. Filling face_benchmark "
+    "would require faces with reference scans, which this repository does not have; producing "
+    "them from rendered heads would yield a number about rendered heads."
+)
+
+
+def build_likeness_disclosure(
+    *,
+    plan_sha256: str,
+    source_image_sha256: str,
+    mesh_sha256: str,
+    subject: str,
+    rights_receipt_sha256: str | None,
+    engine: str,
+    engine_profile: str,
+    views: int = 1,
+) -> dict[str, Any]:
+    """Seal the disclosure that travels with a face_head mesh.
+
+    `asset_kind` is fixed to `face_head` because that is the only kind this artifact describes,
+    and `measured_accuracy` is fixed here rather than accepted from the caller: a disclosure
+    whose accuracy claims could be supplied by whoever wanted to publish the mesh would
+    disclose nothing.
+    """
+    if subject not in FACE_CAPABLE_SUBJECTS:
+        raise ValueError(
+            f"{DiagnosticCode.SUBJECT_KIND_INCOHERENT.value}: a likeness disclosure describes a "
+            f"face, and subject {subject!r} cannot own one"
+        )
+    if subject == "real_person" and rights_receipt_sha256 is None:
+        raise ValueError(
+            f"{DiagnosticCode.FACE_RIGHTS_CONFIRMATION_REQUIRED.value}: a real_person "
+            "disclosure records the receipt that was consumed"
+        )
+    if subject != "real_person" and rights_receipt_sha256 is not None:
+        raise ValueError(f"a rights receipt does not apply to subject {subject!r}")
+    if views < 1:
+        raise ValueError("likeness_basis.views must be at least 1")
+
+    return _seal(
+        {
+            "schema_id": "asset-mania/likeness-disclosure",
+            "schema_version": "1.0",
+            "plan_sha256": plan_sha256,
+            "source_image_sha256": source_image_sha256,
+            "mesh_sha256": mesh_sha256,
+            "asset_kind": "face_head",
+            "subject": subject,
+            "rights_receipt_sha256": rights_receipt_sha256,
+            "engine": engine,
+            "engine_profile": engine_profile,
+            "likeness_basis": {"views": int(views), "inferred": True},
+            "measured_accuracy": {
+                "ground_truth_available": False,
+                "face_benchmark": None,
+                "non_face_reference": dict(NON_FACE_ACCURACY_REFERENCE),
+                "note": _NO_FACE_BENCHMARK_NOTE,
+            },
+            "prohibited_claims": list(PROHIBITED_LIKENESS_CLAIMS),
+            "disclosure_sha256": "",
+        },
+        "disclosure_sha256",
+    )
+
+
 def build_engine_clearance(
     *,
     engine: str,
@@ -596,8 +715,7 @@ def build_reconstruction_plan(
     permissive default but a different job.
     """
     _require_declared_subject(subject)
-    if asset_kind not in ASSET_KINDS:
-        raise ValueError(f"asset_kind {asset_kind!r} is not a declared kind")
+    _require_coherent_kind_and_subject(asset_kind, subject)
     if mask_sha256 is None and background_removal_clearance_sha256 is None:
         raise ValueError(
             f"{DiagnosticCode.MASK_REQUIRED.value}: supply a mask or an audited "

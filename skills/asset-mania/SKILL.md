@@ -95,8 +95,27 @@ including "make this person 3D":
    returned, and never present `open` as usable where a closed volume is required.
 6. If the user has a UV-mapped mesh, offer the local stages above instead, which do work.
 
-A `real_person` subject additionally needs a rights receipt bound to the exact plan digest,
-and that receipt is a user assertion. Never issue or imply one on the user's behalf.
+## Faces and heads
+
+`asset_kind: face_head` is gated twice over, and both gates matter for different reasons:
+
+1. A `real_person` subject needs a rights receipt bound to the exact plan digest. That receipt
+   is a user assertion. Never issue or imply one on the user's behalf.
+2. `face_head` with `non_person` is refused with `SUBJECT_KIND_INCOHERENT`. Before this gate
+   existed the combination sealed a plan with no receipt at all, which made it the way around
+   the rights gate rather than an odd declaration. If a user offers it, say what it means and
+   ask which subject actually applies -- do not pick one for them, and do not suggest
+   `non_person` as a way to proceed.
+
+Every `face_head` mesh carries a `likeness-disclosure-v1` recording the source image, the plan,
+the engine, and what has been measured. Report its contents when describing such a mesh.
+
+**No face accuracy has been measured.** The one accuracy figure this project has -- a symmetric
+mean surface distance of 6.0% of the subject's longest axis -- comes from a rendered geometric
+subject compared against its own source mesh. It does not transfer to a human face. Never quote
+it as a likeness figure, and never describe an output as an identification-grade likeness, a
+biometric record, or a match to a specific person: a single view underdetermines the geometry
+behind a face, and nothing here has measured whether such a claim would hold.
 
 ## Stop at the external-action boundary
 

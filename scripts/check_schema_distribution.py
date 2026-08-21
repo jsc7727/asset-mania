@@ -20,6 +20,10 @@ DISTRIBUTED = (
     "approval-receipt-v1",
     "conditioning-bundle-v1",
     "engine-clearance-v1",
+    # v0.4. Distributed because it is the artifact a consumer of a face_head mesh needs to read
+    # in order to know what the mesh is and what has not been measured about it -- withholding
+    # it would leave the mesh travelling without the disclosure that is its whole point.
+    "likeness-disclosure-v1",
     "manifest-v1",
     "manifest-v2",
     "provider-evidence-v1",

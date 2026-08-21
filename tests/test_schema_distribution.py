@@ -17,6 +17,7 @@ DISTRIBUTED_SCHEMAS = [
     "manifest-v2",
     "provider-evidence-v1",
     "provider-plan-v1",
+    "likeness-disclosure-v1",
     "reconstruction-plan-v1",
     "view-v1",
     "workflow-plan-v1",

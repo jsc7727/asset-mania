@@ -286,6 +286,7 @@ def test_schema_registry_resolves_every_name_and_version() -> None:
         ("blender-response", "1.0"),
         ("conditioning-bundle", "1.0"),
         ("engine-clearance", "1.0"),
+        ("likeness-disclosure", "1.0"),
         ("provider-evidence", "1.0"),
         ("provider-plan", "1.0"),
         ("reconstruction-plan", "1.0"),
