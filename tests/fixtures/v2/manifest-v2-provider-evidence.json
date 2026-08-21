@@ -1,0 +1,59 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-evidence-1",
+  "command": "provider.evidence.refresh",
+  "stage": "provider-evidence",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:25:00Z",
+  "inputs": [],
+  "parents": [],
+  "parameters": {
+    "provider": "openai",
+    "source_hosts": [
+      "developers.openai.com",
+      "platform.openai.com"
+    ],
+    "network_action": "explicit"
+  },
+  "plan_sha256": null,
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": null
+  },
+  "capabilities": {
+    "network": "explicit_official_hosts",
+    "filesystem": "source_read_staging_write",
+    "blender": "not_required",
+    "provider": "available"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "provider_evidence",
+      "path": "provider-evidence.json",
+      "sha256": "d6c21e7a3ec01f67e0398c9b3148127aacf56c3e337a3da375482652ac542574",
+      "byte_size": 3072,
+      "media_type": "application/json",
+      "parents": [],
+      "operation": "evidence-refresh",
+      "content_origin": "observed",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "provider-evidence-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "03fdb582fa2235d7006a38ab7ac3d55c9d89aacfebe7835ab408409cf2af0c7e"
+      }
+    }
+  ],
+  "result": {
+    "status": "succeeded",
+    "diagnostics": [],
+    "provider_state": null
+  },
+  "warnings": []
+}

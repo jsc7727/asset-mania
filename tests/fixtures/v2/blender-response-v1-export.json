@@ -1,0 +1,67 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-export-1",
+  "operation": "export",
+  "status": "succeeded",
+  "diagnostics": [],
+  "portable_labels": [
+    "action-1",
+    "armature-1",
+    "camera-1",
+    "mesh-1"
+  ],
+  "outputs": [
+    {
+      "role": "scene_blend",
+      "path": "exports/asset.blend",
+      "sha256": "8181818181818181818181818181818181818181818181818181818181818181",
+      "byte_size": 2097152,
+      "media_type": "application/x-blender",
+      "validation": {
+        "profile": "roundtrip-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "8484848484848484848484848484848484848484848484848484848484848484"
+      }
+    },
+    {
+      "role": "scene_fbx",
+      "path": "exports/asset.fbx",
+      "sha256": "8282828282828282828282828282828282828282828282828282828282828282",
+      "byte_size": 2097152,
+      "media_type": "application/octet-stream",
+      "validation": {
+        "profile": "roundtrip-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "8484848484848484848484848484848484848484848484848484848484848484"
+      }
+    },
+    {
+      "role": "scene_glb",
+      "path": "exports/asset.glb",
+      "sha256": "8383838383838383838383838383838383838383838383838383838383838383",
+      "byte_size": 2097152,
+      "media_type": "model/gltf-binary",
+      "validation": {
+        "profile": "roundtrip-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "8484848484848484848484848484848484848484848484848484848484848484"
+      }
+    }
+  ],
+  "metrics": {
+    "kind": "export",
+    "format_count": 3,
+    "mesh_count": 1,
+    "bone_count": 12,
+    "action_count": 1,
+    "camera_count": 1,
+    "material_count": 1,
+    "texture_count": 1,
+    "scene_semantic_digest": "8484848484848484848484848484848484848484848484848484848484848484"
+  },
+  "response_sha256": "cb807ecfd3cf38e7a0bf2ae8456a15519911bb3fc90d2c8425af5936a612ab78"
+}

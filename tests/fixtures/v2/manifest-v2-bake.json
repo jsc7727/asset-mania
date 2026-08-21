@@ -1,0 +1,98 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-bake-1",
+  "command": "texture.bake",
+  "stage": "bake",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:45:00Z",
+  "inputs": [
+    {
+      "label": "input-1",
+      "role": "source_scene",
+      "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "byte_size": 262144,
+      "media_type": "application/x-blender",
+      "content_origin": "observed",
+      "sensitivity": "user-content"
+    }
+  ],
+  "parents": [
+    {
+      "run_id": "run-condition-1",
+      "manifest_sha256": "589980d5eff3f0c7a32e2c2173f5ec1eb863afb1a61ce255957b1964563a0e2c",
+      "relationship": "baked_from"
+    },
+    {
+      "run_id": "run-view-1",
+      "manifest_sha256": "a47bb7ee30cdc20a88296516fb4008595df718ca53dbd2596a70a127e3369ab3",
+      "relationship": "view_from"
+    }
+  ],
+  "parameters": {
+    "condition_manifest_sha256": "589980d5eff3f0c7a32e2c2173f5ec1eb863afb1a61ce255957b1964563a0e2c",
+    "view_manifest_sha256": "a47bb7ee30cdc20a88296516fb4008595df718ca53dbd2596a70a127e3369ab3",
+    "atlas_size": [
+      1024,
+      1024
+    ],
+    "bake_margin": 16,
+    "color_padding": 8,
+    "minimum_coverage": 0.15,
+    "profile": "blender-5.2.0-cpu-v1"
+  },
+  "plan_sha256": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad",
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": {
+      "profile": "blender-5.2.0-cpu-v1",
+      "version": "5.2.0",
+      "build_hash": "a1b2c3d4e5f6",
+      "executable_sha256": "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f"
+    }
+  },
+  "capabilities": {
+    "network": "denied",
+    "filesystem": "source_read_staging_write",
+    "blender": "found",
+    "provider": "not_required"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "baked_texture",
+      "path": "baked-texture.png",
+      "sha256": "7171717171717171717171717171717171717171717171717171717171717171",
+      "byte_size": 1048576,
+      "media_type": "image/png",
+      "parents": [
+        {
+          "sha256": "6161616161616161616161616161616161616161616161616161616161616161",
+          "relationship": "generated_from"
+        },
+        {
+          "sha256": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "bake",
+      "content_origin": "generated",
+      "sensitivity": "user-content",
+      "upload_eligible": false,
+      "validation": {
+        "profile": "baked-texture-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "7272727272727272727272727272727272727272727272727272727272727272"
+      }
+    }
+  ],
+  "result": {
+    "status": "succeeded",
+    "diagnostics": [],
+    "provider_state": null
+  },
+  "warnings": []
+}

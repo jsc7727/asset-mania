@@ -1,0 +1,40 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-bake-1",
+  "operation": "bake",
+  "status": "succeeded",
+  "diagnostics": [],
+  "portable_labels": [
+    "action-1",
+    "armature-1",
+    "camera-1",
+    "mesh-1"
+  ],
+  "outputs": [
+    {
+      "role": "baked_texture",
+      "path": "baked-texture.png",
+      "sha256": "7171717171717171717171717171717171717171717171717171717171717171",
+      "byte_size": 1048576,
+      "media_type": "image/png",
+      "validation": {
+        "profile": "baked-texture-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "7272727272727272727272727272727272727272727272727272727272727272"
+      }
+    }
+  ],
+  "metrics": {
+    "kind": "bake",
+    "atlas_width": 1024,
+    "atlas_height": 1024,
+    "observed_texel_count": 512000,
+    "padded_texel_count": 24576,
+    "finite_texel_count": 536576,
+    "coverage_ratio": 0.488281,
+    "texture_semantic_digest": "7272727272727272727272727272727272727272727272727272727272727272"
+  },
+  "response_sha256": "ecc67aa4b2f8aa6a0c37e0b22e6620a541c65179498521167ba55fa6735085f2"
+}

@@ -1,0 +1,875 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/blender-response-v1.schema.json",
+  "title": "Asset Mania Blender worker response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "request_id",
+    "operation",
+    "status",
+    "diagnostics",
+    "portable_labels",
+    "outputs",
+    "metrics",
+    "response_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/blender-response"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "operation": {
+      "enum": [
+        "preflight",
+        "condition",
+        "bake",
+        "export",
+        "validate"
+      ]
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "diagnostics": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/diagnostic_code"
+      }
+    },
+    "portable_labels": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "byte_size",
+          "media_type",
+          "validation"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "byte_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_type": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+          },
+          "validation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "profile",
+              "status",
+              "diagnostics",
+              "semantic_digest"
+            ],
+            "properties": {
+              "profile": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+              },
+              "status": {
+                "enum": [
+                  "valid",
+                  "invalid",
+                  "incomplete",
+                  "unvalidated"
+                ]
+              },
+              "diagnostics": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/diagnostic_code"
+                }
+              },
+              "semantic_digest": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action_count",
+            "armature_count",
+            "camera_count",
+            "external_dependency_count",
+            "kind",
+            "mesh_count",
+            "object_count",
+            "scene_semantic_digest",
+            "target_bone_count",
+            "target_triangle_count",
+            "target_uv_layer_count",
+            "target_vertex_count"
+          ],
+          "properties": {
+            "kind": {
+              "const": "preflight"
+            },
+            "object_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mesh_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "camera_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "armature_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "action_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "target_vertex_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "target_triangle_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "target_uv_layer_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "target_bone_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "external_dependency_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scene_semantic_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "finite_foreground_depth_count",
+            "foreground_pixel_count",
+            "geometry_digest",
+            "height",
+            "interior_unit_normal_count",
+            "kind",
+            "pose_digest",
+            "projection_max_error_pixels",
+            "uv_digest",
+            "width"
+          ],
+          "properties": {
+            "kind": {
+              "const": "condition"
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "foreground_pixel_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "finite_foreground_depth_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "interior_unit_normal_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "projection_max_error_pixels": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "geometry_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "uv_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "pose_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "atlas_height",
+            "atlas_width",
+            "coverage_ratio",
+            "finite_texel_count",
+            "kind",
+            "observed_texel_count",
+            "padded_texel_count",
+            "texture_semantic_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "bake"
+            },
+            "atlas_width": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "atlas_height": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "observed_texel_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "padded_texel_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "finite_texel_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "coverage_ratio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "texture_semantic_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action_count",
+            "bone_count",
+            "camera_count",
+            "format_count",
+            "kind",
+            "material_count",
+            "mesh_count",
+            "scene_semantic_digest",
+            "texture_count"
+          ],
+          "properties": {
+            "kind": {
+              "const": "export"
+            },
+            "format_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mesh_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bone_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "action_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "camera_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "material_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "texture_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scene_semantic_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "checked_artifact_count",
+            "error_count",
+            "kind",
+            "profile",
+            "semantic_digest",
+            "warning_count"
+          ],
+          "properties": {
+            "kind": {
+              "const": "validate"
+            },
+            "profile": {
+              "type": "string",
+              "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+            },
+            "checked_artifact_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warning_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "semantic_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "response_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "preflight"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action_count",
+                  "armature_count",
+                  "camera_count",
+                  "external_dependency_count",
+                  "kind",
+                  "mesh_count",
+                  "object_count",
+                  "scene_semantic_digest",
+                  "target_bone_count",
+                  "target_triangle_count",
+                  "target_uv_layer_count",
+                  "target_vertex_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "preflight"
+                  },
+                  "object_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mesh_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "camera_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "armature_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "action_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_vertex_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_triangle_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_uv_layer_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "target_bone_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "external_dependency_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "scene_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "condition"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "finite_foreground_depth_count",
+                  "foreground_pixel_count",
+                  "geometry_digest",
+                  "height",
+                  "interior_unit_normal_count",
+                  "kind",
+                  "pose_digest",
+                  "projection_max_error_pixels",
+                  "uv_digest",
+                  "width"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "condition"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "foreground_pixel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "finite_foreground_depth_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "interior_unit_normal_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "projection_max_error_pixels": {
+                    "oneOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "geometry_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "uv_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "pose_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "bake"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "atlas_height",
+                  "atlas_width",
+                  "coverage_ratio",
+                  "finite_texel_count",
+                  "kind",
+                  "observed_texel_count",
+                  "padded_texel_count",
+                  "texture_semantic_digest"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "bake"
+                  },
+                  "atlas_width": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "atlas_height": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "observed_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "padded_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "finite_texel_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "coverage_ratio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "texture_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "export"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action_count",
+                  "bone_count",
+                  "camera_count",
+                  "format_count",
+                  "kind",
+                  "material_count",
+                  "mesh_count",
+                  "scene_semantic_digest",
+                  "texture_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "export"
+                  },
+                  "format_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mesh_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "bone_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "action_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "camera_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "material_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "texture_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "scene_semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "validate"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "checked_artifact_count",
+                  "error_count",
+                  "kind",
+                  "profile",
+                  "semantic_digest",
+                  "warning_count"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "validate"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]*$"
+                  },
+                  "checked_artifact_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "error_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "warning_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "semantic_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "not": {
+              "type": "null"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "diagnostic_code": {
+      "enum": [
+        "BACKGROUND_REMOVAL_UNPINNED",
+        "BAKE_CONTEXT_INVALID",
+        "BLENDER_EXECUTION_FAILED",
+        "BLENDER_NOT_FOUND",
+        "BLENDER_RESPONSE_INVALID",
+        "BLENDER_VERSION_MISMATCH",
+        "BLEND_HEADER_INVALID",
+        "CAMERA_CALIBRATION_MISSING",
+        "CAMERA_NOT_FOUND",
+        "DEPSGRAPH_TOPOLOGY_CHANGED",
+        "ENGINE_LICENSE_UNCLEARED",
+        "ENGINE_NOT_CLEARED",
+        "ENGINE_UNAVAILABLE",
+        "EXIF_SENSITIVE_METADATA_PRESENT",
+        "EXPORT_OPERATOR_UNAVAILABLE",
+        "FACE_RIGHTS_CONFIRMATION_REQUIRED",
+        "GLTF_VALIDATION_FAILED",
+        "INPUT_NOT_FOUND",
+        "INPUT_UNREADABLE",
+        "INTERNAL_ERROR",
+        "MASK_REQUIRED",
+        "MISSING_LINKED_ASSET",
+        "OUTPUT_COLLISION",
+        "PARENT_MANIFEST_MISMATCH",
+        "PASS_INVALID",
+        "PLAN_TAMPERED",
+        "POSE_NONFINITE",
+        "PROVIDER_EVIDENCE_STALE",
+        "RECONSTRUCTION_FAILED",
+        "RECONSTRUCTION_UNVERIFIED",
+        "REPROJECTION_LOW_COVERAGE",
+        "RIG_NOT_FOUND",
+        "ROUNDTRIP_MISMATCH",
+        "SELECTION_AMBIGUOUS",
+        "SOURCE_CHANGED_DURING_RUN",
+        "SOURCE_POSE_UNKNOWN",
+        "SUBJECT_DECLARATION_REQUIRED",
+        "TARGET_MESH_NOT_FOUND",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "UNTRUSTED_AUTOEXEC_REQUIRED",
+        "UV_MISSING_OR_INVALID",
+        "VIEW_ALIGNMENT_MISMATCH",
+        "WORKFLOW_NOT_IMPLEMENTED"
+      ]
+    }
+  }
+}

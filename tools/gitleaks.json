@@ -1,0 +1,32 @@
+{
+  "schema_id": "asset-mania/tool-inventory",
+  "schema_version": "1.0",
+  "tool": "gitleaks",
+  "required_version": "8.30.1",
+  "required_release": "v8.30.1",
+  "license": {
+    "spdx": "MIT",
+    "url": "https://github.com/gitleaks/gitleaks",
+    "redistributed": false,
+    "notice": "Gitleaks is invoked as a separate process for secret scanning. Its binary and sources are not bundled, vendored, or redistributed by Asset Mania."
+  },
+  "acquisition": {
+    "policy": "user_supplied_install",
+    "network_boundary": "Acquisition happens before any network-deny boundary. No Asset Mania stage downloads gitleaks.",
+    "official_source": "https://github.com/gitleaks/gitleaks/releases",
+    "official_archives": [],
+    "official_archives_status": "unverified",
+    "official_archives_note": "No release archive URL or SHA-256 is recorded because none has been fetched and verified from the official source. A CI job that downloads gitleaks must pin one first."
+  },
+  "verified_installs": [
+    {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "version": "8.30.1",
+      "executable_path_note": "Installed at /opt/homebrew/bin/gitleaks on the machine that produced this entry.",
+      "executable_sha256": "f414bc2fb952be6c9072b75cb411e3368614ef4b16d48dbd9ad238034afd2302",
+      "verified_by": "local `gitleaks version` output and `shasum -a 256` of the executable"
+    }
+  ],
+  "scan_scope_note": "Gitleaks is a secret scan. It is not evidence about media, model weights, or private sample content; the deny-inventory scan in scripts/check_publication.py covers that separately."
+}

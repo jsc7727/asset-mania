@@ -1,0 +1,17 @@
+# The GPL worker is packaged separately from every Apache wheel. `make release-check`
+# and scripts/check_license_boundary.py enforce that separation.
+[project]
+name = "asset-mania-blender-addon"
+version = "0.2.0"
+description = "GPL Blender worker for Asset Mania; the only tree that imports bpy"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.11,<3.14"
+dependencies = []
+
+[tool.uv.build-backend]
+module-name = "asset_mania_blender"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13"]
+build-backend = "uv_build"

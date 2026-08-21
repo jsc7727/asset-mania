@@ -8,6 +8,52 @@
   identify the source, link the license, and indicate modification. Status: all three appear in
   the file; no separate upstream NOTICE file is supplied with the v2.1 text.
 
+## Separately distributed GPL component
+
+`blender-addon/` is this repository's own code, not a vendored third party, but it is
+licensed GPL-3.0-or-later rather than Apache-2.0 and is therefore inventoried here.
+
+- `blender-addon/LICENSE` — the verbatim FSF GNU General Public License v3, 29 June 2007.
+  It covers every file under `blender-addon/`, which is the only tree permitted to import
+  `bpy` or `mathutils`. Required notice: keep this license text with any distribution of
+  that tree and state the license change relative to the Apache-2.0 packages.
+- The tree is built and published as its own archive. It is not a uv workspace member and
+  never appears inside an Apache wheel or sdist;
+  `scripts/check_license_boundary.py` fails the build if it does.
+
+## Optional separately distributed component
+
+`packages/provider-openai/` is this repository's own Apache-2.0 code, published as its own
+optional wheel `asset-mania-provider-openai`. The CLI wheel has no runtime dependency on
+it; it is discovered through the `asset_mania.providers` entry point, and the root
+development workspace installs it only to run its fake-transport tests. It adds no
+third-party runtime dependency of its own.
+
+## Optional clearance-gated engine adapter
+
+`packages/engine-triposr/` is this repository's own Apache-2.0 code, published as its own
+optional wheel `asset-mania-engine-triposr` and discovered through the
+`asset_mania.engines` entry point. The CLI wheel has no runtime dependency on it.
+
+It bundles and downloads **nothing**: no engine code, no model weight, no preprocessing
+model, and no third-party runtime dependency of its own. Execution is an injected port whose
+default refuses every call. An engine becomes usable only when a user supplies an
+`engine-clearance-v1` artifact recording the revision, digest, license, and download receipt
+for the engine code, the weights, the preprocessing model, and every runtime dependency; see
+`docs/superpowers/specs/2026-08-21-asset-mania-v0-3-generic-image-to-3d-design.md`. No such
+clearance ships with this repository, and no engine has been executed.
+
+## External tools used but never redistributed
+
+Asset Mania invokes these tools as separate processes and bundles neither their binaries
+nor their sources. `tools/` records the pinned acquisition metadata each one needs.
+
+| Component | Pinned target | License | Notice and redistribution status |
+| --- | --- | --- | --- |
+| Blender | `5.2.0 LTS` — see `tools/blender-5.2.0.json` | GPL-2.0-or-later (see [blender.org/about/license](https://www.blender.org/about/license/)) | Invoked as a subprocess from a user-supplied install; no binary, library, or Python module is redistributed. |
+| Gitleaks | `8.30.1` — see `tools/gitleaks.json` | MIT | Invoked as a subprocess for secret scanning; not redistributed. |
+| Khronos glTF-Validator | see `tools/gltf-validator.json` | Apache-2.0 (see [KhronosGroup/glTF-Validator](https://github.com/KhronosGroup/glTF-Validator)) | Invoked as a subprocess for export validation; not redistributed. Absent until Task 9 pins a verified release. |
+
 ## Runtime dependency
 
 | Component | Locked version and source | License | Notice and redistribution status |

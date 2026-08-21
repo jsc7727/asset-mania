@@ -1,0 +1,32 @@
+{
+  "asset_kind": "face_head",
+  "disclosure_sha256": "1e03494d199c3203b84de6825572880b5a681e1efd3f60bea511231a442da3d2",
+  "engine": "triposr-local",
+  "engine_profile": "triposr-local-cpu-v1",
+  "likeness_basis": {
+    "inferred": true,
+    "views": 1
+  },
+  "measured_accuracy": {
+    "face_benchmark": null,
+    "ground_truth_available": false,
+    "non_face_reference": {
+      "subject": "subdivided Suzanne, single rendered view, marching cubes 256",
+      "symmetric_mean_distance": 0.06012,
+      "unit": "fraction of the subject's longest axis"
+    },
+    "note": "No face accuracy has been measured. The non-face reference figure was obtained on a rendered geometric subject and does not transfer to a human face. Filling face_benchmark would require faces with reference scans, which this repository does not have; producing them from rendered heads would yield a number about rendered heads."
+  },
+  "mesh_sha256": "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+  "plan_sha256": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+  "prohibited_claims": [
+    "identification_grade_likeness",
+    "biometric_record",
+    "match_to_a_specific_person"
+  ],
+  "rights_receipt_sha256": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+  "schema_id": "asset-mania/likeness-disclosure",
+  "schema_version": "1.0",
+  "source_image_sha256": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+  "subject": "real_person"
+}

@@ -1,6 +1,6 @@
 [project]
 name = "asset-mania-workspace"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.11,<3.14"
 dependencies = []
 
@@ -10,6 +10,27 @@ dev = [
   "pytest>=9.0.3,<10",
   "pytest-cov>=6,<8",
   "ruff>=0.12,<1",
+  # The engine port's tests need these, and they are dev dependencies rather than skipped
+  # imports on purpose. A `pytest.importorskip` would have made CI green without ever running
+  # the checks that the port acquires nothing, refuses an unmasked photo, and orients its
+  # geometry outward -- a test that silently skips protects nothing. None of these pulls torch;
+  # the engine's own runtime stack stays unpinned and user-supplied.
+  "numpy>=1.26",
+  # trimesh imports scipy lazily inside its graph operations, so merge_vertices and
+  # is_watertight raise ModuleNotFoundError without it. Not optional for these tests.
+  "scipy>=1.11",
+  # trimesh.repair.fill_holes needs networkx. The hole repair in _normalise is what turns the
+  # extraction's 134 boundary loops into a closed surface, so this is a dependency of the
+  # product path, not only of a test.
+  "networkx>=3.0",
+  "pillow>=10.1",
+  # Pinned exactly, not floated. TripoSR's requirements.txt pins trimesh 4.0.5, so that is the
+  # version the port actually runs against -- and it is the version whose numpy-2 breakage the
+  # port works around (`apply_transform`, `creation.box`, `mesh.extents`, and
+  # `proximity.signed_distance` all call the removed `ndarray.ptp`). Letting the test
+  # environment float to trimesh 5 would exercise a library the engine never uses and quietly
+  # validate workarounds against the wrong target.
+  "trimesh==4.0.5",
 ]
 
 [tool.uv]

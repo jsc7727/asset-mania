@@ -1,0 +1,133 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-condition-1",
+  "operation": "condition",
+  "status": "succeeded",
+  "diagnostics": [],
+  "portable_labels": [
+    "action-1",
+    "armature-1",
+    "camera-1",
+    "mesh-1"
+  ],
+  "outputs": [
+    {
+      "role": "beauty_preview",
+      "path": "passes/beauty-preview.png",
+      "sha256": "3131313131313131313131313131313131313131313131313131313131313131",
+      "byte_size": 4097,
+      "media_type": "image/png",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "beauty_exr",
+      "path": "passes/beauty.exr",
+      "sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+      "byte_size": 4096,
+      "media_type": "image/x-exr",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "depth_preview",
+      "path": "passes/depth-preview.png",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "byte_size": 4099,
+      "media_type": "image/png",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "depth_exr",
+      "path": "passes/depth.exr",
+      "sha256": "3232323232323232323232323232323232323232323232323232323232323232",
+      "byte_size": 4098,
+      "media_type": "image/x-exr",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "mask_png",
+      "path": "passes/mask.png",
+      "sha256": "3737373737373737373737373737373737373737373737373737373737373737",
+      "byte_size": 4103,
+      "media_type": "image/png",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "normal_preview",
+      "path": "passes/normal-preview.png",
+      "sha256": "3535353535353535353535353535353535353535353535353535353535353535",
+      "byte_size": 4101,
+      "media_type": "image/png",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "normal_exr",
+      "path": "passes/normal.exr",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+      "byte_size": 4100,
+      "media_type": "image/x-exr",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "object_index_exr",
+      "path": "passes/object-index.exr",
+      "sha256": "3636363636363636363636363636363636363636363636363636363636363636",
+      "byte_size": 4102,
+      "media_type": "image/x-exr",
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    }
+  ],
+  "metrics": {
+    "kind": "condition",
+    "width": 1024,
+    "height": 1024,
+    "foreground_pixel_count": 214512,
+    "finite_foreground_depth_count": 214512,
+    "interior_unit_normal_count": 213998,
+    "projection_max_error_pixels": 0.25,
+    "geometry_digest": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+    "uv_digest": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+    "pose_digest": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
+  },
+  "response_sha256": "1ff69420c273f71044ce20cc60c5b63ac04156933eeb2b2a69dd912ecb5f1ab2"
+}

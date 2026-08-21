@@ -177,3 +177,38 @@ def test_schema_rejects_unversioned_or_nonportable_field_contents(
 
     with pytest.raises(ValidationError):
         validate(instance=manifest, schema=load_manifest_schema())
+
+
+def test_v1_builder_rejects_a_v2_only_result_status() -> None:
+    from asset_mania_contracts import DiagnosticCode, ResultStatus, build_manifest
+
+    with pytest.raises(ValueError, match="v1 result status"):
+        build_manifest(
+            run_id="run-1",
+            created_at="2026-08-19T09:00:00Z",
+            tool_version="0.1.0",
+            input_sha256="0" * 64,
+            byte_size=1,
+            media_type="image/png",
+            parameters={"workflow": "image-to-3d", "kind": "object"},
+            result_status=ResultStatus.CANCELED,
+            diagnostics=[DiagnosticCode.WORKFLOW_NOT_IMPLEMENTED],
+        )
+
+
+def test_v1_schema_diagnostics_stay_a_strict_subset_of_the_v2_enum() -> None:
+    from asset_mania_contracts import load_manifest_schema, load_schema
+
+    v1_codes = set(load_manifest_schema()["$defs"]["diagnostic_code"]["enum"])
+    v2_codes = set(load_schema("run-manifest", "2.0")["$defs"]["diagnostic_code"]["enum"])
+    assert v1_codes < v2_codes
+
+
+def test_manifest_diagnostic_enums_cover_every_publishable_code() -> None:
+    from asset_mania_contracts import DiagnosticCode, load_schema
+
+    v2_codes = set(load_schema("run-manifest", "2.0")["$defs"]["diagnostic_code"]["enum"])
+    publishable = {code.value for code in DiagnosticCode} - {
+        DiagnosticCode.OUTPUT_STORAGE_UNAVAILABLE.value
+    }
+    assert v2_codes == publishable

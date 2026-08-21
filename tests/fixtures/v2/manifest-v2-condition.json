@@ -1,0 +1,274 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-condition-1",
+  "command": "scene.condition",
+  "stage": "condition",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:10:00Z",
+  "inputs": [
+    {
+      "label": "input-1",
+      "role": "source_scene",
+      "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "byte_size": 262144,
+      "media_type": "application/x-blender",
+      "content_origin": "observed",
+      "sensitivity": "user-content"
+    },
+    {
+      "label": "input-2",
+      "role": "workflow_plan",
+      "sha256": "b4763dadfc34cc1f6ea59056078780b985e2d66302baa4b2828adba5997f6dbf",
+      "byte_size": 2560,
+      "media_type": "application/json",
+      "content_origin": "derived",
+      "sensitivity": "portable"
+    }
+  ],
+  "parents": [
+    {
+      "run_id": "run-plan-1",
+      "manifest_sha256": "74ed47a200107882be530c8e3470a264359486dbcd5755d029e40badbd2992ac",
+      "relationship": "conditioned_from"
+    }
+  ],
+  "parameters": {
+    "workflow_plan_sha256": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad",
+    "rights_receipt_sha256": null
+  },
+  "plan_sha256": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad",
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": {
+      "profile": "blender-5.2.0-cpu-v1",
+      "version": "5.2.0",
+      "build_hash": "a1b2c3d4e5f6",
+      "executable_sha256": "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f"
+    }
+  },
+  "capabilities": {
+    "network": "denied",
+    "filesystem": "source_read_staging_write",
+    "blender": "found",
+    "provider": "not_required"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "conditioning_bundle",
+      "path": "conditioning-bundle.json",
+      "sha256": "1025bad17ad46f6776a8bca453bb97ad8463137df6c33c75c7a90a072868aab6",
+      "byte_size": 6144,
+      "media_type": "application/json",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "consumed"
+        }
+      ],
+      "operation": "condition",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-bundle-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "1a1b36a9716223d12d6525a10839e5d2b91afdffe05e2f86cf69d0880c19daa5"
+      }
+    },
+    {
+      "role": "beauty_preview",
+      "path": "passes/beauty-preview.png",
+      "sha256": "3131313131313131313131313131313131313131313131313131313131313131",
+      "byte_size": 4097,
+      "media_type": "image/png",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "beauty_exr",
+      "path": "passes/beauty.exr",
+      "sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+      "byte_size": 4096,
+      "media_type": "image/x-exr",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "depth_preview",
+      "path": "passes/depth-preview.png",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "byte_size": 4099,
+      "media_type": "image/png",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "depth_exr",
+      "path": "passes/depth.exr",
+      "sha256": "3232323232323232323232323232323232323232323232323232323232323232",
+      "byte_size": 4098,
+      "media_type": "image/x-exr",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "mask_png",
+      "path": "passes/mask.png",
+      "sha256": "3737373737373737373737373737373737373737373737373737373737373737",
+      "byte_size": 4103,
+      "media_type": "image/png",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "normal_preview",
+      "path": "passes/normal-preview.png",
+      "sha256": "3535353535353535353535353535353535353535353535353535353535353535",
+      "byte_size": 4101,
+      "media_type": "image/png",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "normal_exr",
+      "path": "passes/normal.exr",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+      "byte_size": 4100,
+      "media_type": "image/x-exr",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    },
+    {
+      "role": "object_index_exr",
+      "path": "passes/object-index.exr",
+      "sha256": "3636363636363636363636363636363636363636363636363636363636363636",
+      "byte_size": 4102,
+      "media_type": "image/x-exr",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "derived_from"
+        }
+      ],
+      "operation": "render",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "conditioning-pass-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": null
+      }
+    }
+  ],
+  "result": {
+    "status": "succeeded",
+    "diagnostics": [],
+    "provider_state": null
+  },
+  "warnings": []
+}

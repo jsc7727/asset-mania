@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/likeness-disclosure-v1.schema.json",
+  "title": "Asset Mania likeness disclosure v1",
+  "description": "Travels with a face_head mesh. Records where the geometry came from and what has actually been measured about its accuracy, so a head mesh on a disk is not indistinguishable from any other head mesh.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "plan_sha256",
+    "source_image_sha256",
+    "mesh_sha256",
+    "asset_kind",
+    "subject",
+    "rights_receipt_sha256",
+    "engine",
+    "engine_profile",
+    "likeness_basis",
+    "measured_accuracy",
+    "prohibited_claims",
+    "disclosure_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/likeness-disclosure"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "plan_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_image_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mesh_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "asset_kind": {
+      "const": "face_head"
+    },
+    "subject": {
+      "description": "Only a subject that can own a face reaches this artifact; non_person is refused upstream with SUBJECT_KIND_INCOHERENT.",
+      "enum": [
+        "real_person",
+        "synthetic_person"
+      ]
+    },
+    "rights_receipt_sha256": {
+      "description": "The consumed receipt for real_person. Null for synthetic_person, which has no subject to obtain rights from.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "engine": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "engine_profile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "likeness_basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "views",
+        "inferred"
+      ],
+      "properties": {
+        "views": {
+          "description": "How many images the geometry was inferred from. One view underdetermines the geometry behind a face.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "inferred": {
+          "description": "Always true. The geometry is a model's inference, not a measurement of the subject.",
+          "const": true
+        }
+      }
+    },
+    "measured_accuracy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground_truth_available",
+        "face_benchmark",
+        "non_face_reference",
+        "note"
+      ],
+      "properties": {
+        "ground_truth_available": {
+          "description": "False for any photograph: there is no reference mesh for a real subject, which is why single-image reconstruction is being used at all.",
+          "type": "boolean"
+        },
+        "face_benchmark": {
+          "description": "Null until faces with reference scans have been measured. This repository has none and cannot synthesise them: rendered heads would only yield a number about rendered heads.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "symmetric_mean_distance",
+            "subjects"
+          ],
+          "properties": {
+            "symmetric_mean_distance": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "subjects": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "non_face_reference": {
+          "description": "The figure that has been measured, and the subject it was measured on. Present so the honest number is available and labelled, rather than absent and later reached for as if it applied to faces.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subject",
+            "symmetric_mean_distance",
+            "unit"
+          ],
+          "properties": {
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "symmetric_mean_distance": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "const": "fraction of the subject's longest axis"
+            }
+          }
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "prohibited_claims": {
+      "description": "Claims this artifact asserts have not been substantiated. Enumerated rather than left to prose so a consumer can check mechanically.",
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 3,
+      "items": {
+        "enum": [
+          "identification_grade_likeness",
+          "biometric_record",
+          "match_to_a_specific_person"
+        ]
+      }
+    },
+    "disclosure_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

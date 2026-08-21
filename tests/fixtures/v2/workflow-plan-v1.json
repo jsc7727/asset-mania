@@ -1,0 +1,86 @@
+{
+  "schema_id": "asset-mania/workflow-plan",
+  "schema_version": "1.0",
+  "source_scene_sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+  "preflight_manifest_sha256": "25841c86b5277e9b9ca2bc2a4064672db5615425ce200c93d7a283568a91fb9c",
+  "selection": {
+    "camera_label": "camera-1",
+    "target_label": "mesh-1",
+    "armature_label": "armature-1",
+    "action_label": "action-1",
+    "selection_digest": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+  },
+  "asset_kind": "character",
+  "subject": "synthetic_person",
+  "frame": 12,
+  "action_range": [
+    1,
+    24
+  ],
+  "resolution": [
+    1024,
+    1024
+  ],
+  "pixel_aspect": [
+    1.0,
+    1.0
+  ],
+  "blender_profile": "blender-5.2.0-cpu-v1",
+  "render_profile": {
+    "profile_id": "blender-5.2.0-cpu-v1",
+    "blender_version": "5.2.0",
+    "engine": "CYCLES",
+    "device": "CPU",
+    "threads": 1,
+    "samples": 16,
+    "seed": 0,
+    "adaptive_sampling": false,
+    "denoise": false,
+    "animated_seed": false,
+    "motion_blur": false,
+    "depth_of_field": false,
+    "render_border": false,
+    "crop_to_border": false,
+    "film_transparent": true,
+    "pixel_aspect": [
+      1.0,
+      1.0
+    ],
+    "working_color_space": "scene_linear",
+    "preview_color_space": "srgb",
+    "target_object_index": 1,
+    "pass_alpha_threshold": 0.5,
+    "atlas_size": [
+      1024,
+      1024
+    ],
+    "bake_margin": 16,
+    "color_padding": 8,
+    "minimum_coverage": 0.15,
+    "depth_absolute_tolerance_meters": 0.0001,
+    "depth_relative_tolerance": 0.0002,
+    "ray_epsilon_scale": 1e-07,
+    "ray_epsilon_min_meters": 1e-07,
+    "ray_epsilon_max_meters": 0.001,
+    "matrix_decimal_places": 9,
+    "worker_timeout_seconds": 300,
+    "worker_response_max_bytes": 1048576,
+    "dependency_policy": "packed_only",
+    "unknown_texels": "transparent",
+    "animation_profile": "selected_action_range_or_none"
+  },
+  "expected_artifact_roles": [
+    "conditioning_bundle",
+    "beauty_exr",
+    "beauty_preview",
+    "depth_exr",
+    "depth_preview",
+    "normal_exr",
+    "normal_preview",
+    "object_index_exr",
+    "mask_png",
+    "scene_state_blend"
+  ],
+  "overwrite_policy": "create_only",
+  "plan_sha256": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad"
+}

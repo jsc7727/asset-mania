@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/workflow-plan-v1.schema.json",
+  "title": "Asset Mania workflow plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "source_scene_sha256",
+    "preflight_manifest_sha256",
+    "selection",
+    "asset_kind",
+    "subject",
+    "frame",
+    "action_range",
+    "resolution",
+    "pixel_aspect",
+    "blender_profile",
+    "render_profile",
+    "expected_artifact_roles",
+    "overwrite_policy",
+    "plan_sha256"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "asset-mania/workflow-plan"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "source_scene_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "preflight_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "camera_label",
+        "target_label",
+        "armature_label",
+        "action_label",
+        "selection_digest"
+      ],
+      "properties": {
+        "camera_label": {
+          "type": "string",
+          "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+        },
+        "target_label": {
+          "type": "string",
+          "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+        },
+        "armature_label": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action_label": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(camera|mesh|armature|action|bone)-[1-9][0-9]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selection_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "asset_kind": {
+      "enum": [
+        "object",
+        "character",
+        "face_head"
+      ]
+    },
+    "subject": {
+      "enum": [
+        "non_person",
+        "synthetic_person",
+        "real_person"
+      ]
+    },
+    "frame": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048574
+    },
+    "action_range": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048574
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "resolution": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4096
+      }
+    },
+    "pixel_aspect": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "const": 1.0
+      }
+    },
+    "blender_profile": {
+      "enum": [
+        "blender-5.2.0-cpu-v1",
+        "blender-5.2.0-cpu-v1-fixture"
+      ]
+    },
+    "render_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "blender_version",
+        "engine",
+        "device",
+        "threads",
+        "samples",
+        "seed",
+        "adaptive_sampling",
+        "denoise",
+        "animated_seed",
+        "motion_blur",
+        "depth_of_field",
+        "render_border",
+        "crop_to_border",
+        "film_transparent",
+        "pixel_aspect",
+        "working_color_space",
+        "preview_color_space",
+        "target_object_index",
+        "pass_alpha_threshold",
+        "atlas_size",
+        "bake_margin",
+        "color_padding",
+        "minimum_coverage",
+        "depth_absolute_tolerance_meters",
+        "depth_relative_tolerance",
+        "ray_epsilon_scale",
+        "ray_epsilon_min_meters",
+        "ray_epsilon_max_meters",
+        "matrix_decimal_places",
+        "worker_timeout_seconds",
+        "worker_response_max_bytes",
+        "dependency_policy",
+        "unknown_texels",
+        "animation_profile"
+      ],
+      "properties": {
+        "profile_id": {
+          "enum": [
+            "blender-5.2.0-cpu-v1",
+            "blender-5.2.0-cpu-v1-fixture"
+          ]
+        },
+        "blender_version": {
+          "const": "5.2.0"
+        },
+        "engine": {
+          "const": "CYCLES"
+        },
+        "device": {
+          "const": "CPU"
+        },
+        "threads": {
+          "const": 1
+        },
+        "samples": {
+          "const": 16
+        },
+        "seed": {
+          "const": 0
+        },
+        "adaptive_sampling": {
+          "const": false
+        },
+        "denoise": {
+          "const": false
+        },
+        "animated_seed": {
+          "const": false
+        },
+        "motion_blur": {
+          "const": false
+        },
+        "depth_of_field": {
+          "const": false
+        },
+        "render_border": {
+          "const": false
+        },
+        "crop_to_border": {
+          "const": false
+        },
+        "film_transparent": {
+          "const": true
+        },
+        "pixel_aspect": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "const": 1.0
+          }
+        },
+        "working_color_space": {
+          "const": "scene_linear"
+        },
+        "preview_color_space": {
+          "const": "srgb"
+        },
+        "target_object_index": {
+          "const": 1
+        },
+        "pass_alpha_threshold": {
+          "const": 0.5
+        },
+        "atlas_size": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          }
+        },
+        "bake_margin": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "color_padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "minimum_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "depth_absolute_tolerance_meters": {
+          "const": 0.0001
+        },
+        "depth_relative_tolerance": {
+          "const": 0.0002
+        },
+        "ray_epsilon_scale": {
+          "const": 1e-07
+        },
+        "ray_epsilon_min_meters": {
+          "const": 1e-07
+        },
+        "ray_epsilon_max_meters": {
+          "const": 0.001
+        },
+        "matrix_decimal_places": {
+          "const": 9
+        },
+        "worker_timeout_seconds": {
+          "const": 300
+        },
+        "worker_response_max_bytes": {
+          "const": 1048576
+        },
+        "dependency_policy": {
+          "const": "packed_only"
+        },
+        "unknown_texels": {
+          "const": "transparent"
+        },
+        "animation_profile": {
+          "const": "selected_action_range_or_none"
+        }
+      }
+    },
+    "expected_artifact_roles": {
+      "const": [
+        "conditioning_bundle",
+        "beauty_exr",
+        "beauty_preview",
+        "depth_exr",
+        "depth_preview",
+        "normal_exr",
+        "normal_preview",
+        "object_index_exr",
+        "mask_png",
+        "scene_state_blend"
+      ]
+    },
+    "overwrite_policy": {
+      "const": "create_only"
+    },
+    "plan_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "diagnostic_code": {
+      "enum": [
+        "BACKGROUND_REMOVAL_UNPINNED",
+        "BAKE_CONTEXT_INVALID",
+        "BLENDER_EXECUTION_FAILED",
+        "BLENDER_NOT_FOUND",
+        "BLENDER_RESPONSE_INVALID",
+        "BLENDER_VERSION_MISMATCH",
+        "BLEND_HEADER_INVALID",
+        "CAMERA_CALIBRATION_MISSING",
+        "CAMERA_NOT_FOUND",
+        "DEPSGRAPH_TOPOLOGY_CHANGED",
+        "ENGINE_LICENSE_UNCLEARED",
+        "ENGINE_NOT_CLEARED",
+        "ENGINE_UNAVAILABLE",
+        "EXIF_SENSITIVE_METADATA_PRESENT",
+        "EXPORT_OPERATOR_UNAVAILABLE",
+        "FACE_RIGHTS_CONFIRMATION_REQUIRED",
+        "GLTF_VALIDATION_FAILED",
+        "INPUT_NOT_FOUND",
+        "INPUT_UNREADABLE",
+        "INTERNAL_ERROR",
+        "MASK_REQUIRED",
+        "MISSING_LINKED_ASSET",
+        "OUTPUT_COLLISION",
+        "PARENT_MANIFEST_MISMATCH",
+        "PASS_INVALID",
+        "PLAN_TAMPERED",
+        "POSE_NONFINITE",
+        "PROVIDER_EVIDENCE_STALE",
+        "RECONSTRUCTION_FAILED",
+        "RECONSTRUCTION_UNVERIFIED",
+        "REPROJECTION_LOW_COVERAGE",
+        "RIG_NOT_FOUND",
+        "ROUNDTRIP_MISMATCH",
+        "SELECTION_AMBIGUOUS",
+        "SOURCE_CHANGED_DURING_RUN",
+        "SOURCE_POSE_UNKNOWN",
+        "SUBJECT_DECLARATION_REQUIRED",
+        "TARGET_MESH_NOT_FOUND",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "UNTRUSTED_AUTOEXEC_REQUIRED",
+        "UV_MISSING_OR_INVALID",
+        "VIEW_ALIGNMENT_MISMATCH",
+        "WORKFLOW_NOT_IMPLEMENTED"
+      ]
+    }
+  }
+}

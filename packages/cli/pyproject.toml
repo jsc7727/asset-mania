@@ -1,12 +1,13 @@
 [project]
 name = "asset-mania-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline Asset Mania inspection CLI"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "asset-mania-contracts",
+  "asset-mania-pipeline",
   "Pillow>=11.3,<13",
 ]
 
@@ -15,6 +16,7 @@ asset-mania = "asset_mania.cli:entrypoint"
 
 [tool.uv.sources]
 asset-mania-contracts = { workspace = true }
+asset-mania-pipeline = { workspace = true }
 
 [tool.uv.build-backend]
 module-name = "asset_mania"

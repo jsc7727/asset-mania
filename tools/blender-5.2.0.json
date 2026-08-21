@@ -1,0 +1,43 @@
+{
+  "schema_id": "asset-mania/tool-inventory",
+  "schema_version": "1.0",
+  "tool": "blender",
+  "required_version": "5.2.0",
+  "required_release": "5.2.0 LTS",
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "url": "https://www.blender.org/about/license/",
+    "redistributed": false,
+    "notice": "Blender is invoked as a separate process from a user-supplied install. No Blender binary, shared library, or Python module is bundled, vendored, or redistributed by Asset Mania."
+  },
+  "acquisition": {
+    "policy": "user_supplied_install",
+    "network_boundary": "Acquisition happens before the network-deny boundary. No Asset Mania stage downloads Blender.",
+    "official_source": "https://www.blender.org/download/lts/",
+    "official_archives": [],
+    "official_archives_status": "unverified",
+    "official_archives_note": "No release-archive URL or SHA-256 is recorded because none has been fetched and verified from the official source in this repository. Task 12 must add each pinned archive with its exact URL and digest before CI may download one."
+  },
+  "verified_installs": [
+    {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "version": "5.2.0",
+      "release": "5.2.0 LTS",
+      "build_hash": "fbe6228777e7",
+      "build_branch": "blender-v5.2-release",
+      "build_commit_date": "2026-07-13",
+      "build_date": "2026-07-14",
+      "executable_path_note": "The canonical local executable is /Applications/Blender.app/Contents/MacOS/Blender. No task may rely on a shell alias or a `blender` PATH entry.",
+      "executable_sha256": "60ba7a9b6743f7acf101274361fa76409e382ae07cd2007ce07dea30f6b129f2",
+      "verified_by": "local `--version` output and `shasum -a 256` of the executable",
+      "authoritative_for": "semantic and tolerance compatibility only"
+    }
+  ],
+  "byte_exact_profile": {
+    "platform": "linux",
+    "architecture": "x86_64",
+    "status": "unverified",
+    "note": "The design names pinned Linux x86_64 Blender 5.2.0 CPU as the authoritative byte-exact environment. It has no verified install entry yet; macOS is a compatibility profile, not a cross-platform byte oracle."
+  }
+}

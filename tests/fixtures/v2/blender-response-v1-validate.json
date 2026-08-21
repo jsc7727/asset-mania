@@ -1,0 +1,24 @@
+{
+  "schema_id": "asset-mania/blender-response",
+  "schema_version": "1.0",
+  "request_id": "request-validate-1",
+  "operation": "validate",
+  "status": "succeeded",
+  "diagnostics": [],
+  "portable_labels": [
+    "action-1",
+    "armature-1",
+    "camera-1",
+    "mesh-1"
+  ],
+  "outputs": [],
+  "metrics": {
+    "kind": "validate",
+    "profile": "gltf-validator-v1",
+    "checked_artifact_count": 3,
+    "error_count": 0,
+    "warning_count": 0,
+    "semantic_digest": "8585858585858585858585858585858585858585858585858585858585858585"
+  },
+  "response_sha256": "ffaf193008930e54cf18d2939331181536b689ed5551b479f7ffb66e925d1040"
+}

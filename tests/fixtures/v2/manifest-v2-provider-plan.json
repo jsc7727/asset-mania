@@ -1,0 +1,93 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-provider-plan-1",
+  "command": "view.provider-plan",
+  "stage": "provider-plan",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:30:00Z",
+  "inputs": [
+    {
+      "label": "input-1",
+      "role": "provider_evidence",
+      "sha256": "d6c21e7a3ec01f67e0398c9b3148127aacf56c3e337a3da375482652ac542574",
+      "byte_size": 3072,
+      "media_type": "application/json",
+      "content_origin": "observed",
+      "sensitivity": "portable"
+    }
+  ],
+  "parents": [
+    {
+      "run_id": "run-condition-1",
+      "manifest_sha256": "589980d5eff3f0c7a32e2c2173f5ec1eb863afb1a61ce255957b1964563a0e2c",
+      "relationship": "conditioned_from"
+    },
+    {
+      "run_id": "run-evidence-1",
+      "manifest_sha256": "965d98dce49df1d93f378e8cf8eaa7a56f4840c9d619f1329e86e12ad404f133",
+      "relationship": "evidenced_from"
+    }
+  ],
+  "parameters": {
+    "condition_manifest_sha256": "589980d5eff3f0c7a32e2c2173f5ec1eb863afb1a61ce255957b1964563a0e2c",
+    "evidence_sha256": "03fdb582fa2235d7006a38ab7ac3d55c9d89aacfebe7835ab408409cf2af0c7e",
+    "prompt_sha256": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+    "controls": {
+      "n": 1,
+      "size": "1024x1024",
+      "quality": "medium",
+      "background": "auto",
+      "output_format": "png",
+      "output_compression": null,
+      "moderation": "auto"
+    }
+  },
+  "plan_sha256": "3bd34dbe24c70e14c55b6eff81642b6ce329800e4ba94204baf9ae0389535122",
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": null
+  },
+  "capabilities": {
+    "network": "approval_gated",
+    "filesystem": "source_read_staging_write",
+    "blender": "not_required",
+    "provider": "approval_gated"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "provider_plan",
+      "path": "provider-plan.json",
+      "sha256": "be0d716a6d9fd4b98322182a32d3c0f403e0dca569c29a8b1f744c6540f03bd7",
+      "byte_size": 4096,
+      "media_type": "application/json",
+      "parents": [
+        {
+          "sha256": "1025bad17ad46f6776a8bca453bb97ad8463137df6c33c75c7a90a072868aab6",
+          "relationship": "consumed"
+        }
+      ],
+      "operation": "provider-plan",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "provider-plan-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "3bd34dbe24c70e14c55b6eff81642b6ce329800e4ba94204baf9ae0389535122"
+      }
+    }
+  ],
+  "result": {
+    "status": "needs_approval",
+    "diagnostics": [
+      "FACE_RIGHTS_CONFIRMATION_REQUIRED"
+    ],
+    "provider_state": "approval_required"
+  },
+  "warnings": []
+}

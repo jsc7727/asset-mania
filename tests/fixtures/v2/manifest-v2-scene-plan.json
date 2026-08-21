@@ -1,0 +1,96 @@
+{
+  "schema_id": "asset-mania/run-manifest",
+  "schema_version": "2.0",
+  "run_id": "run-plan-1",
+  "command": "scene.plan",
+  "stage": "scene-plan",
+  "tool_version": "0.2.0",
+  "created_at": "2026-08-19T09:05:00Z",
+  "inputs": [
+    {
+      "label": "input-1",
+      "role": "source_scene",
+      "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "byte_size": 262144,
+      "media_type": "application/x-blender",
+      "content_origin": "observed",
+      "sensitivity": "user-content"
+    }
+  ],
+  "parents": [
+    {
+      "run_id": "run-preflight-1",
+      "manifest_sha256": "25841c86b5277e9b9ca2bc2a4064672db5615425ce200c93d7a283568a91fb9c",
+      "relationship": "planned_from"
+    }
+  ],
+  "parameters": {
+    "preflight_manifest_sha256": "25841c86b5277e9b9ca2bc2a4064672db5615425ce200c93d7a283568a91fb9c",
+    "asset_kind": "character",
+    "subject": "synthetic_person",
+    "camera_label": "camera-1",
+    "target_label": "mesh-1",
+    "armature_label": "armature-1",
+    "action_label": "action-1",
+    "frame": 12,
+    "action_range": [
+      1,
+      24
+    ],
+    "resolution": [
+      1024,
+      1024
+    ],
+    "profile": "blender-5.2.0-cpu-v1"
+  },
+  "plan_sha256": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad",
+  "environment": {
+    "operating_system": "macos",
+    "architecture": "arm64",
+    "python_version": "3.12.7",
+    "blender": {
+      "profile": "blender-5.2.0-cpu-v1",
+      "version": "5.2.0",
+      "build_hash": "a1b2c3d4e5f6",
+      "executable_sha256": "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f"
+    }
+  },
+  "capabilities": {
+    "network": "denied",
+    "filesystem": "source_read_staging_write",
+    "blender": "found",
+    "provider": "not_required"
+  },
+  "approvals": [],
+  "artifacts": [
+    {
+      "role": "workflow_plan",
+      "path": "workflow-plan.json",
+      "sha256": "b4763dadfc34cc1f6ea59056078780b985e2d66302baa4b2828adba5997f6dbf",
+      "byte_size": 2560,
+      "media_type": "application/json",
+      "parents": [
+        {
+          "sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+          "relationship": "consumed"
+        }
+      ],
+      "operation": "plan",
+      "content_origin": "derived",
+      "sensitivity": "portable",
+      "upload_eligible": true,
+      "validation": {
+        "profile": "workflow-plan-v1",
+        "status": "valid",
+        "diagnostics": [],
+        "semantic_digest": "561f9e80d77b84c2f764fa7d4732266b1eca16de8b4b6d29f69a6823d23492ad"
+      }
+    }
+  ],
+  "result": {
+    "status": "succeeded",
+    "diagnostics": [],
+    "provider_state": null
+  },
+  "warnings": []
+}
