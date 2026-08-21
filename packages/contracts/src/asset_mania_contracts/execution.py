@@ -692,6 +692,58 @@ def build_engine_clearance(
     )
 
 
+def reconstruction_binding_digest(
+    *,
+    engine: str,
+    engine_profile: str,
+    clearance_sha256: str,
+    source_image_sha256: str,
+    source_width: int,
+    source_height: int,
+    alpha: bool,
+    mask_sha256: str | None,
+    background_removal_clearance_sha256: str | None,
+    asset_kind: str,
+    subject: str,
+    expected_output: Mapping[str, Any],
+) -> str:
+    """The digest a rights receipt is bound to: the plan's content, minus the receipt.
+
+    A receipt cannot be bound to `plan_sha256`, because the plan seals `rights_receipt_sha256`
+    into its own preimage -- so the plan digest depends on the receipt and the receipt would
+    have to depend on the plan digest. That circle is why the reconstruction path accepted a
+    caller-supplied `plan_sha256_for_receipt` and then compared the receipt against it: the
+    caller chose the value on both sides of the check, which made the binding decorative. The
+    only test covering the accepted case passed a literal `"b7" * 32`, and it passed.
+
+    This digest breaks the circle by excluding exactly one field. It commits to everything that
+    determines what would be reconstructed -- the image, the mask, the engine, the clearance,
+    the declared kind and subject, the expected output -- so a receipt issued for one subject's
+    photograph does not authorise a different one, while remaining computable before any
+    receipt exists.
+    """
+    return canonical_digest(
+        {
+            "schema_id": "asset-mania/reconstruction-plan",
+            "schema_version": "1.0",
+            "binding": "rights_receipt",
+            "engine": engine,
+            "engine_profile": engine_profile,
+            "clearance_sha256": clearance_sha256,
+            "source_image_sha256": source_image_sha256,
+            "source_width": int(source_width),
+            "source_height": int(source_height),
+            "color_space": "srgb",
+            "alpha": alpha,
+            "mask_sha256": mask_sha256,
+            "background_removal_clearance_sha256": background_removal_clearance_sha256,
+            "asset_kind": asset_kind,
+            "subject": subject,
+            "expected_output": dict(expected_output),
+        }
+    )
+
+
 def build_reconstruction_plan(
     *,
     engine: str,

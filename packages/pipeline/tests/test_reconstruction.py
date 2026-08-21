@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from asset_mania_contracts import canonical_digest, load_schema
 from asset_mania_pipeline import (
+    ApprovalRejected,
     ReconstructionRejected,
     SubjectDeclarationRequired,
     ViewRejected,
@@ -179,22 +180,59 @@ def test_an_unknown_subject_is_refused_first_of_all(image, staging, mask) -> Non
         _plan(image, staging, mask_path=mask, subject="unknown", clearance=None)
 
 
-def test_a_real_person_without_a_receipt_is_refused(image, staging, mask) -> None:
-    with pytest.raises(ReconstructionRejected, match="FACE_RIGHTS_CONFIRMATION_REQUIRED"):
-        _plan(image, staging, mask_path=mask, subject="real_person", asset_kind="face_head")
+def _face_binding(image, staging, mask) -> str:
+    """The digest a face-rights receipt must be bound to, computed the way the gate computes it.
+
+    A test that invents this value proves nothing -- which is what the previous version of the
+    accepted case did, passing a literal `"b7" * 32` on both sides of the comparison.
+    """
+    from asset_mania_contracts import reconstruction_binding_digest
+    from asset_mania_pipeline import prepare_input
+
+    prepared = prepare_input(image_path=image, staging_root=staging / "probe", mask_path=mask)
+    return reconstruction_binding_digest(
+        engine=ENGINE,
+        engine_profile=PROFILE,
+        clearance_sha256=_clearance()["clearance_sha256"],
+        source_image_sha256=prepared["image_sha256"],
+        source_width=prepared["width"],
+        source_height=prepared["height"],
+        alpha=prepared["alpha"],
+        mask_sha256=prepared["mask_sha256"],
+        background_removal_clearance_sha256=None,
+        asset_kind="face_head",
+        subject="real_person",
+        expected_output={"mesh_format": "glb", "textured": False, "unit_scale_meters": 1.0},
+    )
 
 
-def test_a_real_person_with_a_plan_bound_receipt_is_accepted(image, staging, mask) -> None:
-    plan_digest = "b7" * 32
-    receipt = issue_receipt(
+def _face_receipt(plan_sha256: str):
+    return issue_receipt(
         receipt_id="receipt-face-rights-1",
-        plan_sha256=plan_digest,
+        plan_sha256=plan_sha256,
         gate="face_rights",
-        acknowledgement=acknowledgement_text("face_rights", plan_digest),
+        acknowledgement=acknowledgement_text("face_rights", plan_sha256),
         disclosure="Local face/head reconstruction of a real person.",
         issued_at="2026-08-25T08:00:00Z",
         expires_at="2026-08-25T10:00:00Z",
     )
+
+
+def test_a_real_person_without_a_receipt_is_refused(image, staging, mask) -> None:
+    """Now raised by the gate itself rather than by a pre-check on a caller-supplied digest.
+
+    The refusal used to come from `plan_sha256_for_receipt is None`, which meant the message
+    was about a missing *argument*. It now comes from `require_rights_receipt`, so the same
+    code path rejects a missing receipt and a wrongly-bound one -- there is no longer a
+    separate branch that only ran when the caller declined to name a digest.
+    """
+    with pytest.raises(ApprovalRejected, match="FACE_RIGHTS_CONFIRMATION_REQUIRED"):
+        _plan(image, staging, mask_path=mask, subject="real_person", asset_kind="face_head")
+
+
+def test_a_real_person_with_a_correctly_bound_receipt_is_accepted(image, staging, mask) -> None:
+    binding = _face_binding(image, staging, mask)
+    receipt = _face_receipt(binding)
     result = _plan(
         image,
         staging,
@@ -202,9 +240,55 @@ def test_a_real_person_with_a_plan_bound_receipt_is_accepted(image, staging, mas
         subject="real_person",
         asset_kind="face_head",
         rights_receipt=receipt,
-        plan_sha256_for_receipt=plan_digest,
     )
     assert result["plan"]["rights_receipt_sha256"] == receipt["receipt_sha256"]
+
+
+def test_a_receipt_bound_to_an_arbitrary_digest_is_refused(image, staging, mask) -> None:
+    """The defect this replaced: the caller chose the digest on both sides of the check.
+
+    `plan_sha256_for_receipt` let a caller pass any string and have the receipt validated
+    against that same string, so `receipt.plan_sha256 == plan_sha256` could not fail. The
+    binding is now derived from the image, the mask, the engine, the clearance, and the declared
+    kind and subject, so a receipt for some other plan no longer authorises this one.
+    """
+    receipt = _face_receipt("b7" * 32)
+    with pytest.raises(ApprovalRejected, match="bound to a different plan digest"):
+        _plan(
+            image,
+            staging,
+            mask_path=mask,
+            subject="real_person",
+            asset_kind="face_head",
+            rights_receipt=receipt,
+        )
+
+
+def test_the_binding_changes_when_the_photograph_changes(image, staging, mask, tmp_path) -> None:
+    """A receipt for one subject's photograph must not authorise a different one.
+
+    This is the property that makes the binding worth having: consent is given for a specific
+    image, and the digest commits to it.
+    """
+    # Same dimensions as the fixture, so the mask still applies and the only thing that
+    # differs is the pixel content -- which is precisely what the binding must notice.
+    other = tmp_path / "other.png"
+    Image.new("RGB", (320, 240), (160, 40, 30)).save(other)
+
+    first = _face_binding(image, staging, mask)
+    second = _face_binding(other, staging / "second", mask)
+    assert first != second
+
+    receipt = _face_receipt(first)
+    with pytest.raises(ApprovalRejected, match="bound to a different plan digest"):
+        _plan(
+            other,
+            staging / "run",
+            mask_path=mask,
+            subject="real_person",
+            asset_kind="face_head",
+            rights_receipt=receipt,
+        )
 
 
 def test_a_receipt_on_a_non_person_plan_is_refused(image, staging, mask) -> None:

@@ -21,6 +21,7 @@ from asset_mania_contracts import (
     DiagnosticCode,
     build_likeness_disclosure,
     build_reconstruction_plan,
+    reconstruction_binding_digest,
 )
 from PIL import Image
 
@@ -140,7 +141,6 @@ def plan_reconstruction(
     mask_path: Path | None = None,
     background_removal_clearance: Mapping[str, Any] | None = None,
     rights_receipt: Mapping[str, Any] | None = None,
-    plan_sha256_for_receipt: str | None = None,
     expected_output: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Produce a sealed reconstruction plan, or refuse before any engine is considered.
@@ -161,17 +161,37 @@ def plan_reconstruction(
         now=now,
     )
 
+    resolved_output = expected_output or {
+        "mesh_format": "glb",
+        "textured": False,
+        "unit_scale_meters": 1.0,
+    }
+
     receipt_digest: str | None = None
     if subject == "real_person":
-        if plan_sha256_for_receipt is None:
-            raise ReconstructionRejected(
-                DiagnosticCode.FACE_RIGHTS_CONFIRMATION_REQUIRED.value,
-                "a real_person plan needs the plan digest its receipt is bound to",
-            )
+        # The digest the receipt must be bound to is computed here, from the same inputs the
+        # plan is built from. It used to be a `plan_sha256_for_receipt` argument, which meant
+        # the caller supplied both sides of `receipt.plan_sha256 == plan_sha256` and the
+        # comparison could not fail -- the one test covering the accepted case passed a
+        # literal `"b7" * 32` and passed. A binding the caller chooses is not a binding.
+        binding = reconstruction_binding_digest(
+            engine=engine,
+            engine_profile=engine_profile,
+            clearance_sha256=clearance_digest,
+            source_image_sha256=prepared["image_sha256"],
+            source_width=prepared["width"],
+            source_height=prepared["height"],
+            alpha=prepared["alpha"],
+            mask_sha256=mask_digest,
+            background_removal_clearance_sha256=remover_digest,
+            asset_kind=asset_kind,
+            subject=subject,
+            expected_output=resolved_output,
+        )
         validated = require_rights_receipt(
             subject=subject,
             receipt=rights_receipt,
-            plan_sha256=plan_sha256_for_receipt,
+            plan_sha256=binding,
             now=now,
         )
         receipt_digest = validated["receipt_sha256"] if validated else None
@@ -191,8 +211,7 @@ def plan_reconstruction(
         asset_kind=asset_kind,
         subject=subject,
         rights_receipt_sha256=receipt_digest,
-        expected_output=expected_output
-        or {"mesh_format": "glb", "textured": False, "unit_scale_meters": 1.0},
+        expected_output=resolved_output,
     )
     return {"plan": plan, "input": prepared}
 
