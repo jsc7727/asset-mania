@@ -190,3 +190,66 @@ def test_the_adapter_is_importable_without_the_cli() -> None:
     )
     assert completed.returncode == 0, completed.stderr
     assert "False openai" in completed.stdout
+
+
+# --- The planned-capability gate actually fires ------------------------------------
+
+
+def test_the_planned_capability_gate_catches_an_unbacked_claim(tmp_path: Path) -> None:
+    """A `Planned` row must not be able to become `Available` without evidence."""
+    clone = tmp_path / "clone"
+    (clone / "scripts").mkdir(parents=True)
+    (clone / "tools").mkdir()
+    (clone / "scripts" / "check_publication.py").write_text(
+        (ROOT / "scripts" / "check_publication.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (clone / "THIRD_PARTY_NOTICES.md").write_text("# Notices\n", encoding="utf-8")
+    (clone / "skills").mkdir()
+    (clone / "skills" / "asset-mania").mkdir()
+    (clone / "skills" / "asset-mania" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+
+    def run() -> subprocess.CompletedProcess[str]:
+        subprocess.run(["git", "add", "-A"], cwd=clone, check=True, capture_output=True)
+        return subprocess.run(
+            [sys.executable, str(clone / "scripts" / "check_publication.py")],
+            cwd=clone,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    subprocess.run(["git", "init", "-q"], cwd=clone, check=True)
+
+    # Planned: accepted.
+    (clone / "README.md").write_text(
+        "| Generic image to 3D | Planned | contracts only |\n", encoding="utf-8"
+    )
+    assert "UNBACKED_CAPABILITY_CLAIM" not in run().stdout
+
+    # Available with no evidence phrase: refused.
+    (clone / "README.md").write_text(
+        "| Generic image to 3D | Available | it works now |\n", encoding="utf-8"
+    )
+    assert "UNBACKED_CAPABILITY_CLAIM" in run().stdout
+
+    # Available with the evidence phrase present: accepted.
+    (clone / "README.md").write_text(
+        "| Generic image to 3D | Available | see below |\n"
+        "no engine is cleared, downloaded, or executed\n",
+        encoding="utf-8",
+    )
+    assert "UNBACKED_CAPABILITY_CLAIM" not in run().stdout
+
+
+def test_the_readme_still_reports_generic_image_to_3d_as_planned() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    row = next(line for line in readme.splitlines() if line.startswith("| Generic image to 3D |"))
+    assert "Planned" in row
+    assert "no engine is cleared, downloaded, or executed" in row
+
+
+def test_the_skill_refuses_generic_image_to_3d() -> None:
+    skill = (ROOT / "skills" / "asset-mania" / "SKILL.md").read_text(encoding="utf-8")
+    assert "does not generate 3D geometry" in skill
+    assert "no cleared engine" in skill.lower()
+    assert "make this person 3D" in skill

@@ -25,6 +25,7 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | BLEND / GLB / FBX export | Available | container checks plus fresh-process reimport in a separate Blender |
 | GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
+| Generic image to 3D | **Planned** | contracts and a fail-closed clearance gate exist; **no engine is cleared, downloaded, or executed** |
 | Face/head reconstruction | Research | not implemented; `real_person` needs a plan-bound rights receipt |
 | Asset Mania Cloud | Later | — |
 
@@ -37,6 +38,10 @@ Two limits are worth stating plainly:
 - The pinned Blender and glTF Validator inventories in `tools/` record only what was
   verified locally. No official archive URL or digest is asserted, because none has been
   fetched and verified.
+- Generic image-to-3D does not work here. Asset Mania needs a 3D model as input; it does not
+  generate geometry. The v0.3 clearance contract and gate are in place, but no inference
+  engine has been cleared, downloaded, or run, and the blocker is license clearance across an
+  engine's entire dependency closure rather than implementation effort.
 
 The `inspect` command accepts a local PNG, JPEG, WebP, or `.blend` header input, records only
 portable allowlisted metadata and hashes, and writes a new run directory. It does not alter or

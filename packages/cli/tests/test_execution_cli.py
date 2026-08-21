@@ -83,6 +83,20 @@ def test_every_declared_stage_command_parses() -> None:
             "--out",
             "evidence",
         ],
+        "engine clearance verify": ["engine", "clearance", "verify", "clearance.json"],
+        "image reconstruct": [
+            "image",
+            "reconstruct",
+            "subject.png",
+            "--engine",
+            "triposr-local",
+            "--clearance",
+            "clearance.json",
+            "--asset-kind",
+            "object",
+            "--subject",
+            "non-person",
+        ],
     }
     assert sorted(invocations) == sorted(STAGE_COMMANDS)
     for expected, argv in sorted(invocations.items()):
@@ -292,3 +306,136 @@ def test_the_exit_codes_are_fixed(status: str, code: int) -> None:
 def test_an_unknown_status_has_no_exit_code() -> None:
     with pytest.raises(ValueError):
         exit_code("partly")
+
+
+# --- v0.3 generic image-to-3D commands -----------------------------------------------
+
+
+def test_the_engine_clearance_command_parses() -> None:
+    request = parse(["engine", "clearance", "verify", "clearance.json"])
+    assert request.command == "engine clearance verify"
+    assert request.arguments["engine_clearance"].name == "clearance.json"
+
+
+def test_the_reconstruct_command_parses() -> None:
+    request = parse(
+        [
+            "image",
+            "reconstruct",
+            "subject.png",
+            "--engine",
+            "triposr-local",
+            "--clearance",
+            "clearance.json",
+            "--asset-kind",
+            "object",
+            "--subject",
+            "non-person",
+            "--mask",
+            "subject-mask.png",
+        ]
+    )
+    assert request.command == "image reconstruct"
+    assert request.arguments["asset_kind"] == "object"
+    assert request.arguments["subject"] == "non_person"
+    assert request.arguments["mask"].name == "subject-mask.png"
+
+
+def test_reconstruction_requires_a_clearance_argument() -> None:
+    """There is no way to ask for a reconstruction without naming a clearance."""
+    with pytest.raises(UsageError):
+        parse(
+            [
+                "image",
+                "reconstruct",
+                "subject.png",
+                "--engine",
+                "triposr-local",
+                "--asset-kind",
+                "object",
+                "--subject",
+                "non-person",
+            ]
+        )
+
+
+def test_reconstruction_requires_a_subject_declaration() -> None:
+    with pytest.raises(UsageError):
+        parse(
+            [
+                "image",
+                "reconstruct",
+                "subject.png",
+                "--engine",
+                "triposr-local",
+                "--clearance",
+                "clearance.json",
+                "--asset-kind",
+                "object",
+            ]
+        )
+
+
+def test_reconstruction_normalizes_the_face_head_spelling() -> None:
+    request = parse(
+        [
+            "image",
+            "reconstruct",
+            "subject.png",
+            "--engine",
+            "triposr-local",
+            "--clearance",
+            "clearance.json",
+            "--asset-kind",
+            "face-head",
+            "--subject",
+            "real-person",
+            "--rights-receipt",
+            "receipt.json",
+        ]
+    )
+    assert request.arguments["asset_kind"] == "face_head"
+    assert request.arguments["subject"] == "real_person"
+
+
+def test_reconstruction_accepts_a_background_remover_instead_of_a_mask() -> None:
+    request = parse(
+        [
+            "image",
+            "reconstruct",
+            "subject.png",
+            "--engine",
+            "triposr-local",
+            "--clearance",
+            "clearance.json",
+            "--asset-kind",
+            "object",
+            "--subject",
+            "non-person",
+            "--background-removal",
+            "remover-clearance.json",
+        ]
+    )
+    assert request.arguments["mask"] is None
+    assert request.arguments["background_removal"].name == "remover-clearance.json"
+
+
+def test_there_is_no_flag_to_skip_clearance() -> None:
+    for flag in ("--skip-clearance", "--no-clearance", "--force", "--yes"):
+        with pytest.raises(UsageError):
+            parse(
+                [
+                    "image",
+                    "reconstruct",
+                    "subject.png",
+                    "--engine",
+                    "triposr-local",
+                    "--clearance",
+                    "clearance.json",
+                    "--asset-kind",
+                    "object",
+                    "--subject",
+                    "non-person",
+                    flag,
+                ]
+            )

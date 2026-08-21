@@ -69,6 +69,24 @@ Rules that hold for every stage:
   boolean shortcut, and a same-sized image is not evidence of alignment.
 - Report low coverage as incomplete. Do not present an incomplete bake as a finished asset.
 
+## Generic image-to-3D is not available
+
+For any request to turn a photo or a single image into a 3D model, mesh, or figure —
+including "make this person 3D":
+
+1. State plainly that Asset Mania does not generate 3D geometry. It projects a supplied,
+   camera-aligned image onto a mesh the user already owns; it requires the 3D model as an
+   **input**.
+2. State that the generic image-to-3D path is contracted but has **no cleared engine**: no
+   engine code, model weight, or preprocessing model has been downloaded, executed, or
+   license-cleared in this repository.
+3. Do not describe the capability as working, coming soon, or a matter of effort. The blocker
+   is license clearance across the engine's whole dependency closure, not implementation.
+4. If the user has a UV-mapped mesh, offer the local stages above instead, which do work.
+
+A `real_person` subject additionally needs a rights receipt bound to the exact plan digest,
+and that receipt is a user assertion. Never issue or imply one on the user's behalf.
+
 ## Stop at the external-action boundary
 
 For any request to upload data, download a model, use a remote provider, or spend paid

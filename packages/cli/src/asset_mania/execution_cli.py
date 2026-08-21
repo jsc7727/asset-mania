@@ -31,6 +31,8 @@ from asset_mania_contracts import (
 from asset_mania_pipeline import parse_asset_kind, parse_gate, parse_subject
 
 STAGE_COMMANDS = (
+    "engine clearance verify",
+    "image reconstruct",
     "scene preflight",
     "scene plan",
     "scene condition",
@@ -205,6 +207,25 @@ def build_parser() -> argparse.ArgumentParser:
     issue.add_argument("--expires-in", default=DEFAULT_EXPIRES_IN)
     issue.add_argument("--acknowledgement")
 
+    # v0.3: generic image-to-3D. Both commands fail closed without a clearance artifact.
+    engine = commands.add_parser("engine").add_subparsers(dest="stage", required=True)
+    clearance = engine.add_parser("clearance").add_subparsers(dest="action", required=True)
+    verify = clearance.add_parser("verify")
+    verify.add_argument("engine_clearance", type=Path)
+    verify.add_argument("--out", type=Path)
+
+    image = commands.add_parser("image").add_subparsers(dest="stage", required=True)
+    reconstruct = image.add_parser("reconstruct")
+    reconstruct.add_argument("source_image", type=Path)
+    reconstruct.add_argument("--engine", required=True)
+    reconstruct.add_argument("--clearance", required=True, type=Path)
+    reconstruct.add_argument("--asset-kind", required=True)
+    reconstruct.add_argument("--subject", required=True)
+    reconstruct.add_argument("--mask", type=Path)
+    reconstruct.add_argument("--background-removal", type=Path)
+    reconstruct.add_argument("--rights-receipt", type=Path)
+    reconstruct.add_argument("--out", type=Path)
+
     provider = commands.add_parser("provider").add_subparsers(dest="stage", required=True)
     evidence = provider.add_parser("evidence").add_subparsers(dest="action", required=True)
     refresh = evidence.add_parser("refresh")
@@ -242,6 +263,8 @@ def normalize(namespace: argparse.Namespace) -> StageRequest:
 
     if command == "provider evidence":
         command = "provider evidence refresh"
+    if command == "engine clearance":
+        command = "engine clearance verify"
 
     return StageRequest(command=command, arguments=arguments)
 

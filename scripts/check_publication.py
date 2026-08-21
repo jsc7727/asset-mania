@@ -62,6 +62,12 @@ ALLOWED_BINARY_PATHS = frozenset({"blender-addon/LICENSE"})
 #: the opposite of asserting it.
 PUBLIC_CLAIM_FILES = ("README.md", "skills/asset-mania/SKILL.md")
 #: A guarded claim must travel with at least one of these qualifiers.
+#: A capability row may only leave `Planned` when a recorded run backs it. Each entry maps a
+#: README row label to the evidence phrase that must accompany a non-`Planned` state.
+PLANNED_CAPABILITIES = {
+    "Generic image to 3D": "no engine is cleared, downloaded, or executed",
+}
+
 GUARDED_CLAIMS = {
     "live-verified": (
         "no live call has ever been made",
@@ -167,6 +173,32 @@ def load_deny_inventory() -> list[str]:
     return entries
 
 
+def check_planned_capabilities() -> list[Finding]:
+    """A `Planned` row cannot quietly become `Available`.
+
+    The check is deliberately about the *evidence phrase*, not the word `Planned`: a row may
+    legitimately change state, but only together with the sentence that says what backs it.
+    """
+    findings: list[Finding] = []
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for label, evidence in sorted(PLANNED_CAPABILITIES.items()):
+        row = next((line for line in readme.splitlines() if line.startswith(f"| {label} |")), None)
+        if row is None:
+            findings.append(Finding("CAPABILITY_ROW_MISSING", "README.md", f"no row for {label!r}"))
+            continue
+        if "Planned" in row:
+            continue
+        if evidence.lower() not in readme.lower():
+            findings.append(
+                Finding(
+                    "UNBACKED_CAPABILITY_CLAIM",
+                    "README.md",
+                    f"{label!r} left Planned without the evidence phrase {evidence!r}",
+                )
+            )
+    return findings
+
+
 def check_private_sample_names(paths: list[PurePosixPath]) -> tuple[list[Finding], str]:
     """Scan every tracked text file against the local deny inventory.
 
@@ -264,6 +296,7 @@ def main(argv: list[str]) -> int:
     findings = (
         check_tracked_binaries(paths)
         + check_capability_claims()
+        + check_planned_capabilities()
         + private_findings
         + check_declared_tools(paths)
     )
