@@ -29,6 +29,20 @@ it; it is discovered through the `asset_mania.providers` entry point, and the ro
 development workspace installs it only to run its fake-transport tests. It adds no
 third-party runtime dependency of its own.
 
+## Optional clearance-gated engine adapter
+
+`packages/engine-triposr/` is this repository's own Apache-2.0 code, published as its own
+optional wheel `asset-mania-engine-triposr` and discovered through the
+`asset_mania.engines` entry point. The CLI wheel has no runtime dependency on it.
+
+It bundles and downloads **nothing**: no engine code, no model weight, no preprocessing
+model, and no third-party runtime dependency of its own. Execution is an injected port whose
+default refuses every call. An engine becomes usable only when a user supplies an
+`engine-clearance-v1` artifact recording the revision, digest, license, and download receipt
+for the engine code, the weights, the preprocessing model, and every runtime dependency; see
+`docs/superpowers/specs/2026-08-21-asset-mania-v0-3-generic-image-to-3d-design.md`. No such
+clearance ships with this repository, and no engine has been executed.
+
 ## External tools used but never redistributed
 
 Asset Mania invokes these tools as separate processes and bundles neither their binaries

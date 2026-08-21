@@ -7,6 +7,7 @@ members = [
     "asset-mania-blender-client",
     "asset-mania-cli",
     "asset-mania-contracts",
+    "asset-mania-engine-triposr",
     "asset-mania-pipeline",
     "asset-mania-provider-openai",
     "asset-mania-workspace",
@@ -48,6 +49,21 @@ requires-dist = [
 name = "asset-mania-contracts"
 version = "0.2.0"
 source = { editable = "packages/contracts" }
+
+[[package]]
+name = "asset-mania-engine-triposr"
+version = "0.2.0"
+source = { editable = "packages/engine-triposr" }
+dependencies = [
+    { name = "asset-mania-contracts" },
+    { name = "asset-mania-pipeline" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asset-mania-contracts", editable = "packages/contracts" },
+    { name = "asset-mania-pipeline", editable = "packages/pipeline" },
+]
 
 [[package]]
 name = "asset-mania-pipeline"

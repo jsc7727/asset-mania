@@ -1,0 +1,29 @@
+# An optional, separately distributed engine adapter. The CLI wheel has no runtime
+# dependency on it. It bundles and downloads nothing: an engine is unusable until the user
+# supplies a clearance artifact covering the code, the weights, the preprocessing model, and
+# every runtime dependency.
+[project]
+name = "asset-mania-engine-triposr"
+version = "0.2.0"
+description = "Optional clearance-gated single-image-to-mesh engine adapter for Asset Mania"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "asset-mania-contracts",
+  "asset-mania-pipeline",
+]
+
+[project.entry-points."asset_mania.engines"]
+triposr-local = "asset_mania_engine_triposr.adapter:ENGINE"
+
+[tool.uv.sources]
+asset-mania-contracts = { workspace = true }
+asset-mania-pipeline = { workspace = true }
+
+[tool.uv.build-backend]
+module-name = "asset_mania_engine_triposr"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13"]
+build-backend = "uv_build"
