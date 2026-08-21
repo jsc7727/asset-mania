@@ -16,9 +16,9 @@ from __future__ import annotations
 import pytest
 from asset_mania_contracts import (
     ASSET_KINDS,
-    FIXTURE_RENDER_PROFILE,
     DECLARABLE_SUBJECTS,
     FACE_CAPABLE_SUBJECTS,
+    FIXTURE_RENDER_PROFILE,
     DiagnosticCode,
     build_reconstruction_plan,
     build_workflow_plan,

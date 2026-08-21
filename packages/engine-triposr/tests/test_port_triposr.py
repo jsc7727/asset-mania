@@ -17,10 +17,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-from PIL import Image
-
-from asset_mania_pipeline import ReconstructionRejected, describe_reconstruction_output
-
 from asset_mania_engine_triposr.adapter import EngineRequest, ReconstructionFailed
 from asset_mania_engine_triposr.ports import triposr as port_module
 from asset_mania_engine_triposr.ports.triposr import (
@@ -33,6 +29,8 @@ from asset_mania_engine_triposr.ports.triposr import (
     _load_foreground,
     _normalise,
 )
+from asset_mania_pipeline import ReconstructionRejected, describe_reconstruction_output
+from PIL import Image
 
 PORT_SOURCE = Path(port_module.__file__)
 
@@ -42,9 +40,7 @@ DECLARED_MANIFOLD_STATES = frozenset({"closed", "open", "unknown"})
 
 ROOT = Path(__file__).resolve().parents[3]
 RECONSTRUCTION_PLAN = json.loads(
-    (ROOT / "tests" / "fixtures" / "v2" / "reconstruction-plan-v1.json").read_text(
-        encoding="utf-8"
-    )
+    (ROOT / "tests" / "fixtures" / "v2" / "reconstruction-plan-v1.json").read_text(encoding="utf-8")
 )
 
 
@@ -53,6 +49,7 @@ def mesh_fixture(tmp_path: Path) -> Path:
     path = tmp_path / "mesh.glb"
     path.write_bytes(b"glTF" + bytes(64))
     return path
+
 
 #: Names that would mean this port fetches its own weights. The clearance gate exists so the
 #: user reads the licences before the bytes land; a download here would make that ordering a
@@ -197,19 +194,31 @@ class TestGeometryNormalisation:
     #: this test depends on visible instead of implied.
     CUBE_VERTICES = np.array(
         [
-            [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-            [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+            [1, 1, 1],
+            [0, 1, 1],
         ],
         dtype=float,
     )
     CUBE_FACES_OUTWARD = np.array(
         [
-            [0, 2, 1], [0, 3, 2],   # z = 0
-            [4, 5, 6], [4, 6, 7],   # z = 1
-            [0, 1, 5], [0, 5, 4],   # y = 0
-            [3, 6, 2], [3, 7, 6],   # y = 1
-            [0, 7, 3], [0, 4, 7],   # x = 0
-            [1, 2, 6], [1, 6, 5],   # x = 1
+            [0, 2, 1],
+            [0, 3, 2],  # z = 0
+            [4, 5, 6],
+            [4, 6, 7],  # z = 1
+            [0, 1, 5],
+            [0, 5, 4],  # y = 0
+            [3, 6, 2],
+            [3, 7, 6],  # y = 1
+            [0, 7, 3],
+            [0, 4, 7],  # x = 0
+            [1, 2, 6],
+            [1, 6, 5],  # x = 1
         ]
     )
 
@@ -339,9 +348,7 @@ class TestGeometryNormalisation:
             if isinstance(node, ast.Assign)
             and isinstance(node.value, ast.Constant)
             and isinstance(node.value.value, str)
-            and any(
-                isinstance(t, ast.Name) and t.id == "manifold" for t in node.targets
-            )
+            and any(isinstance(t, ast.Name) and t.id == "manifold" for t in node.targets)
         }
         assert emitted, "found no manifold assignments to check"
         assert emitted <= DECLARED_MANIFOLD_STATES, (

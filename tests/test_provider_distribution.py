@@ -168,9 +168,7 @@ def test_the_engine_ports_load_but_never_acquire() -> None:
     _, ports = _engine_sources()
     for path in ports:
         roots = _imported_roots(path.read_text(encoding="utf-8"))
-        assert not (roots & ACQUISITION_IMPORTS), (
-            f"{path}: {sorted(roots & ACQUISITION_IMPORTS)}"
-        )
+        assert not (roots & ACQUISITION_IMPORTS), f"{path}: {sorted(roots & ACQUISITION_IMPORTS)}"
 
 
 def test_the_engine_adapter_names_no_download_url() -> None:

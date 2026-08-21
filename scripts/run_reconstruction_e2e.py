@@ -25,8 +25,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "packages" / "engine-triposr" / "src"))
 
-from asset_mania_engine_triposr.adapter import EngineRequest  # noqa: E402
-from asset_mania_engine_triposr.ports.triposr import (  # noqa: E402
+from asset_mania_engine_triposr.adapter import EngineRequest
+from asset_mania_engine_triposr.ports.triposr import (
     DEFAULT_MC_RESOLUTION,
     DEFAULT_MC_THRESHOLD,
     TripoSRPort,

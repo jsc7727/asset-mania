@@ -32,6 +32,7 @@ from types import ModuleType
 from typing import Any
 
 from asset_mania_contracts import DiagnosticCode
+
 from asset_mania_engine_triposr.adapter import (
     EngineRequest,
     EngineResult,
@@ -413,8 +414,8 @@ class TripoSRPort:
         mesh.export(str(request.output_path), file_type=request.mesh_format)
 
         return EngineResult(
-            triangle_count=int(len(mesh.faces)),
-            vertex_count=int(len(mesh.vertices)),
+            triangle_count=len(mesh.faces),
+            vertex_count=len(mesh.vertices),
             manifold=manifold,
         )
 

@@ -152,7 +152,9 @@ class TestTheSubjectGatesCarryOver:
             _disclosure(subject="real_person", receipt=None)
 
     def test_synthetic_person_records_no_receipt(self) -> None:
-        assert _disclosure(subject="synthetic_person", receipt=None)["rights_receipt_sha256"] is None
+        assert (
+            _disclosure(subject="synthetic_person", receipt=None)["rights_receipt_sha256"] is None
+        )
 
     def test_a_receipt_on_a_synthetic_subject_is_refused(self) -> None:
         """A receipt for a subject that cannot grant one is a mislabelled run, not a spare field."""
