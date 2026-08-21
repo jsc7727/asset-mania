@@ -33,18 +33,33 @@ The reconstruction row above is backed by a run, so here is the run. A synthetic
 input, TripoSR at `107cefdc` with `stabilityai/TripoSR` weights at `5b521936` (sha256
 `429e2c6b…`, checked against the digest the registry publishes), CPU, marching cubes at 128:
 
-| Measured | Value |
-| --- | --- |
-| Wall clock | 15.8 s |
-| Triangles / vertices | 82,948 / 41,613 |
-| Extent | 0.980 × 0.998 × 1.013 |
-| Winding | consistent, outward (signed volume +0.273) |
-| Surface | **open, not watertight** — 548 boundary edges, Euler number −135 |
-| Vertex colour | present |
+| Measured | mc 128 | mc 256 (default) |
+| --- | --- | --- |
+| Wall clock | 13.6 s | 23.4 s |
+| Triangles / vertices | 83,222 / 41,613 | 338,870 / 169,437 |
+| Extent | 0.980 × 0.998 × 1.013 | 0.972 × 0.998 × 1.009 |
+| Signed volume | +0.27314 | +0.26401 |
+| Surface | closed, watertight | closed, watertight |
+| Winding | consistent, outward | consistent, outward |
+| Vertex colour | present | present |
 
-The open surface is the honest headline. Marching cubes on a density field does not owe you a
-closed manifold, and `manifold` reports `open` rather than rounding up to `closed`. Anything
-downstream that needs watertightness needs a repair pass that does not exist yet.
+Getting to `closed` took a repair pass, and the shape of that pass is worth stating because two
+plausible versions of it are wrong. Marching cubes on a density field leaves single absent
+triangles where the isosurface is ambiguous — 134 of them on the first run, enough to report
+the whole surface as open. Putting those back is repair: the signed volume does not move.
+
+Capping a *large* opening is not repair. It makes the mesh watertight while inventing surface
+across a region the model never reconstructed, which then reads as a solid object. So the guard
+has to tell the two apart, and the two obvious measures cannot:
+
+- **Vertex count** fails because a cube missing an entire face has a four-vertex boundary loop,
+  exactly like a single absent triangle.
+- **Volume drift** fails because a planar cap across a flat opening adds no volume at all.
+
+What separates them is spatial span. Noise holes reached 3.2% of the bounding-box diagonal
+against a grid cell of 0.46%; a missing cube face spans 82%. The threshold sits at 10% — three
+times above the worst real hole, eight times below fabrication — and anything wider leaves the
+mesh `open`, reported as such rather than rounded up.
 
 Four licences are involved, each read from its source rather than from memory: the engine code
 (MIT), the weights (MIT), and a ViT architecture config that TripoSR fetches at runtime from

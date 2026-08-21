@@ -11,24 +11,48 @@ Everything here runs without weights. The reconstruction itself is exercised sep
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from asset_mania_pipeline import ReconstructionRejected, describe_reconstruction_output
+
 from asset_mania_engine_triposr.adapter import EngineRequest, ReconstructionFailed
 from asset_mania_engine_triposr.ports import triposr as port_module
 from asset_mania_engine_triposr.ports.triposr import (
     BACKGROUND_LEVEL,
+    MAX_REPAIRABLE_HOLE_SPAN,
     TripoSRPort,
     TripoSRSettings,
     WeightsMissing,
+    _boundary_loop_spans,
     _load_foreground,
     _normalise,
 )
 
 PORT_SOURCE = Path(port_module.__file__)
+
+#: The states `describe_reconstruction_output` accepts. Kept here as a literal so the test
+#: below fails if the port drifts from the record, rather than silently agreeing with it.
+DECLARED_MANIFOLD_STATES = frozenset({"closed", "open", "unknown"})
+
+ROOT = Path(__file__).resolve().parents[3]
+RECONSTRUCTION_PLAN = json.loads(
+    (ROOT / "tests" / "fixtures" / "v2" / "reconstruction-plan-v1.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+
+@pytest.fixture
+def mesh_fixture(tmp_path: Path) -> Path:
+    path = tmp_path / "mesh.glb"
+    path.write_bytes(b"glTF" + bytes(64))
+    return path
 
 #: Names that would mean this port fetches its own weights. The clearance gate exists so the
 #: user reads the licences before the bytes land; a download here would make that ordering a
@@ -214,6 +238,127 @@ class TestGeometryNormalisation:
     def test_vertices_are_merged(self) -> None:
         mesh, _ = _normalise(self._inward_soup())
         assert len(mesh.vertices) == 8, "a cube has eight distinct corners"
+
+    @classmethod
+    def _fine_cube(cls) -> Any:
+        """A finely tessellated unit cube: 12,288 triangles, so one is small next to the whole.
+
+        The subdivision level is chosen to match the regime the real mesh is in, rather than
+        the reverse. The coarse cube cannot stand in for extraction noise at all -- one of its
+        twelve triangles is half a face, so removing it leaves a hole spanning 82% of the
+        diagonal, indistinguishable from a wholly missing region. Measured spans for one
+        absent triangle: 10.2% at 768 faces, 5.1% at 3,072, 2.6% at 12,288. The reference run
+        had 82,948 faces and holes reaching 3.2%, so 12,288 is the level that actually
+        resembles it. Tuning the threshold to fit a coarser fixture would have been fitting the
+        guard to the test instead of to the failure.
+        """
+        import trimesh
+
+        mesh = trimesh.Trimesh(
+            vertices=cls.CUBE_VERTICES.copy(), faces=cls.CUBE_FACES_OUTWARD.copy()
+        )
+        for _ in range(5):
+            mesh = mesh.subdivide()
+        assert mesh.is_watertight and len(mesh.faces) == 12288
+        return mesh
+
+    def test_a_single_missing_triangle_is_repaired(self) -> None:
+        """The failure the reference run actually had, 134 times over.
+
+        One absent triangle makes an otherwise sound surface report as open, and the volume
+        does not move when it is put back -- which is what distinguishes repair from invention.
+        """
+        fine = self._fine_cube()
+        punctured = fine.copy()
+        punctured.update_faces(np.arange(len(fine.faces)) != 0)
+        assert not punctured.is_watertight
+
+        mesh, manifold = _normalise(punctured)
+        assert manifold == "closed"
+        assert mesh.volume == pytest.approx(1.0, rel=1e-6)
+
+    def test_a_large_hole_is_left_open_rather_than_capped(self) -> None:
+        """Capping a missing region would turn a failed reconstruction into a solid object.
+
+        A whole face removed from the coarse cube is the case that defeated both earlier
+        guards: its boundary loop has four vertices, the same count as a noise hole, and a
+        planar cap across it adds no volume at all. Only the span tells them apart.
+        """
+        import trimesh
+
+        gutted = trimesh.Trimesh(
+            vertices=self.CUBE_VERTICES.copy(),
+            faces=self.CUBE_FACES_OUTWARD[2:].copy(),
+        )
+        mesh, manifold = _normalise(gutted)
+        assert manifold == "open", "a missing region must not be filled in silently"
+        assert not mesh.is_watertight
+
+    def test_the_span_threshold_sits_between_the_two_measured_cases(self) -> None:
+        """The threshold is a measurement, so the measurements are asserted, not just cited.
+
+        Noise holes on the reference run reached 3.2% of the diagonal; a missing cube face
+        spans 82%. If either number drifted toward the other the threshold would stop
+        separating them, and this test is what would notice.
+        """
+        import trimesh
+
+        fine = self._fine_cube()
+        punctured = fine.copy()
+        punctured.update_faces(np.arange(len(fine.faces)) != 0)
+        noise = _boundary_loop_spans(punctured)
+
+        gutted = trimesh.Trimesh(
+            vertices=self.CUBE_VERTICES.copy(), faces=self.CUBE_FACES_OUTWARD[2:].copy()
+        )
+        missing = _boundary_loop_spans(gutted)
+
+        assert noise and missing
+        assert noise[0] < MAX_REPAIRABLE_HOLE_SPAN < missing[0]
+        assert missing[0] / noise[0] > 20, "the two cases must stay well separated"
+
+    def test_every_manifold_state_the_port_can_return_is_one_the_record_accepts(self) -> None:
+        """The port once returned `non_manifold`, which the record rejects.
+
+        That is a defect the geometry tests above cannot catch: they only exercise the two
+        states a healthy mesh reaches, so a third, unreachable-in-tests branch could emit a
+        value that fails only in production. Reading the branch literals out of the source and
+        checking them against the record's own list closes that gap.
+        """
+        import ast
+
+        source = ast.parse(Path(port_module.__file__).read_text(encoding="utf-8"))
+        normalise = next(
+            node
+            for node in ast.walk(source)
+            if isinstance(node, ast.FunctionDef) and node.name == "_normalise"
+        )
+        emitted = {
+            node.value.value
+            for node in ast.walk(normalise)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+            and any(
+                isinstance(t, ast.Name) and t.id == "manifold" for t in node.targets
+            )
+        }
+        assert emitted, "found no manifold assignments to check"
+        assert emitted <= DECLARED_MANIFOLD_STATES, (
+            f"_normalise can emit {sorted(emitted - DECLARED_MANIFOLD_STATES)}, which "
+            f"describe_reconstruction_output rejects"
+        )
+
+    def test_the_record_rejects_a_state_outside_the_declared_set(self, mesh_fixture) -> None:
+        """Guards the check above: if the record stopped rejecting, it would prove nothing."""
+        with pytest.raises(ReconstructionRejected):
+            describe_reconstruction_output(
+                mesh_path=mesh_fixture,
+                plan=RECONSTRUCTION_PLAN,
+                triangle_count=1,
+                vertex_count=3,
+                manifold="non_manifold",
+            )
 
     def test_open_surface_is_reported_as_open_not_closed(self) -> None:
         import trimesh

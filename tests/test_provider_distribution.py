@@ -284,15 +284,19 @@ def test_the_readme_qualifies_generic_image_to_3d_with_what_is_still_missing() -
     assert "no wheel ships an engine or a weight" in row
 
 
-def test_the_readme_reports_the_reconstruction_as_open_not_watertight() -> None:
-    """The measured surface is open, and the README must not round that up.
+def test_the_readme_documents_the_limit_of_the_hole_repair() -> None:
+    """The surface closes now, which makes the *bound* on the repair the thing to publish.
 
-    An open mesh is the kind of result that reads as success -- a file exists, the triangle
-    count is large -- until something downstream needs a closed volume.
+    This assertion used to require the README to say "open, not watertight", which was right
+    while that was the measured state and became wrong once a repair pass landed. What has to
+    stay documented is the part a reader could otherwise not know: filling holes is also how a
+    failed reconstruction gets dressed up as a solid object, so the README has to say where the
+    line is and that a wider opening leaves the mesh open.
     """
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "open, not watertight" in readme
-    assert "boundary edges" in readme
+    assert "Capping a *large* opening is not repair" in readme
+    assert "leaves the\nmesh `open`" in readme or "leaves the mesh `open`" in readme
+    assert "82%" in readme, "the fabrication case must be quantified, not just described"
 
 
 def test_the_skill_refuses_generic_image_to_3d() -> None:
@@ -308,4 +312,4 @@ def test_the_skill_refuses_generic_image_to_3d() -> None:
     assert "no cleared engine" in skill.lower()
     assert "make this person 3D" in skill
     assert "Never issue that clearance" in skill
-    assert "open, not watertight" in skill
+    assert "`open` when the model failed to reconstruct a region" in skill

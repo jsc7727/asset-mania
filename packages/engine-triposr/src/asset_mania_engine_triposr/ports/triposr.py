@@ -204,6 +204,93 @@ def _preprocess(rgba: Any, foreground_ratio: float, resize_foreground: Any) -> A
     return Image.fromarray((composited * 255.0).astype(np.uint8))
 
 
+#: Widest boundary loop that counts as extraction noise, as a fraction of the mesh's
+#: bounding-box diagonal.
+#:
+#: Vertex count was the obvious measure and the wrong one: a cube missing an entire face has a
+#: four-vertex boundary loop, the same count as a single absent triangle. Signed-volume drift
+#: was the second guess and also wrong, because a planar cap across a flat opening adds no
+#: volume at all -- it closes the mesh while inventing the surface, which is the exact failure
+#: this guard exists to prevent.
+#:
+#: Spatial span separates them cleanly. Measured on the reference run: 134 loops, widest
+#: 3.2% of the diagonal, median 1.6%, against a grid cell of 0.46%. A missing cube face spans
+#: 82%. This threshold sits 3x above the worst real hole and 8x below fabrication.
+MAX_REPAIRABLE_HOLE_SPAN = 0.10
+
+#: Secondary guard, for a large opening that is not planar and so would add volume when
+#: capped. Span catches those too, but the two measures fail differently and neither is
+#: expensive.
+MAX_REPAIR_VOLUME_DRIFT = 0.01
+
+
+def _boundary_loop_spans(mesh: Any) -> list[float]:
+    """Diagonal extent of each boundary loop, as a fraction of the mesh diagonal, widest first."""
+    import numpy as np
+
+    edges, counts = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
+    boundary = edges[counts == 1]
+    if not len(boundary):
+        return []
+
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    diagonal = float(np.linalg.norm(vertices.max(axis=0) - vertices.min(axis=0)))
+    if diagonal <= 0:
+        return []
+
+    neighbours: dict[int, list[int]] = {}
+    for a, b in boundary:
+        neighbours.setdefault(int(a), []).append(int(b))
+        neighbours.setdefault(int(b), []).append(int(a))
+
+    seen: set[int] = set()
+    spans: list[float] = []
+    for start in neighbours:
+        if start in seen:
+            continue
+        loop, stack = [], [start]
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            loop.append(node)
+            stack.extend(n for n in neighbours[node] if n not in seen)
+        points = vertices[loop]
+        spans.append(float(np.linalg.norm(points.max(axis=0) - points.min(axis=0))) / diagonal)
+    return sorted(spans, reverse=True)
+
+
+def _repair_small_holes(mesh: Any) -> Any:
+    """Close extraction-noise holes, and refuse to close anything larger.
+
+    Marching cubes on a density field leaves single missing triangles where the isosurface is
+    ambiguous -- on the reference run, 134 of them, enough to make an otherwise sound surface
+    report as open while the volume was correct to five decimals. Putting those back is
+    repair.
+
+    Capping a large opening is not repair, it is fabrication: the mesh becomes watertight and
+    a region the model never reconstructed reads as solid. `MAX_REPAIRABLE_HOLE_SPAN` records
+    how that line was drawn and why the two more obvious measures do not draw it.
+
+    All or nothing, because `fill_holes` fills everything: a mesh with one genuinely missing
+    region keeps its small holes too and stays `open`, which is the accurate report.
+    """
+    spans = _boundary_loop_spans(mesh)
+    if not spans:
+        return mesh
+    if spans[0] > MAX_REPAIRABLE_HOLE_SPAN:
+        return mesh
+
+    before = float(mesh.volume)
+    candidate = mesh.copy()
+    candidate.fill_holes()
+    candidate.fix_normals()
+    if abs(float(candidate.volume) - before) > MAX_REPAIR_VOLUME_DRIFT:
+        return mesh
+    return candidate
+
+
 def _normalise(mesh: Any) -> tuple[Any, str]:
     """Merge coincident vertices and orient faces outward, then report what we ended up with.
 
@@ -223,13 +310,17 @@ def _normalise(mesh: Any) -> tuple[Any, str]:
     mesh.update_faces(mesh.nondegenerate_faces())
     mesh.remove_unreferenced_vertices()
     mesh.fix_normals()
+    mesh = _repair_small_holes(mesh)
 
+    # `closed` / `open` / `unknown` are the states the reconstruction record declares; a value
+    # outside them is rejected downstream. `unknown` is the honest answer for a surface whose
+    # winding is inconsistent, because then "open" would be claiming more than was measured.
     if mesh.is_watertight:
         manifold = "closed"
     elif mesh.is_winding_consistent:
         manifold = "open"
     else:
-        manifold = "non_manifold"
+        manifold = "unknown"
     return mesh, manifold
 
 

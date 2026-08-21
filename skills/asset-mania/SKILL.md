@@ -89,8 +89,10 @@ including "make this person 3D":
 4. Do not describe the remaining work as larger than it is. The blocker is clearance and
    acquisition, which the user can do by reading `scripts/acquire_engine_assets.py` output and
    deciding — not missing implementation.
-5. A mesh from that path is **open, not watertight**. Do not offer it for any use that needs a
-   closed volume without saying so.
+5. A mesh from that path closes only after a bounded repair pass, and the pass refuses to cap
+   an opening wider than a tenth of the mesh. So the result is `closed` on a clean subject and
+   **`open` when the model failed to reconstruct a region** — report whichever state the run
+   returned, and never present `open` as usable where a closed volume is required.
 6. If the user has a UV-mapped mesh, offer the local stages above instead, which do work.
 
 A `real_person` subject additionally needs a rights receipt bound to the exact plan digest,
