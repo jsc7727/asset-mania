@@ -233,6 +233,37 @@ def write_normalized_png(*, pixels: bytes, width: int, height: int, destination:
     return destination
 
 
+def open_bounded(path: Path) -> Image.Image:
+    """Open and fully decode one image within the size and bomb limits."""
+    return _open(path)
+
+
+def reject_metadata_and_colour(image: Image.Image) -> None:
+    """The checks that apply to any decoded input, whatever its channel layout.
+
+    Orientation, metadata, colour management, and alpha convention are separate from the
+    channel-shape rule, because a mask is legitimately single-channel while a view is not.
+    """
+    _reject_orientation_and_metadata(image)
+    _reject_unknown_colour_management(image)
+    _reject_premultiplied_alpha(image)
+
+
+def decode_still(path: Path) -> Image.Image:
+    """Decode one colour still: the view and reconstruction-image shape.
+
+    Shared by view ingest and reconstruction input, so the two cannot drift apart.
+    """
+    image = open_bounded(path)
+    try:
+        _reject_unsupported_shape(image)
+        reject_metadata_and_colour(image)
+    except BaseException:
+        image.close()
+        raise
+    return image
+
+
 def ingest_view(
     *,
     image_path: Path,
@@ -268,13 +299,8 @@ def ingest_view(
         f"subject {subject!r} is not executable",
     )
 
-    image = _open(image_path)
+    image = decode_still(image_path)
     try:
-        _reject_unsupported_shape(image)
-        _reject_orientation_and_metadata(image)
-        _reject_unknown_colour_management(image)
-        _reject_premultiplied_alpha(image)
-
         width, height = image.size
         expected_width, expected_height = resolution
         _require(
