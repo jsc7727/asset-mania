@@ -19,6 +19,7 @@ from typing import Any
 
 from asset_mania_contracts import (
     DiagnosticCode,
+    build_likeness_disclosure,
     build_reconstruction_plan,
 )
 from PIL import Image
@@ -209,6 +210,12 @@ def describe_reconstruction_output(
     A reconstruction has no camera correspondence and no authored UVs, so it is validated
     structurally and nothing more. `manifold` is recorded rather than assumed, because
     claiming a watertight mesh that is not one breaks every downstream consumer.
+
+    For a `face_head` plan the record carries a sealed `likeness-disclosure-v1` under
+    `disclosure`. It is produced here, from the same measurement, rather than by a separate call
+    the caller might forget: a disclosure that has to be remembered is one that will eventually
+    travel apart from its mesh, and a head mesh with no disclosure is indistinguishable from any
+    other head mesh. For every other asset kind `disclosure` is None.
     """
     if not mesh_path.is_file():
         raise ReconstructionRejected(
@@ -260,7 +267,29 @@ def describe_reconstruction_output(
         "triangle_count": int(triangle_count),
         "vertex_count": int(vertex_count),
         "manifold": manifold,
+        "disclosure": _disclosure_for(plan, mesh_path),
     }
+
+
+def _disclosure_for(plan: Mapping[str, Any], mesh_path: Path) -> dict[str, Any] | None:
+    """Seal the likeness disclosure for a face_head plan, or None for any other kind.
+
+    The plan is the only source for subject and receipt, so the disclosure cannot disagree with
+    the gate that let the run happen. `views` is 1 because this engine takes one image; a
+    multi-view engine would have to pass its own count rather than inherit this default.
+    """
+    if plan.get("asset_kind") != "face_head":
+        return None
+    return build_likeness_disclosure(
+        plan_sha256=plan["plan_sha256"],
+        source_image_sha256=plan["source_image_sha256"],
+        mesh_sha256=sha256_file(mesh_path),
+        subject=plan["subject"],
+        rights_receipt_sha256=plan["rights_receipt_sha256"],
+        engine=plan["engine"],
+        engine_profile=plan["engine_profile"],
+        views=1,
+    )
 
 
 def refuse_as_bake_input(manifest: Mapping[str, Any]) -> None:

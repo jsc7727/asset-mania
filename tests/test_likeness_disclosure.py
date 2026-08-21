@@ -167,3 +167,85 @@ class TestTheSubjectGatesCarryOver:
         disclosure["asset_kind"] = "object"
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(disclosure, load_schema("likeness-disclosure", "1.0"))
+
+
+class TestTheDisclosureTravelsWithTheMeshRecord:
+    """The design says the disclosure is produced by the same call that describes the mesh.
+
+    It was not, for a while: the builder existed and nothing called it. A disclosure a caller
+    has to remember to produce is one that will eventually travel apart from its mesh, which
+    leaves exactly the artifact this version exists to prevent -- a head mesh with nothing
+    saying where it came from or what was never measured about it.
+    """
+
+    @staticmethod
+    def _plan(asset_kind: str, subject: str, receipt: str | None):
+        from asset_mania_contracts import build_reconstruction_plan
+
+        return build_reconstruction_plan(
+            engine="triposr-local",
+            engine_profile="triposr-local-cpu-v1",
+            clearance_sha256="a" * 64,
+            source_image_sha256="b" * 64,
+            source_width=512,
+            source_height=512,
+            alpha=True,
+            mask_sha256="c" * 64,
+            background_removal_clearance_sha256=None,
+            asset_kind=asset_kind,
+            subject=subject,
+            rights_receipt_sha256=receipt,
+            expected_output={"mesh_format": "glb", "textured": False, "unit_scale_meters": 1.0},
+        )
+
+    @staticmethod
+    def _record(plan, mesh: Path):
+        from asset_mania_pipeline import describe_reconstruction_output
+
+        return describe_reconstruction_output(
+            mesh_path=mesh, plan=plan, triangle_count=1000, vertex_count=500, manifold="closed"
+        )
+
+    @pytest.fixture
+    def mesh(self, tmp_path: Path) -> Path:
+        path = tmp_path / "mesh.glb"
+        path.write_bytes(b"glTF" + bytes(200))
+        return path
+
+    def test_a_face_head_record_carries_a_sealed_disclosure(self, mesh: Path) -> None:
+        record = self._record(self._plan("face_head", "real_person", RECEIPT), mesh)
+        disclosure = record["disclosure"]
+        assert disclosure is not None
+        jsonschema.validate(disclosure, load_schema("likeness-disclosure", "1.0"))
+        preimage = {k: v for k, v in disclosure.items() if k != "disclosure_sha256"}
+        assert disclosure["disclosure_sha256"] == canonical_digest(preimage)
+
+    def test_the_disclosure_digests_the_mesh_that_was_measured(self, mesh: Path) -> None:
+        """Not a digest the caller passed in -- the file this record describes."""
+        from asset_mania_pipeline import sha256_file
+
+        record = self._record(self._plan("face_head", "real_person", RECEIPT), mesh)
+        assert record["disclosure"]["mesh_sha256"] == sha256_file(mesh)
+
+    def test_the_disclosure_cannot_disagree_with_the_plan_that_gated_the_run(
+        self, mesh: Path
+    ) -> None:
+        """Subject and receipt come from the plan, so the two cannot drift into disagreement."""
+        plan = self._plan("face_head", "real_person", RECEIPT)
+        disclosure = self._record(plan, mesh)["disclosure"]
+        assert disclosure["subject"] == plan["subject"]
+        assert disclosure["rights_receipt_sha256"] == plan["rights_receipt_sha256"]
+        assert disclosure["plan_sha256"] == plan["plan_sha256"]
+        assert disclosure["source_image_sha256"] == plan["source_image_sha256"]
+        assert disclosure["engine"] == plan["engine"]
+        assert disclosure["engine_profile"] == plan["engine_profile"]
+
+    def test_a_synthetic_face_records_no_receipt(self, mesh: Path) -> None:
+        plan = self._plan("face_head", "synthetic_person", None)
+        assert self._record(plan, mesh)["disclosure"]["rights_receipt_sha256"] is None
+
+    @pytest.mark.parametrize("asset_kind", ["object", "character"])
+    def test_other_kinds_get_no_disclosure(self, mesh: Path, asset_kind: str) -> None:
+        """`None`, not an empty disclosure: an object mesh has no likeness to disclose."""
+        plan = self._plan(asset_kind, "non_person", None)
+        assert self._record(plan, mesh)["disclosure"] is None
