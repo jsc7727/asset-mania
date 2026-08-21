@@ -45,6 +45,7 @@ and never to imply the workflow runs:
 - [approval receipt v1](references/approval-receipt-v1.schema.json)
 - [engine clearance v1](references/engine-clearance-v1.schema.json)
 - [reconstruction plan v1](references/reconstruction-plan-v1.schema.json)
+- [likeness disclosure v1](references/likeness-disclosure-v1.schema.json)
 
 ## Local stage routing
 
