@@ -755,10 +755,41 @@ def _run_texture_infer(
 
 
 def _texture_view_records(run: Path, views: Path) -> list[DADTextureView]:
-    return [
-        DADTextureView(yaw, origin, image, mask, projection)
-        for yaw, origin, image, mask, projection in _texture_paths(run, views)
-    ]
+    records = []
+    for yaw, origin, image, mask, projection in _texture_paths(run, views):
+        if yaw == 0:
+            projection = _ensure_observed_camera_projection(run, projection)
+        records.append(DADTextureView(yaw, origin, image, mask, projection))
+    return records
+
+
+def _ensure_observed_camera_projection(run: Path, source_projection: Path) -> Path:
+    target = run / "texture/views/yaw-000/projection.npz"
+    if target.exists():
+        return target
+    from asset_mania_engine_dad3dheads.mesh import _load_mesh
+
+    with np.load(source_projection, allow_pickle=False) as archive:
+        projected = np.asarray(archive["projected_vertices"], dtype=np.float64)
+        image_shape = np.asarray(archive["image_shape"], dtype=np.int64)
+        camera = (
+            np.asarray(archive["camera_vertices"], dtype=np.float64)
+            if "camera_vertices" in archive
+            else np.asarray(
+                _load_mesh(run / "inference/plugin-output/head.obj").vertices,
+                dtype=np.float64,
+            )
+        )
+    if camera.shape != (len(projected), 3):
+        raise ValueError("observed DAD camera projection topology is invalid")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        target,
+        projected_vertices=projected,
+        camera_vertices=camera,
+        image_shape=image_shape,
+    )
+    return target
 
 
 def _run_texture_build(arguments: argparse.Namespace, *, texture_builder: Callable) -> int:
