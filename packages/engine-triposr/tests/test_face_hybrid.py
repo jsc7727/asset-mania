@@ -9,11 +9,19 @@ from asset_mania_contracts import TURNTABLE_YAWS
 from asset_mania_engine_triposr.face_hybrid import (
     CanonicalView,
     FaceHybridSettings,
+    _align_anchor,
+    _blend_face_anchor,
     build_visual_hull,
     canonicalize_views,
     project_points,
 )
 from PIL import Image, ImageDraw
+from scipy.spatial import ConvexHull
+
+pytestmark = [
+    pytest.mark.filterwarnings("ignore:'pkgutil.find_loader' is deprecated:DeprecationWarning"),
+    pytest.mark.filterwarnings("ignore:__array_wrap__ must accept context:DeprecationWarning"),
+]
 
 
 def _sha256(path: Path) -> str:
@@ -200,3 +208,113 @@ def test_visual_hull_rejects_two_inconsistent_silhouettes(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="visual hull reprojection gate failed"):
         build_visual_hull(views, FaceHybridSettings(48, 7, 0.08))
+
+
+def _anchor_mesh():
+    import trimesh
+
+    mesh = trimesh.creation.icosphere(subdivisions=3, radius=1.0)
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    vertices[:, 0] *= 0.40
+    vertices[:, 1] *= 0.32
+    vertices[:, 2] *= 0.50
+    face_region = np.exp(-((vertices[:, 1] / 0.10) ** 2 + (vertices[:, 2] / 0.14) ** 2))
+    vertices[:, 0] += np.where(vertices[:, 0] > 0, 0.10 * face_region, 0.0)
+    mesh.vertices = vertices
+    return mesh
+
+
+def _normalised_vertices(mesh) -> np.ndarray:
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    lower = vertices.min(axis=0)
+    upper = vertices.max(axis=0)
+    return (vertices - (lower + upper) * 0.5) / np.ptp(vertices, axis=0).max()
+
+
+def _anchor_silhouette(
+    mesh,
+    *,
+    resolution: int,
+    scale: float,
+    translate_y: float,
+    translate_z: float,
+) -> np.ndarray:
+    vertices = _normalised_vertices(mesh) * scale
+    vertices[:, 1] += translate_y
+    vertices[:, 2] += translate_z
+    pixel_x = (vertices[:, 1] + 0.6) * ((resolution - 1) / 1.2)
+    pixel_y = (0.6 - vertices[:, 2]) * ((resolution - 1) / 1.2)
+    points = np.column_stack((pixel_x, pixel_y))
+    hull = ConvexHull(points)
+    image = Image.new("L", (resolution, resolution), 0)
+    ImageDraw.Draw(image).polygon([tuple(point) for point in points[hull.vertices]], fill=255)
+    return np.asarray(image) >= 128
+
+
+def test_anchor_alignment_recovers_bounded_scale_and_translation() -> None:
+    mesh = _anchor_mesh()
+    target = _anchor_silhouette(
+        mesh,
+        resolution=64,
+        scale=1.08,
+        translate_y=0.04,
+        translate_z=-0.03,
+    )
+
+    _aligned, metrics = _align_anchor(mesh, target, resolution=64)
+
+    assert metrics["scale"] == pytest.approx(1.08, abs=0.011)
+    assert metrics["translate_y"] == pytest.approx(0.04, abs=0.006)
+    assert metrics["translate_z"] == pytest.approx(-0.03, abs=0.006)
+    assert metrics["projection_iou"] >= 0.90
+
+
+def test_anchor_alignment_rejects_a_target_outside_the_bounded_search() -> None:
+    mesh = _anchor_mesh()
+    target = _anchor_silhouette(
+        mesh,
+        resolution=64,
+        scale=0.60,
+        translate_y=0.30,
+        translate_z=0.25,
+    )
+
+    with pytest.raises(ValueError, match="anchor alignment gate failed"):
+        _align_anchor(mesh, target, resolution=64)
+
+
+def _hybrid_grids(resolution: int = 48) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    axis = np.linspace(-0.6, 0.6, resolution)
+    x, y, z = np.meshgrid(axis, axis, axis, indexing="ij")
+    hull = (x / 0.45) ** 2 + (y / 0.34) ** 2 + (z / 0.50) ** 2 <= 1.0
+    anchor = hull.copy()
+    anchor[x < -0.04] = False
+    return axis, anchor, hull
+
+
+def test_face_anchor_blend_keeps_front_and_completes_rear() -> None:
+    axis, anchor, hull = _hybrid_grids()
+
+    hybrid, retention = _blend_face_anchor(anchor, hull, FaceHybridSettings(48, 7, 0.08))
+
+    front = (
+        int(np.argmin(abs(axis - 0.35))),
+        int(np.argmin(abs(axis))),
+        int(np.argmin(abs(axis))),
+    )
+    rear = (
+        int(np.argmin(abs(axis + 0.35))),
+        int(np.argmin(abs(axis))),
+        int(np.argmin(abs(axis))),
+    )
+    assert retention >= 0.85
+    assert hybrid[front]
+    assert hybrid[rear]
+
+
+def test_face_anchor_blend_rejects_excessive_front_clipping() -> None:
+    axis, anchor, hull = _hybrid_grids()
+    hull[np.meshgrid(axis, axis, axis, indexing="ij")[0] > 0.15] = False
+
+    with pytest.raises(ValueError, match="front anchor retention gate failed"):
+        _blend_face_anchor(anchor, hull, FaceHybridSettings(48, 7, 0.08))

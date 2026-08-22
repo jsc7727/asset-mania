@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 from asset_mania_contracts import TURNTABLE_YAWS
-from PIL import Image
+from PIL import Image, ImageDraw
 
 COMMON_RADIUS = 0.6
 CANONICAL_RESOLUTION = 1024
@@ -292,6 +292,168 @@ def build_visual_hull(
     if metrics["minimum_reprojection_iou"] < 0.72 or metrics["mean_reprojection_iou"] < 0.82:
         raise ValueError("visual hull reprojection gate failed")
     return occupancy, metrics
+
+
+def _normalise_anchor(mesh):
+    import trimesh
+
+    if not bool(mesh.is_watertight) or not bool(mesh.is_winding_consistent):
+        raise ValueError("face anchor must be closed and winding-consistent")
+    if float(mesh.volume) <= 0:
+        raise ValueError("face anchor must have positive volume")
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    lower = vertices.min(axis=0)
+    upper = vertices.max(axis=0)
+    scale = float(np.ptp(vertices, axis=0).max())
+    if scale <= 0:
+        raise ValueError("face anchor has no positive extent")
+    normalized = (vertices - (lower + upper) * 0.5) / scale
+    return trimesh.Trimesh(
+        vertices=normalized,
+        faces=np.asarray(mesh.faces),
+        vertex_colors=np.asarray(mesh.visual.vertex_colors),
+        process=False,
+    )
+
+
+def _silhouette_from_plane(
+    plane_points: np.ndarray,
+    *,
+    resolution: int,
+    hull_indices: np.ndarray | None = None,
+) -> np.ndarray:
+    from scipy.spatial import ConvexHull
+
+    points = np.asarray(plane_points, dtype=float)
+    indices = ConvexHull(points).vertices if hull_indices is None else hull_indices
+    scale = (resolution - 1) / (2 * COMMON_RADIUS)
+    polygon = np.column_stack(
+        (
+            (points[indices, 0] + COMMON_RADIUS) * scale,
+            (COMMON_RADIUS - points[indices, 1]) * scale,
+        )
+    )
+    image = Image.new("L", (resolution, resolution), 0)
+    ImageDraw.Draw(image).polygon([tuple(point) for point in polygon], fill=255)
+    return np.asarray(image) >= 128
+
+
+def _align_anchor(mesh, target_mask: np.ndarray, *, resolution: int):
+    """Align one normalized anchor by bounded uniform scale and Y/Z translation."""
+    from scipy.spatial import ConvexHull
+
+    normalized = _normalise_anchor(mesh)
+    vertices = np.asarray(normalized.vertices, dtype=float)
+    plane = vertices[:, [1, 2]]
+    hull_indices = ConvexHull(plane).vertices
+    target = np.asarray(target_mask, dtype=bool)
+    if target.shape != (resolution, resolution):
+        target = np.asarray(
+            Image.fromarray(target).resize((resolution, resolution), Image.Resampling.NEAREST),
+            dtype=bool,
+        )
+    if not target.any():
+        raise ValueError("anchor target mask has no foreground")
+
+    best: (
+        tuple[tuple[float, float, float, float, float, float], tuple[float, float, float]] | None
+    ) = None
+    scales = np.linspace(0.88, 1.12, 13)
+    translations = np.linspace(-0.08, 0.08, 17)
+    for scale in scales:
+        scaled = plane * scale
+        for translate_y in translations:
+            for translate_z in translations:
+                candidate = scaled + (translate_y, translate_z)
+                silhouette = _silhouette_from_plane(
+                    candidate,
+                    resolution=resolution,
+                    hull_indices=hull_indices,
+                )
+                union = np.logical_or(silhouette, target).sum()
+                intersection = np.logical_and(silhouette, target).sum()
+                iou = float(intersection / union) if union else 0.0
+                key = (
+                    -iou,
+                    abs(float(scale) - 1.0),
+                    abs(float(translate_y)) + abs(float(translate_z)),
+                    float(scale),
+                    float(translate_y),
+                    float(translate_z),
+                )
+                if best is None or key < best[0]:
+                    best = (key, (float(scale), float(translate_y), float(translate_z)))
+    assert best is not None
+    iou = -best[0][0]
+    if iou < 0.60:
+        raise ValueError("anchor alignment gate failed")
+    scale, translate_y, translate_z = best[1]
+    aligned = normalized.copy()
+    transformed = np.asarray(aligned.vertices, dtype=float) * scale
+    transformed[:, 1] += translate_y
+    transformed[:, 2] += translate_z
+    aligned.vertices = transformed
+    return aligned, {
+        "scale": scale,
+        "translate_y": translate_y,
+        "translate_z": translate_z,
+        "projection_iou": iou,
+    }
+
+
+def _voxelize_aligned_anchor(mesh, resolution: int) -> np.ndarray:
+    from scipy.ndimage import binary_dilation, generate_binary_structure
+
+    pitch = 2 * COMMON_RADIUS / (resolution - 1)
+    voxel = mesh.voxelized(pitch).fill()
+    points = np.asarray(voxel.points, dtype=float)
+    grid = np.zeros((resolution, resolution, resolution), dtype=bool)
+    if len(points):
+        indices = np.rint((points + COMMON_RADIUS) / pitch).astype(int)
+        valid = np.logical_and(indices >= 0, indices < resolution).all(axis=1)
+        indices = indices[valid]
+        grid[indices[:, 0], indices[:, 1], indices[:, 2]] = True
+    return binary_dilation(grid, structure=generate_binary_structure(3, 1), iterations=1)
+
+
+def _blend_face_anchor(
+    anchor: np.ndarray,
+    hull: np.ndarray,
+    settings: FaceHybridSettings,
+) -> tuple[np.ndarray, float]:
+    from scipy.ndimage import binary_dilation, generate_binary_structure
+
+    _validate_settings(settings)
+    anchor_grid = np.asarray(anchor, dtype=bool)
+    hull_grid = np.asarray(hull, dtype=bool)
+    expected = (settings.grid_resolution,) * 3
+    if anchor_grid.shape != expected or hull_grid.shape != expected:
+        raise ValueError(f"anchor and hull grids must both be {expected}")
+    axis = np.linspace(-COMMON_RADIUS, COMMON_RADIUS, settings.grid_resolution)
+    x = axis[:, None, None]
+    hull_margin = binary_dilation(
+        hull_grid,
+        structure=generate_binary_structure(3, 1),
+        iterations=1,
+    )
+    front = x >= settings.front_seam
+    rear = x <= -settings.front_seam
+    band = np.logical_not(np.logical_or(front, rear))
+    hybrid = np.zeros_like(anchor_grid)
+    hybrid |= np.logical_and(np.logical_and(anchor_grid, hull_margin), front)
+    hybrid |= np.logical_and(hull_grid, rear)
+    hybrid |= np.logical_and(
+        np.logical_or(anchor_grid, hull_grid), np.logical_and(hull_margin, band)
+    )
+    hybrid = _clean_volume(hybrid)
+    anchor_front = np.logical_and(anchor_grid, front)
+    count = int(anchor_front.sum())
+    if count == 0:
+        raise ValueError("face anchor has no positive-X front occupancy")
+    retention = float(np.logical_and(hybrid, anchor_front).sum() / count)
+    if retention < 0.85:
+        raise ValueError("front anchor retention gate failed")
+    return hybrid, retention
 
 
 __all__ = [
