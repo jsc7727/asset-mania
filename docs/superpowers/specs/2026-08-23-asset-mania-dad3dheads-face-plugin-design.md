@@ -1,7 +1,6 @@
 # Asset Mania DAD-3DHeads Face Plugin Design
 
-**Status:** proposed for user review on 2026-08-23; no source checkout, model download, or
-inference is approved by this document alone
+**Status:** approved for implementation and the fixed acquisition plan on 2026-08-23
 
 ## Purpose
 
@@ -199,6 +198,7 @@ The result is private and contains:
   "plugin": "dad3dheads-local",
   "status": "succeeded",
   "raw_mesh": "<private absolute path>",
+  "projection_data": "<private absolute path>",
   "vertex_count": 0,
   "triangle_count": 0,
   "elapsed_seconds": 0.0,
