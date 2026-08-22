@@ -13,3 +13,9 @@ Face/head work is a separately gated future workflow. External processing will r
 user's confirmation of rights and consent. No face input belongs in fixtures, telemetry,
 training data, galleries, or bug reports by default. See [the roadmap](roadmap.md) and
 [security reporting](../SECURITY.md).
+
+An approved turntable run uploads only the normalized source cutout to the exact provider/model
+plan. Prompt, cutout, generated views, receipts, and response bytes remain private; portable
+records contain hashes, labels, request IDs, and numeric usage only. Seven paid calls share one
+immutable maximum-cost plan and stop on the first failure. Generated side and rear views retain
+`origin: generated` and never become evidence of observed appearance.

@@ -23,5 +23,12 @@ implementation time. Face/head reconstruction remains
 research-only and must not be marketed as exact likeness, anonymity, biometric safety, or legal
 clearance.
 
+The turntable experiment keeps GPT-generated views distinct from camera observations. Seven
+inferred yaw views may improve geometric coverage for local consensus, but they cannot reveal the
+person's real unseen appearance. The structural audit checks dimensions, mask containment,
+centering, area continuity, and duplicate pixels; it performs no identity embedding or biometric
+comparison. Yaw-aware TripoSR voxel voting is a research consensus method, not photogrammetry and
+not a face-accuracy benchmark.
+
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.

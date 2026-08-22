@@ -24,6 +24,8 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | Reprojection and bake | Available | coverage 40.5% against a UV island area of 41.4% on the fixture |
 | BLEND / GLB / FBX export | Available | container checks plus fresh-process reimport in a separate Blender |
 | GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
+| GPT Image 2 360-degree turntable | **experimental, fake-transport E2E verified** | one observed front plus seven generated yaws; approvals, no-retry ordering, audit, and provenance verified; **no live call has been made** |
+| Multi-view TripoSR voxel fusion | **experimental, local synthetic E2E verified** | eight yaw meshes fuse to a watertight GLB with the optional CPU torchmcubes runtime; no live generated-face viewset has been fused |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
 | Generic image to 3D | Runs, unbundled | measured below; **clearance is user-issued and unissued here**, and no wheel ships an engine or a weight |
 | Face/head reconstruction | Gated, unmeasured | `face_head` + `non_person` now refused (it sealed with no receipt before); every mesh carries a `likeness-disclosure-v1`; **no face accuracy has been measured** |
@@ -113,6 +115,13 @@ remains planned. Each invocation creates a new child directory under the selecte
 with canonical `manifest.json` and `report.json` files and an empty `logs/` directory. See
 [Getting started](docs/getting-started.md) for flags and [Run manifests](docs/concepts/run-manifest.md)
 for the stream and exit-code contract.
+
+The maintainer-only turntable runner is intentionally outside the public CLI while it remains
+research-grade. It plans one observed front view plus seven GPT Image 2 generated yaws, audits the
+returned white-background images, reconstructs each view locally, and fuses eligible meshes into a
+neutral GLB. Generated side and rear views are model inferences, not observations, and identity
+consistency stays unmeasured. The deterministic fake-provider E2E and local synthetic fusion pass;
+a live provider run has not yet been performed.
 
 ## Project guide
 

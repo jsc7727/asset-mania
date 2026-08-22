@@ -61,3 +61,14 @@ stable diagnostic.
 
 Read [Run manifests](concepts/run-manifest.md) for output, diagnostics, and exit semantics, then
 return to the [documentation index](README.md).
+
+## Maintainer turntable research path
+
+`scripts/run_turntable_multiview_e2e.py` exposes `plan`, `generate`, `reconstruct`, and `verify`.
+`plan` is offline. `generate` uploads the approved cutout seven times and therefore requires fresh
+plan-bound face-rights, external-egress, and paid-compute receipts for a real person. Calls execute
+once in yaw order and never retry. `reconstruct` and `verify` are local and offline.
+
+All source images, prompts, receipts, generated views, masks, per-view meshes, fused meshes, and
+previews belong below `.asset-mania/` and must never be committed. The path is currently
+fake-transport and synthetic-fusion verified, not live-provider verified.

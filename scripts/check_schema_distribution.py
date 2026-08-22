@@ -26,9 +26,12 @@ DISTRIBUTED = (
     "likeness-disclosure-v1",
     "manifest-v1",
     "manifest-v2",
+    "multiview-reconstruction-v1",
     "provider-evidence-v1",
     "provider-plan-v1",
     "reconstruction-plan-v1",
+    "turntable-plan-v1",
+    "turntable-viewset-v1",
     "view-v1",
     "workflow-plan-v1",
 )

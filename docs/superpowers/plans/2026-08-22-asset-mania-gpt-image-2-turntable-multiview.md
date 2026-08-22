@@ -503,25 +503,25 @@ git commit -m "feat: add turntable multiview E2E runner"
 - Consumes: final command and artifact names from Task 5.
 - Produces: distributed schema parity, maintainer usage instructions, approval language, live-E2E opt-in boundary, and measured capability statements.
 
-- [ ] **Step 1: Write failing distribution and publication tests**
+- [x] **Step 1: Write failing distribution and publication tests**
 
 Require all three schemas in contracts and Skill references byte-for-byte, reject private turntable assets and generated views from tracked/public content, and require README capability wording to distinguish fake E2E from live E2E.
 
-- [ ] **Step 2: Run release-focused tests and verify RED**
+- [x] **Step 2: Run release-focused tests and verify RED**
 
 Run: `uv run pytest tests/test_schema_distribution.py tests/test_skill_distribution.py tests/test_check_release.py -q`
 
 Expected: failures naming the three undistributed schemas and missing documentation clauses.
 
-- [ ] **Step 3: Distribute schemas and update rules**
+- [x] **Step 3: Distribute schemas and update rules**
 
 Copy canonical schema bytes to Skill references. Document that GPT views are generated evidence, real-person viewsets need all three approvals, paid calls never retry, actual live E2E is opt-in, and identity remains unmeasured.
 
-- [ ] **Step 4: Update README and guides from measured results only**
+- [x] **Step 4: Update README and guides from measured results only**
 
 Before the live run, describe the feature as deterministic/fake-transport verified and live-unverified. After Task 7, replace only the rows supported by live evidence and record actual counts, runtime, cost, viewset audit status, and mesh state without a likeness claim.
 
-- [ ] **Step 5: Run distribution, Skill, and release checks**
+- [x] **Step 5: Run distribution, Skill, and release checks**
 
 Run:
 
@@ -534,7 +534,7 @@ uv run python scripts/check_release.py
 
 Expected: all commands exit `0`.
 
-- [ ] **Step 6: Commit Task 6**
+- [x] **Step 6: Commit Task 6**
 
 ```powershell
 git add README.md docs rules skills scripts/check_schema_distribution.py scripts/check_release.py THIRD_PARTY_NOTICES.md tests

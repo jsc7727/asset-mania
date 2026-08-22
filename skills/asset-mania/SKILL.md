@@ -46,6 +46,30 @@ and never to imply the workflow runs:
 - [engine clearance v1](references/engine-clearance-v1.schema.json)
 - [reconstruction plan v1](references/reconstruction-plan-v1.schema.json)
 - [likeness disclosure v1](references/likeness-disclosure-v1.schema.json)
+- [turntable plan v1](references/turntable-plan-v1.schema.json)
+- [turntable viewset v1](references/turntable-viewset-v1.schema.json)
+- [multi-view reconstruction v1](references/multiview-reconstruction-v1.schema.json)
+
+## Generated 360-degree turntables
+
+The maintainer E2E can plan one observed front view plus seven GPT Image 2 generated views at
+45-degree yaw increments, audit their structural suitability, reconstruct each view locally with
+TripoSR, and fuse eligible meshes by yaw-aware voxel consensus. This path is currently verified
+with a fake provider transport and a real local torchmcubes synthetic-fusion E2E. It has not yet
+made a live GPT Image 2 call.
+
+Rules for this path:
+
+- Every generated side or rear view is inferred content, never an observed photograph.
+- `identity_consistency` stays `unmeasured`; structural audit is not face recognition.
+- A real person requires plan-bound `face_rights`, `external_egress`, and `paid_compute` receipts
+  before the first provider call.
+- Seven paid calls execute sequentially with no automatic retry or fallback model.
+- Fewer than eight structurally valid images stops before TripoSR; fewer than six closed meshes
+  stops before fusion.
+- The neutral fused GLB carries an eight-view likeness disclosure and no exact-likeness claim.
+- Use `scripts/run_turntable_multiview_e2e.py`; this research path is not exposed by the public
+  `asset-mania` CLI.
 
 ## Local stage routing
 

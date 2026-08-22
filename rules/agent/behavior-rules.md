@@ -11,3 +11,8 @@
 - Face/head processing is separately gated: external processing requires rights and consent
   confirmation. Never place face material in examples, fixtures, telemetry, galleries, or bug
   reports by default.
+- A real-person turntable needs exact `face_rights`, `external_egress`, and `paid_compute`
+  receipts before the first of seven calls. Stop after the first failed call; never retry or
+  substitute a model, snapshot, angle, size, quality, or background.
+- Treat every generated yaw as inferred `generated` content. Structural audit never proves
+  identity, so keep `identity_consistency` equal to `unmeasured`.
