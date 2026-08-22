@@ -2,6 +2,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 from asset_mania_pipeline import FacePluginResult
 from PIL import Image
@@ -72,16 +73,37 @@ def _fake_plugin(*, request, **_kwargs) -> FacePluginResult:
     request.output_directory.mkdir()
     mesh = request.output_directory / "head.obj"
     projection = request.output_directory / "projection.npz"
-    mesh.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n", encoding="utf-8")
-    projection.write_bytes(b"synthetic")
+    mesh.write_text(
+        """
+v -1 -1 0
+v 1 -1 0
+v 0 1 0
+v 0 0 1
+f 1 3 2
+f 1 2 4
+f 2 3 4
+f 3 1 4
+""".lstrip(),
+        encoding="utf-8",
+    )
+    with Image.open(request.source_image) as opened:
+        width, height = opened.size
+    np.savez_compressed(
+        projection,
+        projected_vertices=np.array(
+            [[0, 0], [width - 1, 0], [width // 2, height - 1], [width // 2, height // 2]],
+            dtype=float,
+        ),
+        image_shape=np.array([height, width], dtype=np.int64),
+    )
     return FacePluginResult(
         schema="asset-mania.face-plugin-result.v0",
         plugin=request.plugin,
         status="succeeded",
         raw_mesh=mesh,
         projection_data=projection,
-        vertex_count=3,
-        triangle_count=1,
+        vertex_count=4,
+        triangle_count=4,
         elapsed_seconds=0.01,
         device="cuda",
         checkpoint_sha256=request.checkpoint_sha256,
@@ -195,7 +217,7 @@ def test_smoke_requires_exact_cuda_runtime_and_seals_result(tmp_path: Path) -> N
     assert record["status"] == "passed"
     assert record["device"] == "cuda"
     assert record["torch"] == "2.13.0+cu130"
-    assert record["vertex_count"] == 3
+    assert record["vertex_count"] == 4
     assert len(record["record_sha256"]) == 64
 
 
@@ -273,3 +295,97 @@ def test_private_run_preserves_source_and_redacts_path(tmp_path: Path) -> None:
     record = json.loads(record_text)
     assert record["source_unchanged"] is True
     assert record["identity_consistency"] == "unmeasured"
+
+
+def _private_inference_run(tmp_path: Path) -> tuple[Path, Path]:
+    run = _acquired_run(tmp_path)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+    main(
+        [
+            "smoke",
+            "--run",
+            str(run),
+            "--python",
+            str(python),
+            "--plugin-command",
+            str(plugin),
+        ],
+        runtime_probe=_cuda_probe,
+        plugin_runner=_fake_plugin,
+    )
+    source = tmp_path / "private-person.png"
+    Image.new("RGB", (32, 32), (210, 180, 160)).save(source)
+    main(
+        [
+            "run",
+            "--run",
+            str(run),
+            "--source",
+            str(source),
+            "--python",
+            str(python),
+            "--plugin-command",
+            str(plugin),
+        ],
+        runtime_probe=_cuda_probe,
+        plugin_runner=_fake_plugin,
+    )
+    return run, source
+
+
+def test_convert_seals_plain_and_colored_glbs(tmp_path: Path) -> None:
+    run, _source = _private_inference_run(tmp_path)
+
+    assert main(["convert", "--run", str(run)]) == 0
+
+    record = json.loads((run / "conversion/record.json").read_text(encoding="utf-8"))
+    assert record["component_count"] == 1
+    assert record["non_manifold_edge_count"] == 0
+    assert record["identity_consistency"] == "unmeasured"
+    assert len(record["plain_glb_sha256"]) == 64
+    assert len(record["colored_glb_sha256"]) == 64
+
+
+def test_verify_writes_three_row_comparison_and_unreviewed_report(tmp_path: Path) -> None:
+    run, source = _private_inference_run(tmp_path)
+    main(["convert", "--run", str(run)])
+    blender = tmp_path / "blender.exe"
+    blender.write_bytes(b"exe")
+    anchor = tmp_path / "anchor.glb"
+    hybrid = tmp_path / "hybrid.glb"
+    anchor.write_bytes(b"prior-anchor")
+    hybrid.write_bytes(b"prior-hybrid")
+    calls = []
+
+    def fake_preview(mesh: Path, output: Path, executable: Path) -> None:
+        calls.append((mesh, executable))
+        Image.new("RGB", (80, 40), (20 * len(calls), 30, 40)).save(output)
+
+    assert (
+        main(
+            [
+                "verify",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--blender",
+                str(blender),
+                "--triposr-anchor",
+                str(anchor),
+                "--triposr-hybrid",
+                str(hybrid),
+            ],
+            preview_runner=fake_preview,
+        )
+        == 0
+    )
+    assert len(calls) == 3
+    report = json.loads((run / "verification/report.json").read_text(encoding="utf-8"))
+    assert report["visual_quality"] == "unreviewed"
+    assert report["identity_consistency"] == "unmeasured"
+    assert report["source_unchanged"] is True
+    assert (run / "verification/comparison.png").is_file()

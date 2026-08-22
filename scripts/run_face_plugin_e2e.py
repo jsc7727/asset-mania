@@ -8,17 +8,19 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 import urllib.request
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from asset_mania_contracts import canonical_digest, canonical_json
-from asset_mania_engine_dad3dheads import run_face_plugin
+from asset_mania_engine_dad3dheads import convert_dad_mesh, run_face_plugin
 from asset_mania_pipeline import (
     build_face_plugin_request,
     fingerprint_source,
     sha256_file,
+    validate_glb,
     verify_source_unchanged,
     write_face_plugin_request,
 )
@@ -416,6 +418,156 @@ def _run_private_inference(
     return 0
 
 
+def _run_convert(arguments: argparse.Namespace) -> int:
+    run = arguments.run.resolve(strict=True)
+    inference = _load_object(run / "inference/record.json", "inference record")
+    _verify_seal(inference, "record_sha256", "inference record")
+    raw_mesh = run / "inference/plugin-output/head.obj"
+    projection = run / "inference/plugin-output/projection.npz"
+    source = run / "inference/source.png"
+    if sha256_file(raw_mesh) != inference["raw_mesh_sha256"]:
+        raise ValueError("raw DAD mesh differs from the inference record")
+    if sha256_file(projection) != inference["projection_sha256"]:
+        raise ValueError("DAD projection differs from the inference record")
+    if sha256_file(source) != inference["normalized_sha256"]:
+        raise ValueError("normalized source differs from the inference record")
+    plain = run / "conversion/head.glb"
+    colored = run / "conversion/head-colored.glb"
+    record_path = run / "conversion/record.json"
+    if record_path.exists():
+        raise FileExistsError("refusing to overwrite DAD conversion")
+    measured = convert_dad_mesh(
+        obj_path=raw_mesh,
+        projection_path=projection,
+        source_image=source,
+        plain_glb=plain,
+        colored_glb=colored,
+    )
+    preimage = {
+        "schema_id": "asset-mania/private-face-plugin-conversion",
+        "schema_version": "0.1",
+        "status": "passed",
+        "plugin": "dad3dheads-local",
+        "plugin_revision": DAD_REVISION,
+        "plain_glb_sha256": sha256_file(plain),
+        "colored_glb_sha256": sha256_file(colored),
+        "vertex_count": measured.vertex_count,
+        "triangle_count": measured.triangle_count,
+        "component_count": measured.component_count,
+        "boundary_edge_count": measured.boundary_edge_count,
+        "boundary_loop_count": measured.boundary_loop_count,
+        "non_manifold_edge_count": measured.non_manifold_edge_count,
+        "winding_consistent": measured.winding_consistent,
+        "signed_volume": measured.signed_volume,
+        "observed_color_coverage": measured.observed_color_coverage,
+        "identity_consistency": "unmeasured",
+    }
+    record = {**preimage, "record_sha256": canonical_digest(preimage)}
+    record_path.write_text(canonical_json(record), encoding="utf-8")
+    return 0
+
+
+def _default_preview(mesh: Path, output: Path, blender: Path) -> None:
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("blender_preview.py")),
+        "render",
+        "--blender",
+        str(blender),
+        "--mesh",
+        str(mesh),
+        "--out",
+        str(output),
+        "--samples",
+        "16",
+        "--resolution",
+        "500",
+        "--views",
+        "4",
+        "--vertex-colors",
+    ]
+    completed = subprocess.run(command, check=False, capture_output=True)
+    if completed.returncode != 0:
+        raise ValueError(f"Blender preview failed with exit {completed.returncode}")
+
+
+def _write_comparison(rows: Sequence[tuple[str, Path]], output: Path) -> None:
+    if output.exists():
+        raise FileExistsError(f"refusing to overwrite {output}")
+    opened = []
+    try:
+        for label, path in rows:
+            image = Image.open(path).convert("RGB")
+            image.load()
+            opened.append((label, image))
+        width = max(image.width for _label, image in opened)
+        label_height = 28
+        height = sum(image.height + label_height for _label, image in opened)
+        comparison = Image.new("RGB", (width, height), (28, 28, 28))
+        draw = ImageDraw.Draw(comparison)
+        y = 0
+        for label, image in opened:
+            draw.text((8, y + 6), label, fill=(240, 240, 240))
+            y += label_height
+            comparison.paste(image, (0, y))
+            y += image.height
+        comparison.save(output, format="PNG", compress_level=9)
+    finally:
+        for _label, image in opened:
+            image.close()
+
+
+def _run_verify(
+    arguments: argparse.Namespace,
+    *,
+    preview_runner: Callable[[Path, Path, Path], None],
+) -> int:
+    run = arguments.run.resolve(strict=True)
+    inference = _load_object(run / "inference/record.json", "inference record")
+    conversion = _load_object(run / "conversion/record.json", "conversion record")
+    _verify_seal(inference, "record_sha256", "inference record")
+    _verify_seal(conversion, "record_sha256", "conversion record")
+    source = arguments.source.resolve(strict=True)
+    before = fingerprint_source(source)
+    if before.sha256 != inference["source_sha256"]:
+        raise ValueError("private source differs from the inference record")
+    blender = arguments.blender.resolve(strict=True)
+    dad = run / "conversion/head-colored.glb"
+    anchor = arguments.triposr_anchor.resolve(strict=True)
+    hybrid = arguments.triposr_hybrid.resolve(strict=True)
+    if sha256_file(dad) != conversion["colored_glb_sha256"]:
+        raise ValueError("colored DAD GLB differs from the conversion record")
+    validate_glb(dad)
+    previews = [
+        ("DAD-3DHeads", dad, run / "verification/dad.png"),
+        ("TripoSR front anchor", anchor, run / "verification/triposr-anchor.png"),
+        ("TripoSR face hybrid", hybrid, run / "verification/triposr-hybrid.png"),
+    ]
+    for _label, mesh, output in previews:
+        if output.exists():
+            raise FileExistsError(f"refusing to overwrite {output}")
+        preview_runner(mesh, output, blender)
+    comparison = run / "verification/comparison.png"
+    _write_comparison([(label, output) for label, _mesh, output in previews], comparison)
+    verify_source_unchanged(source, before)
+    report = {
+        "schema_id": "asset-mania/private-face-plugin-verification",
+        "schema_version": "0.1",
+        "status": "passed",
+        "plugin": "dad3dheads-local",
+        "source_unchanged": True,
+        "dad_glb_sha256": conversion["colored_glb_sha256"],
+        "comparison_sha256": sha256_file(comparison),
+        "visual_quality": "unreviewed",
+        "identity_consistency": "unmeasured",
+    }
+    report_path = run / "verification/report.json"
+    if report_path.exists():
+        raise FileExistsError("refusing to overwrite face plugin verification")
+    report_path.write_text(canonical_json(report), encoding="utf-8")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -432,6 +584,14 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--plugin-command", type=Path, required=True)
         if name == "run":
             command.add_argument("--source", type=Path, required=True)
+    convert = commands.add_parser("convert")
+    convert.add_argument("--run", type=Path, required=True)
+    verify = commands.add_parser("verify")
+    verify.add_argument("--run", type=Path, required=True)
+    verify.add_argument("--source", type=Path, required=True)
+    verify.add_argument("--blender", type=Path, required=True)
+    verify.add_argument("--triposr-anchor", type=Path, required=True)
+    verify.add_argument("--triposr-hybrid", type=Path, required=True)
     return parser
 
 
@@ -446,6 +606,7 @@ def main(
     expected_checkpoint_bytes: int = CHECKPOINT_BYTES,
     runtime_probe: Callable[[Path], dict] | None = None,
     plugin_runner: Callable | None = None,
+    preview_runner: Callable[[Path, Path, Path], None] | None = None,
 ) -> int:
     arguments = build_parser().parse_args(list(argv) if argv is not None else None)
     timestamp = _parse_time(now)
@@ -471,11 +632,15 @@ def main(
             runtime_probe=selected_probe,
             plugin_runner=selected_runner,
         )
-    return _run_private_inference(
-        arguments,
-        runtime_probe=selected_probe,
-        plugin_runner=selected_runner,
-    )
+    if arguments.command == "run":
+        return _run_private_inference(
+            arguments,
+            runtime_probe=selected_probe,
+            plugin_runner=selected_runner,
+        )
+    if arguments.command == "convert":
+        return _run_convert(arguments)
+    return _run_verify(arguments, preview_runner=preview_runner or _default_preview)
 
 
 if __name__ == "__main__":
