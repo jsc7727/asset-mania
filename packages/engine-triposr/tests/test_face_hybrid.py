@@ -1,6 +1,7 @@
 """Face-anchor visual-hull geometry from private canonical turntable views."""
 
 import hashlib
+import importlib.util
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +12,10 @@ from asset_mania_engine_triposr.face_hybrid import (
     FaceHybridSettings,
     _align_anchor,
     _blend_face_anchor,
+    _project_vertex_colors,
     build_visual_hull,
     canonicalize_views,
+    fuse_face_anchor,
     project_points,
 )
 from PIL import Image, ImageDraw
@@ -318,3 +321,97 @@ def test_face_anchor_blend_rejects_excessive_front_clipping() -> None:
 
     with pytest.raises(ValueError, match="front anchor retention gate failed"):
         _blend_face_anchor(anchor, hull, FaceHybridSettings(48, 7, 0.08))
+
+
+def _colored_views(directory: Path, *, hide_yaw0: bool = False) -> list[CanonicalView]:
+    directory.mkdir(parents=True, exist_ok=True)
+    cardinal = {
+        0: (240, 10, 10),
+        90: (10, 240, 10),
+        180: (10, 10, 240),
+        270: (220, 220, 10),
+    }
+    result = []
+    for yaw in TURNTABLE_YAWS:
+        image_path = directory / f"color-{yaw:03d}.png"
+        mask_path = directory / f"color-{yaw:03d}-mask.png"
+        Image.new("RGB", (64, 64), cardinal.get(yaw, (32, 32, 32))).save(image_path)
+        mask_value = 0 if hide_yaw0 and yaw == 0 else 255
+        Image.new("L", (64, 64), mask_value).save(mask_path)
+        result.append(CanonicalView(yaw, image_path, mask_path))
+    return result
+
+
+def test_vertex_colors_follow_the_best_facing_cameras(tmp_path: Path) -> None:
+    views = _colored_views(tmp_path / "views")
+    vertices = np.array([[0.30, 0.0, 0.0], [0.0, 0.30, 0.0], [-0.30, 0.0, 0.0]])
+    normals = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]])
+
+    colors, coverage = _project_vertex_colors(vertices, normals, views)
+
+    assert colors[0, 0] > colors[0, 1] * 3
+    assert colors[1, 1] > colors[1, 0] * 3
+    assert colors[2, 2] > colors[2, 0] * 3
+    assert coverage == 1.0
+    assert (colors[:, 3] == 255).all()
+
+
+def test_observed_front_color_is_not_used_when_its_mask_is_invalid(tmp_path: Path) -> None:
+    views = _colored_views(tmp_path / "views", hide_yaw0=True)
+
+    colors, coverage = _project_vertex_colors(
+        np.array([[0.30, 0.0, 0.0]]),
+        np.array([[1.0, 0.0, 0.0]]),
+        views,
+    )
+
+    assert colors[0, 0] < 100
+    assert coverage == 1.0
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torchmcubes") is None,
+    reason="optional torchmcubes runtime is not installed in the workspace",
+)
+def test_face_hybrid_exports_one_colored_watertight_glb(tmp_path: Path) -> None:
+    import trimesh
+
+    views = _analytic_views(tmp_path / "views")
+    anchor = tmp_path / "anchor.glb"
+    _anchor_mesh().export(anchor, file_type="glb")
+    output = tmp_path / "hybrid.glb"
+
+    result = fuse_face_anchor(
+        anchor_mesh=anchor,
+        views=views,
+        output_path=output,
+        settings=FaceHybridSettings(48, 7, 0.08),
+    )
+
+    mesh = trimesh.load(str(output), process=False, force="mesh")
+    assert result.manifold == "closed"
+    assert result.component_count == 1
+    assert result.signed_volume > 0
+    assert mesh.is_watertight and mesh.is_winding_consistent
+    assert len(mesh.visual.vertex_colors) == len(mesh.vertices)
+    assert result.color_coverage > 0.80
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torchmcubes") is None,
+    reason="optional torchmcubes runtime is not installed in the workspace",
+)
+def test_face_hybrid_refuses_to_replace_an_existing_glb(tmp_path: Path) -> None:
+    views = _analytic_views(tmp_path / "views")
+    anchor = tmp_path / "anchor.glb"
+    _anchor_mesh().export(anchor, file_type="glb")
+    output = tmp_path / "hybrid.glb"
+    output.write_bytes(b"existing")
+
+    with pytest.raises(ValueError, match="overwrite"):
+        fuse_face_anchor(
+            anchor_mesh=anchor,
+            views=views,
+            output_path=output,
+            settings=FaceHybridSettings(48, 7, 0.08),
+        )

@@ -32,6 +32,19 @@ class FaceHybridSettings:
     front_seam: float = 0.08
 
 
+@dataclass(frozen=True, slots=True)
+class FaceHybridResult:
+    triangle_count: int
+    vertex_count: int
+    manifold: str
+    signed_volume: float
+    component_count: int
+    minimum_reprojection_iou: float
+    mean_reprojection_iou: float
+    front_anchor_retention: float
+    color_coverage: float
+
+
 def _require_yaw(yaw: int) -> None:
     if not isinstance(yaw, int) or isinstance(yaw, bool) or yaw not in TURNTABLE_YAWS:
         raise ValueError(f"yaw must be one of {list(TURNTABLE_YAWS)}")
@@ -456,10 +469,163 @@ def _blend_face_anchor(
     return hybrid, retention
 
 
+def _project_vertex_colors(
+    vertices: np.ndarray,
+    normals: np.ndarray,
+    views: Sequence[CanonicalView],
+) -> tuple[np.ndarray, float]:
+    points = np.asarray(vertices, dtype=float)
+    directions = np.asarray(normals, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 3 or directions.shape != points.shape:
+        raise ValueError("vertices and normals must be matching Nx3 arrays")
+    records = list(views)
+    if [record.yaw for record in records] != list(TURNTABLE_YAWS):
+        raise ValueError(f"views must use the ordered yaws {list(TURNTABLE_YAWS)}")
+
+    images: list[np.ndarray] = []
+    masks: list[np.ndarray] = []
+    cameras = []
+    for record in records:
+        try:
+            with Image.open(record.image_path) as opened:
+                opened.load()
+                image = np.asarray(opened.convert("RGB"))
+            with Image.open(record.mask_path) as opened:
+                opened.load()
+                mask = np.asarray(opened.convert("L")) >= 128
+        except OSError as error:
+            raise ValueError(f"yaw {record.yaw} color source is unreadable") from error
+        if image.shape[:2] != mask.shape or image.shape[0] != image.shape[1]:
+            raise ValueError(f"yaw {record.yaw} color image and mask must share one square shape")
+        images.append(image)
+        masks.append(mask)
+        radians = np.deg2rad(record.yaw)
+        cameras.append((np.cos(radians), np.sin(radians), 0.0))
+
+    camera_array = np.asarray(cameras, dtype=float)
+    rgba = np.empty((len(points), 4), dtype=np.uint8)
+    rgba[:, :3] = 128
+    rgba[:, 3] = 255
+    covered = 0
+    for index, (point, normal) in enumerate(zip(points, directions, strict=True)):
+        cosines = camera_array @ normal
+        selected = []
+        for view_index in np.argsort(-cosines):
+            cosine = float(cosines[view_index])
+            if cosine <= 0:
+                break
+            resolution = images[view_index].shape[0]
+            projected = project_points(
+                point[None, :],
+                yaw=records[view_index].yaw,
+                resolution=resolution,
+            )[0]
+            pixel_x, pixel_y = np.rint(projected).astype(int)
+            if not (0 <= pixel_x < resolution and 0 <= pixel_y < resolution):
+                continue
+            if not masks[view_index][pixel_y, pixel_x]:
+                continue
+            weight = cosine * (1.5 if records[view_index].yaw == 0 else 1.0)
+            selected.append((view_index, weight, pixel_x, pixel_y))
+            if len(selected) == 2:
+                break
+        if not selected:
+            continue
+        weights = np.asarray([item[1] for item in selected], dtype=float)
+        samples = np.asarray(
+            [images[item[0]][item[3], item[2]] for item in selected],
+            dtype=float,
+        )
+        rgba[index, :3] = np.clip(
+            np.rint(np.average(samples, axis=0, weights=weights)),
+            0,
+            255,
+        ).astype(np.uint8)
+        covered += 1
+    coverage = float(covered / len(points)) if len(points) else 0.0
+    return rgba, coverage
+
+
+def fuse_face_anchor(
+    *,
+    anchor_mesh: Path,
+    views: Sequence[CanonicalView],
+    output_path: Path,
+    settings: FaceHybridSettings,
+) -> FaceHybridResult:
+    """Fuse one observed-front TripoSR anchor with an eight-silhouette visual hull."""
+    if output_path.exists():
+        raise ValueError(f"refusing to overwrite {output_path}")
+    _validate_settings(settings)
+    import trimesh
+
+    try:
+        anchor = trimesh.load(str(anchor_mesh), process=False, force="mesh")
+    except (OSError, ValueError) as error:
+        raise ValueError("face anchor mesh is unreadable") from error
+    records = list(views)
+    hull, hull_metrics = build_visual_hull(records, settings)
+    masks = _load_canonical_masks(records)
+    aligned, _alignment = _align_anchor(
+        anchor,
+        masks[0],
+        resolution=settings.grid_resolution,
+    )
+    anchor_grid = _voxelize_aligned_anchor(aligned, settings.grid_resolution)
+    hybrid, retention = _blend_face_anchor(anchor_grid, hull, settings)
+
+    from .multiview import _extract_surface
+
+    vertices, faces = _extract_surface(hybrid)
+    pitch = 2 * COMMON_RADIUS / (settings.grid_resolution - 1)
+    vertices = vertices * pitch - COMMON_RADIUS
+    from .ports.triposr import _normalise
+
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    mesh, manifold = _normalise(mesh)
+    if manifold != "closed" or not bool(mesh.is_winding_consistent) or float(mesh.volume) <= 0:
+        raise ValueError("face hybrid must be closed, winding-consistent, and positive-volume")
+    colors, color_coverage = _project_vertex_colors(
+        np.asarray(mesh.vertices),
+        np.asarray(mesh.vertex_normals),
+        records,
+    )
+    mesh.visual.vertex_colors = colors
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    mesh.export(str(output_path), file_type="glb")
+    if not output_path.is_file() or output_path.stat().st_size == 0:
+        raise ValueError("face hybrid GLB was not written")
+
+    measured = trimesh.load(str(output_path), process=False, force="mesh")
+    components = measured.split(only_watertight=False)
+    component_count = len(components)
+    signed_volume = float(measured.volume)
+    if (
+        component_count != 1
+        or not bool(measured.is_watertight)
+        or not bool(measured.is_winding_consistent)
+        or signed_volume <= 0
+    ):
+        raise ValueError("written face hybrid failed geometry verification")
+    return FaceHybridResult(
+        triangle_count=len(measured.faces),
+        vertex_count=len(measured.vertices),
+        manifold="closed",
+        signed_volume=signed_volume,
+        component_count=component_count,
+        minimum_reprojection_iou=hull_metrics["minimum_reprojection_iou"],
+        mean_reprojection_iou=hull_metrics["mean_reprojection_iou"],
+        front_anchor_retention=retention,
+        color_coverage=color_coverage,
+    )
+
+
 __all__ = [
     "CanonicalView",
+    "FaceHybridResult",
     "FaceHybridSettings",
     "build_visual_hull",
     "canonicalize_views",
+    "fuse_face_anchor",
     "project_points",
 ]
