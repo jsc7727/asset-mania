@@ -7,6 +7,9 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "asset-mania-pipeline",
+  "numpy>=1.26",
+  "Pillow>=11.3,<13",
+  "trimesh==4.0.5",
 ]
 
 [project.scripts]
