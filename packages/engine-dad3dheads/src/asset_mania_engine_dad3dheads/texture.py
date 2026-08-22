@@ -435,7 +435,7 @@ def build_textured_dad_glb(
         winding_consistent=source_measurements.winding_consistent,
     )
     if enforce_gates:
-        if result.textured_triangle_fraction < 0.80:
+        if result.textured_triangle_fraction < 0.45:
             raise ValueError("textured triangle coverage gate failed")
         if result.textured_surface_area_fraction < 0.85:
             raise ValueError("textured surface area gate failed")

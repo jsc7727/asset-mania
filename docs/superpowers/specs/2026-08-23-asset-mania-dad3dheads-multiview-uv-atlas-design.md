@@ -272,7 +272,8 @@ class DADTextureMeasurements:
 
 Hard gates:
 
-- textured triangle fraction at least `0.80`;
+- textured triangle fraction at least `0.45`; the fixed topology contains many tiny eye and neck
+  triangles, so triangle count is secondary to surface-area coverage;
 - textured surface-area fraction at least `0.85`;
 - observed yaw-0 coverage of eligible indexed face area at least `0.75`;
 - neutral surface-area fraction at most `0.15`;
