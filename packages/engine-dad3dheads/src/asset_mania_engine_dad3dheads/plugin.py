@@ -170,6 +170,30 @@ def _write_obj(path: Path, vertices, faces) -> None:
             handle.write(f"f {face[0]} {face[1]} {face[2]}\n")
 
 
+def _write_projection(path: Path, projected, camera_vertices, image_shape) -> None:
+    import numpy as np
+
+    projected_array = np.asarray(projected, dtype=np.float64)
+    camera_array = np.asarray(camera_vertices, dtype=np.float64)
+    shape_array = np.asarray(image_shape, dtype=np.int64)
+    if projected_array.ndim != 2 or projected_array.shape[1] != 2:
+        raise ValueError("DAD projected vertices are invalid")
+    if camera_array.shape != (len(projected_array), 3):
+        raise ValueError("DAD camera vertices are invalid")
+    if shape_array.shape != (2,) or np.any(shape_array <= 0):
+        raise ValueError("DAD projection image shape is invalid")
+    if not np.isfinite(projected_array).all() or not np.isfinite(camera_array).all():
+        raise ValueError("DAD projection contains non-finite values")
+    if path.exists():
+        raise FileExistsError(f"refusing to overwrite {path}")
+    np.savez_compressed(
+        path,
+        projected_vertices=projected_array,
+        camera_vertices=camera_array,
+        image_shape=shape_array,
+    )
+
+
 def execute_dad_request(request_path: Path, result_path: Path, settings: DADPluginSettings) -> int:
     request = _load_request(request_path)
     if request.plugin != DAD_PLUGIN or request.plugin_revision != settings.revision:
@@ -231,11 +255,7 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
     mesh_path = request.output_directory / "head.obj"
     projection_path = request.output_directory / "projection.npz"
     _write_obj(mesh_path, vertices, faces + 1)
-    np.savez_compressed(
-        projection_path,
-        projected_vertices=projected,
-        image_shape=np.asarray(image_rgb.shape[:2], dtype=np.int64),
-    )
+    _write_projection(projection_path, projected, vertices, image_rgb.shape[:2])
     result = {
         "schema": "asset-mania.face-plugin-result.v0",
         "plugin": DAD_PLUGIN,

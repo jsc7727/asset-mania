@@ -8,6 +8,7 @@ import pytest
 from asset_mania_engine_dad3dheads.plugin import (
     DADPluginSettings,
     _install_python312_compatibility,
+    _write_projection,
     run_face_plugin,
     validate_dad_runtime,
 )
@@ -36,6 +37,19 @@ def test_python312_compatibility_restores_getargspec(monkeypatch) -> None:
     assert np.object is object
     assert np.unicode is str
     assert np.str is str
+
+
+def test_projection_payload_preserves_camera_vertices(tmp_path: Path) -> None:
+    path = tmp_path / "projection.npz"
+    projected = np.array([[1.0, 2.0], [3.0, 4.0]])
+    camera = np.array([[0.1, 0.2, -0.3], [0.4, 0.5, 0.6]])
+
+    _write_projection(path, projected, camera, (64, 32))
+
+    with np.load(path, allow_pickle=False) as archive:
+        assert np.array_equal(archive["projected_vertices"], projected)
+        assert np.array_equal(archive["camera_vertices"], camera)
+        assert archive["image_shape"].tolist() == [64, 32]
 
 
 def _request(tmp_path: Path):

@@ -95,6 +95,15 @@ f 3 1 4
             [[0, 0], [width - 1, 0], [width // 2, height - 1], [width // 2, height // 2]],
             dtype=float,
         ),
+        camera_vertices=np.array(
+            [
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, -1.0],
+            ],
+            dtype=float,
+        ),
         image_shape=np.array([height, width], dtype=np.int64),
     )
     return FacePluginResult(
