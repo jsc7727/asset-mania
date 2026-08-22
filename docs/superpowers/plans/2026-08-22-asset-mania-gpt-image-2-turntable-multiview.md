@@ -144,7 +144,7 @@ git commit -m "feat: add turntable multiview contracts"
   - `write_contact_sheet(candidates: Sequence[TurntableCandidate], destination: Path) -> Path`
   - `publish_turntable_viewset(*, plan: Mapping[str, Any], candidates: Sequence[TurntableCandidate], audit: Mapping[str, Any], actual_cost: str | None) -> dict[str, Any]`
 
-- [ ] **Step 1: Write failing source-preparation tests**
+- [x] **Step 1: Write failing source-preparation tests**
 
 ```python
 def test_source_preparation_writes_an_rgba_cutout_without_changing_source(tmp_path):
@@ -156,17 +156,17 @@ def test_source_preparation_writes_an_rgba_cutout_without_changing_source(tmp_pa
     assert sha256_file(source) == before
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `uv run pytest packages/pipeline/tests/test_turntable.py::test_source_preparation_writes_an_rgba_cutout_without_changing_source -q`
 
 Expected: import failure because `asset_mania_pipeline.turntable` is absent.
 
-- [ ] **Step 3: Implement bounded RGBA cutout preparation**
+- [x] **Step 3: Implement bounded RGBA cutout preparation**
 
 Reuse the existing bounded decoders, require equal image/mask dimensions, write create-only normalized PNGs below staging, zero hidden RGB, and return only paths plus digests to the caller.
 
-- [ ] **Step 4: Write audit boundary tests**
+- [x] **Step 4: Write audit boundary tests**
 
 ```python
 @pytest.mark.parametrize(
@@ -186,27 +186,27 @@ def test_structural_audit_fails_closed(turntable_candidates, mutation, diagnosti
     assert result["diagnostics"] == [diagnostic]
 ```
 
-- [ ] **Step 5: Run audit tests and verify RED**
+- [x] **Step 5: Run audit tests and verify RED**
 
 Run: `uv run pytest packages/pipeline/tests/test_turntable.py -q`
 
 Expected: failures because audit and mask functions are absent.
 
-- [ ] **Step 6: Implement white-background masks and the fixed audit**
+- [x] **Step 6: Implement white-background masks and the fixed audit**
 
 Use Pillow plus NumPy. Background is the edge-connected near-white region; keep the largest foreground component. Compute coverage, normalized centroid, border-contact ratio, adjacent area ratios, byte digest, and decoded-pixel digest. Apply the exact thresholds from the spec and always emit `identity_consistency: unmeasured`.
 
-- [ ] **Step 7: Implement contact sheet and viewset publication**
+- [x] **Step 7: Implement contact sheet and viewset publication**
 
 The contact sheet is four columns by two rows, labeled with portable yaw text only, and written inside the private run. Publication calls `build_turntable_viewset`; it never embeds source paths or bytes.
 
-- [ ] **Step 8: Run pipeline tests and verify GREEN**
+- [x] **Step 8: Run pipeline tests and verify GREEN**
 
 Run: `uv run pytest packages/pipeline/tests/test_turntable.py packages/pipeline/tests/test_reconstruction.py packages/pipeline/tests/test_views.py -q`
 
 Expected: all selected tests pass.
 
-- [ ] **Step 9: Commit Task 2**
+- [x] **Step 9: Commit Task 2**
 
 ```powershell
 git add packages/pipeline
