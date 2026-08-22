@@ -62,7 +62,7 @@ observed front photograph (yaw 0)
                                                |
                                   TripoSR x 8, locally and offline
                                                |
-                                  yaw normalization about +Z
+                                  yaw normalization about TripoSR-native +Z
                                                |
                                   voxel occupancy majority vote
                                                |
@@ -186,7 +186,7 @@ Fusion is implemented inside the optional TripoSR engine package, not the common
 2. Merge coincident vertices, remove degenerate faces, repair only holes within the existing
    bounded repair policy, and require consistent winding.
 3. Centre each mesh on its bounding-box centre and scale its longest extent to `1.0`.
-4. Rotate generated mesh `i` by `-target_yaw` degrees about `+Z`; yaw `0` is the reference.
+4. Rotate generated mesh `i` by `-target_yaw` degrees about TripoSR-native `+Z`; yaw `0` is the reference. TripoSR declares `x back, y right, z up`, so azimuth rotates from +X toward +Y about +Z.
 5. Translate each mesh to the median centroid. Do not run unconstrained rotational ICP.
 6. Voxelize each closed mesh into the common cube `[-0.6,0.6]^3` at `192^3` final resolution
    (`48^3` deterministic test profile) and fill its interior.

@@ -98,6 +98,29 @@ def test_white_background_mask_keeps_only_the_edge_disconnected_subject(tmp_path
         assert mask.getpixel((512, 512)) == 255
 
 
+def test_white_background_mask_accepts_neutral_light_gray_studio_backdrops(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "oauth-generated.png"
+    image = Image.new("RGB", (1024, 1024), (212, 214, 218))
+    draw = ImageDraw.Draw(image)
+    for inset in range(80):
+        shade = 212 + inset // 16
+        draw.rectangle(
+            (inset, inset, 1023 - inset, 1023 - inset),
+            outline=(shade, shade + 2, min(255, shade + 6)),
+        )
+    draw.ellipse((290, 190, 734, 834), fill=(45, 35, 30))
+    image.save(source)
+
+    mask_path = derive_white_background_mask(source, tmp_path / "mask.png")
+
+    with Image.open(mask_path) as mask:
+        assert mask.getpixel((0, 0)) == 0
+        assert mask.getpixel((100, 100)) == 0
+        assert mask.getpixel((512, 512)) == 255
+
+
 def test_structural_audit_accepts_a_complete_centered_turntable(tmp_path: Path) -> None:
     result = audit_turntable(_turntable(tmp_path))
 

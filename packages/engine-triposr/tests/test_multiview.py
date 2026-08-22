@@ -75,6 +75,23 @@ def test_six_inputs_default_to_three_votes() -> None:
     assert fused[1, 1, 1]
 
 
+def test_consensus_cleanup_keeps_one_connected_subject_volume() -> None:
+    from asset_mania_engine_triposr.multiview import _clean_consensus
+
+    occupancy = np.zeros((16, 16, 16), dtype=bool)
+    occupancy[4:12, 4:12, 4:12] = True
+    occupancy[8, 8, 8] = False
+    occupancy[1, 1, 1] = True
+    occupancy[14, 14, 14] = True
+
+    cleaned = _clean_consensus(occupancy)
+
+    assert cleaned[8, 8, 8]
+    assert not cleaned[1, 1, 1]
+    assert not cleaned[14, 14, 14]
+    assert cleaned[5:11, 5:11, 5:11].all()
+
+
 def test_fewer_than_six_or_mismatched_grids_are_refused() -> None:
     grid = np.zeros((4, 4, 4), dtype=bool)
     with pytest.raises(ValueError, match="six"):

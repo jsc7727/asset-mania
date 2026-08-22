@@ -50,6 +50,14 @@ def clear_scene() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+def select_import_target(objects) -> bpy.types.Object:
+    """Return the first mesh, ignoring GLB hierarchy objects such as root empties."""
+    for candidate in objects:
+        if candidate.type == "MESH":
+            return candidate
+    raise ValueError("the imported scene contains no mesh object")
+
+
 def import_mesh(path: str) -> bpy.types.Object:
     lowered = path.lower()
     if lowered.endswith(".obj"):
@@ -72,11 +80,13 @@ def import_mesh(path: str) -> bpy.types.Object:
         bpy.ops.object.select_all(action="SELECT")
         bpy.context.view_layer.objects.active = meshes[0]
         bpy.ops.object.join()
-    return bpy.context.scene.objects[0] if len(meshes) == 1 else meshes[0]
+    return select_import_target(bpy.context.scene.objects)
 
 
 def build_material(target: bpy.types.Object, use_vertex_colors: bool) -> None:
     """A plain dielectric. Colour comes from the mesh when it has any, grey when it does not."""
+    for polygon in target.data.polygons:
+        polygon.use_smooth = True
     material = bpy.data.materials.new("preview")
     material.use_nodes = True
     nodes, links = material.node_tree.nodes, material.node_tree.links

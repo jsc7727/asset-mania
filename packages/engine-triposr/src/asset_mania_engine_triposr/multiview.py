@@ -34,7 +34,7 @@ class FusionResult:
 
 
 def normalize_and_rotate(vertices: np.ndarray, yaw: int) -> np.ndarray:
-    """Centre, unit-scale, and remove one declared yaw rotation about +Z."""
+    """Centre, unit-scale, and remove one declared yaw rotation about TripoSR's +Z."""
     array = np.asarray(vertices, dtype=float)
     if array.ndim != 2 or array.shape[1] != 3 or len(array) < 3:
         raise ValueError("vertices must be an Nx3 array with at least three rows")
@@ -99,7 +99,32 @@ def _voxelize(mesh, *, yaw: int, resolution: int) -> np.ndarray:
     valid = np.logical_and(indices >= 0, indices < resolution).all(axis=1)
     indices = indices[valid]
     grid[indices[:, 0], indices[:, 1], indices[:, 2]] = True
-    return grid
+    # Rotating a filled voxel point cloud moves its lattice off the target lattice. Nearest
+    # cell resampling alone leaves alternating one-cell gaps, so each source volume gets one
+    # conservative 6-neighbour splat before cross-view voting.
+    from scipy.ndimage import binary_dilation, generate_binary_structure
+
+    return binary_dilation(grid, structure=generate_binary_structure(3, 1), iterations=1)
+
+
+def _clean_consensus(occupancy: np.ndarray) -> np.ndarray:
+    """Close one-cell resampling gaps and retain the single connected subject volume."""
+    from scipy.ndimage import (
+        binary_closing,
+        binary_fill_holes,
+        generate_binary_structure,
+        label,
+    )
+
+    connectivity = generate_binary_structure(3, 3)
+    closed = binary_closing(occupancy, structure=connectivity, iterations=1)
+    filled = binary_fill_holes(closed)
+    labels, count = label(filled, structure=connectivity)
+    if count <= 1:
+        return np.asarray(filled, dtype=bool)
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    return labels == int(np.argmax(sizes))
 
 
 def _extract_surface(occupancy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -146,7 +171,7 @@ def fuse_turntable_meshes(
         _voxelize(mesh, yaw=record.yaw, resolution=settings.grid_resolution)
         for record, mesh in eligible
     ]
-    consensus = vote_occupancy(grids, minimum_votes)
+    consensus = _clean_consensus(vote_occupancy(grids, minimum_votes))
     if not consensus.any():
         raise ValueError("voxel consensus is empty")
     vertices, faces = _extract_surface(consensus)

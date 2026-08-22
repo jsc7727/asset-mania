@@ -346,6 +346,7 @@ def test_known_yaw_is_removed_before_consensus():
     restored = normalize_and_rotate(rotated, yaw=90)
     assert np.allclose(restored, normalize_and_rotate(vertices, yaw=0), atol=1e-6)
 
+
 def test_four_of_eight_votes_survive_one_outlier():
     grids = [base_grid.copy() for _ in range(7)] + [outlier_grid]
     fused = vote_occupancy(grids)
@@ -360,7 +361,7 @@ Expected: import failure because `multiview.py` is absent.
 
 - [x] **Step 3: Implement normalization, yaw removal, and occupancy voting**
 
-Use `numpy.ptp(array, axis=0)`, never `ndarray.ptp`, so NumPy 1.x and 2.x both work. Centre on bounds, divide by longest extent, rotate `-yaw` around +Z, and translate to the median centroid. Default votes are `ceil(count / 2)`.
+Use `numpy.ptp(array, axis=0)`, never `ndarray.ptp`, so NumPy 1.x and 2.x both work. Centre on bounds, divide by longest extent, rotate `-yaw` around TripoSR-native +Z, and translate to the median centroid. Default votes are `ceil(count / 2)`.
 
 - [x] **Step 4: Add failing mesh-validation tests**
 
@@ -428,11 +429,23 @@ git commit -m "feat: fuse yaw-aware TripoSR meshes"
 ```python
 def test_plan_is_offline_and_creates_no_provider_request(tmp_path, deny_sockets):
     image, mask, clearance, evidence, prompt = write_plan_inputs(tmp_path)
-    code = main([
-        "plan", "--image", str(image), "--mask", str(mask),
-        "--clearance", str(clearance), "--evidence", str(evidence),
-        "--prompt-file", str(prompt), "--out", str(tmp_path / "runs"),
-    ])
+    code = main(
+        [
+            "plan",
+            "--image",
+            str(image),
+            "--mask",
+            str(mask),
+            "--clearance",
+            str(clearance),
+            "--evidence",
+            str(evidence),
+            "--prompt-file",
+            str(prompt),
+            "--out",
+            str(tmp_path / "runs"),
+        ]
+    )
     assert code == 0
     plan = load_only_child_json(tmp_path / "runs", "turntable-plan.json")
     assert plan["yaws"] == list(TURNTABLE_YAWS)
@@ -634,3 +647,26 @@ git commit -m "docs: record turntable multiview E2E evidence"
 - [ ] **Step 10: Final review and completion audit**
 
 Compare every acceptance criterion in the spec with a current file, test, or runtime artifact. Check commit diffs for private inputs, generated images, credentials, weights, opaque binaries, and unrelated changes. The goal is complete only if the live eight-view run and final fused GLB both have direct evidence.
+
+#### 2026-08-22 OAuth execution evidence
+
+The user explicitly replaced the direct API-key execution path with the Codex built-in
+`imagegen` OAuth path. That tool disclosed neither a model snapshot nor request-level cost, so
+the private provenance record says `codex-imagegen-oauth`, `model=unreported`, and
+`cost=unreported`; it does not claim the pinned GPT Image 2 API snapshot.
+
+- Eight yaw images were generated and the structural viewset audit passed. Identity
+  consistency remains unmeasured.
+- Head-only masks were required because shoulder and ponytail pixels dominated the first
+  reconstruction attempt.
+- Final TripoSR resolution `256` produced six closed and two open per-view meshes.
+- Voxel resampling initially produced 47,352 disconnected closed fragments. One-cell lattice
+  splatting, closing, hole filling, and largest-component retention reduced the output to one
+  closed, positive-volume component.
+- The resulting experimental fused GLB passed container, watertightness, winding, and volume
+  checks, but failed Blender visual review because consensus removed recognizable facial
+  detail. The capability therefore remains visually unverified and must not be described as a
+  successful likeness reconstruction.
+- Private evidence and deliverables remain under
+  `.asset-mania/private-face-run/oauth-8view-20260822/`; no face image, generated view, mesh,
+  receipt, or prompt is tracked.

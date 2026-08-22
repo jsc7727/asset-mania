@@ -69,7 +69,7 @@ def prepare_turntable_source(
 
 
 def derive_white_background_mask(image_path: Path, destination: Path) -> Path:
-    """Remove only near-white pixels connected to the image edge."""
+    """Remove neutral light studio pixels connected to the image edge."""
     if destination.exists():
         raise FileExistsError(f"refusing to overwrite {destination}")
     image = decode_still(image_path)
@@ -88,10 +88,7 @@ def derive_white_background_mask(image_path: Path, destination: Path) -> Path:
         candidate[index] = int(
             alpha == 0
             or (
-                red >= 245
-                and green >= 245
-                and blue >= 245
-                and max(red, green, blue) - min(red, green, blue) <= 15
+                min(red, green, blue) >= 160 and max(red, green, blue) - min(red, green, blue) <= 24
             )
         )
 
