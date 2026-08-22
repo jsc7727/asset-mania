@@ -337,7 +337,7 @@ git commit -m "feat: generate approved GPT Image turntables"
   - `vote_occupancy(grids: Sequence[ndarray], minimum_votes: int | None = None) -> ndarray`.
   - `fuse_turntable_meshes(inputs: Sequence[YawMesh], output_path: Path, settings: FusionSettings) -> FusionResult`.
 
-- [ ] **Step 1: Write failing pure normalization and voting tests**
+- [x] **Step 1: Write failing pure normalization and voting tests**
 
 ```python
 def test_known_yaw_is_removed_before_consensus():
@@ -352,33 +352,33 @@ def test_four_of_eight_votes_survive_one_outlier():
     assert np.array_equal(fused, base_grid)
 ```
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run: `uv run pytest packages/engine-triposr/tests/test_multiview.py -q`
 
 Expected: import failure because `multiview.py` is absent.
 
-- [ ] **Step 3: Implement normalization, yaw removal, and occupancy voting**
+- [x] **Step 3: Implement normalization, yaw removal, and occupancy voting**
 
 Use `numpy.ptp(array, axis=0)`, never `ndarray.ptp`, so NumPy 1.x and 2.x both work. Centre on bounds, divide by longest extent, rotate `-yaw` around +Z, and translate to the median centroid. Default votes are `ceil(count / 2)`.
 
-- [ ] **Step 4: Add failing mesh-validation tests**
+- [x] **Step 4: Add failing mesh-validation tests**
 
 Test refusal for fewer than six inputs, duplicate/missing yaw, open mesh, inconsistent winding, empty occupancy, existing output, and non-positive fused volume.
 
-- [ ] **Step 5: Run validation tests and verify RED**
+- [x] **Step 5: Run validation tests and verify RED**
 
 Run: `uv run pytest packages/engine-triposr/tests/test_multiview.py -q`
 
 Expected: failures because the end-to-end fusion function is incomplete.
 
-- [ ] **Step 6: Implement local mesh voxelization and extraction**
+- [x] **Step 6: Implement local mesh voxelization and extraction**
 
 Load with `process=False`, normalize, rotate, voxelize and fill each mesh in the shared cube, vote, invoke CPU torchmcubes at level `0.5`, transform extracted vertices to world coordinates, orient faces, use the existing bounded hole policy, require watertight positive volume, and export create-only GLB through Trimesh.
 
 Keep `torch` and `torchmcubes` imports inside the execution function so the Apache workspace can import and test the optional package without those runtime dependencies.
 
-- [ ] **Step 7: Add a runtime-gated synthetic fusion E2E**
+- [x] **Step 7: Add a runtime-gated synthetic fusion E2E**
 
 ```python
 @pytest.mark.skipif(importlib.util.find_spec("torchmcubes") is None, reason="optional runtime")
@@ -389,7 +389,7 @@ def test_eight_noisy_ellipsoids_fuse_to_a_closed_glb(tmp_path):
     assert result.signed_volume > 0
 ```
 
-- [ ] **Step 8: Run engine tests and verify GREEN**
+- [x] **Step 8: Run engine tests and verify GREEN**
 
 Root workspace: `uv run pytest packages/engine-triposr/tests/test_multiview.py packages/engine-triposr/tests/test_port_triposr.py -q`
 
@@ -397,7 +397,7 @@ Installed optional runtime: `.asset-mania\triposr-venv\Scripts\python.exe -m pyt
 
 Expected: pure tests pass in both environments and the synthetic GLB E2E passes in the optional runtime.
 
-- [ ] **Step 9: Commit Task 4**
+- [x] **Step 9: Commit Task 4**
 
 ```powershell
 git add packages/engine-triposr
