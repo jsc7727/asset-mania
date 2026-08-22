@@ -41,7 +41,16 @@ _FORBIDDEN_FILE_NAMES = {
     "token",
     "token.json",
 }
-_FORBIDDEN_WEIGHT_SUFFIXES = {".ckpt", ".onnx", ".pt", ".pth", ".safetensors", ".trcd"}
+_FORBIDDEN_WEIGHT_SUFFIXES = {
+    ".ckpt",
+    ".npy",
+    ".npz",
+    ".onnx",
+    ".pt",
+    ".pth",
+    ".safetensors",
+    ".trcd",
+}
 _TEXT_FIXTURE_SUFFIXES = {
     ".csv",
     ".json",

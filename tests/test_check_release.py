@@ -76,6 +76,8 @@ def _findings_with_code(root: Path, code: str) -> list[Finding]:
         "private/cookies.txt",
         "weights/model.safetensors",
         "artifacts/model.trcd",
+        "artifacts/projection.npz",
+        "artifacts/face.npy",
         ".dad_checkpoints/model.trcd",
         "model_training/model/static/flame.pkl",
         ".cache/download.bin",
