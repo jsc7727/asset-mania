@@ -43,6 +43,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="shade from the mesh's colour attribute instead of a neutral grey",
     )
+    parser.add_argument(
+        "--use-imported-material",
+        action="store_true",
+        help="preserve the material and embedded texture imported from the mesh",
+    )
     return parser.parse_args(argv)
 
 
@@ -83,10 +88,16 @@ def import_mesh(path: str) -> bpy.types.Object:
     return select_import_target(bpy.context.scene.objects)
 
 
-def build_material(target: bpy.types.Object, use_vertex_colors: bool) -> None:
+def build_material(
+    target: bpy.types.Object,
+    use_vertex_colors: bool,
+    use_imported_material: bool = False,
+) -> None:
     """A plain dielectric. Colour comes from the mesh when it has any, grey when it does not."""
     for polygon in target.data.polygons:
         polygon.use_smooth = True
+    if use_imported_material and target.data.materials:
+        return
     material = bpy.data.materials.new("preview")
     material.use_nodes = True
     nodes, links = material.node_tree.nodes, material.node_tree.links
@@ -180,7 +191,7 @@ def main() -> int:
     args = parse_args()
     clear_scene()
     target = import_mesh(args.mesh)
-    build_material(target, args.vertex_colors)
+    build_material(target, args.vertex_colors, args.use_imported_material)
     radius = frame_and_light(target)
     configure_render(args.samples, args.resolution)
 

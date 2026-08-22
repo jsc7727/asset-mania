@@ -11,11 +11,18 @@ import subprocess
 import sys
 import urllib.request
 from collections.abc import Callable, Sequence
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 from asset_mania_contracts import canonical_digest, canonical_json
-from asset_mania_engine_dad3dheads import convert_dad_mesh, run_face_plugin
+from asset_mania_engine_dad3dheads import (
+    DADTextureView,
+    build_textured_dad_glb,
+    convert_dad_mesh,
+    run_face_plugin,
+)
 from asset_mania_pipeline import (
     build_face_plugin_request,
     fingerprint_source,
@@ -31,6 +38,8 @@ SOURCE_URL = "https://github.com/PinataFarms/DAD-3DHeads.git"
 CHECKPOINT_URL = "https://media.pinatafarm.com/public/research/dad-3dheads/dad_3dheads.trcd"
 CHECKPOINT_BYTES = 132_711_657
 APPROVAL_REFERENCE = "face-plugin-approval-20260823"
+TEXTURE_PROFILE = "dad-multiview-uv-atlas-v1"
+TEXTURE_YAWS = (0, 45, 90, 135, 180, 225, 270, 315)
 RUN_DIRECTORIES = ("plan", "acquisition", "smoke", "inference", "conversion", "verification")
 
 
@@ -493,7 +502,13 @@ def _run_convert(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _default_preview(mesh: Path, output: Path, blender: Path) -> None:
+def _default_preview(
+    mesh: Path,
+    output: Path,
+    blender: Path,
+    *,
+    use_imported_material: bool = False,
+) -> None:
     command = [
         sys.executable,
         str(Path(__file__).with_name("blender_preview.py")),
@@ -510,8 +525,11 @@ def _default_preview(mesh: Path, output: Path, blender: Path) -> None:
         "500",
         "--views",
         "4",
-        "--vertex-colors",
     ]
+    if use_imported_material:
+        command.append("--use-imported-material")
+    else:
+        command.append("--vertex-colors")
     completed = subprocess.run(command, check=False, capture_output=True)
     if completed.returncode != 0:
         raise ValueError(f"Blender preview failed with exit {completed.returncode}")
@@ -604,6 +622,244 @@ def _run_verify(
     return 0
 
 
+def _texture_paths(run: Path, views: Path) -> list[tuple[int, str, Path, Path, Path]]:
+    records = []
+    for yaw in TEXTURE_YAWS:
+        if yaw == 0:
+            image = run / "inference/source.png"
+            projection = run / "inference/plugin-output/projection.npz"
+            origin = "observed"
+        else:
+            image = views / f"yaw-{yaw:03d}.png"
+            projection = run / f"texture/views/yaw-{yaw:03d}/plugin-output/projection.npz"
+            origin = "generated"
+        records.append((yaw, origin, image, views / f"yaw-{yaw:03d}-mask.png", projection))
+    return records
+
+
+def _run_texture_plan(arguments: argparse.Namespace) -> int:
+    run = arguments.run.resolve(strict=True)
+    views = arguments.views.resolve(strict=True)
+    texture = run / "texture"
+    if texture.exists():
+        raise FileExistsError("refusing to overwrite DAD texture plan")
+    texture.mkdir()
+    for relative in ("views", "build", "verification"):
+        (texture / relative).mkdir()
+    inference = _load_object(run / "inference/record.json", "inference record")
+    _verify_seal(inference, "record_sha256", "inference record")
+    records = []
+    for yaw, origin, image, mask, projection in _texture_paths(run, views):
+        if not image.is_file() or not mask.is_file():
+            raise ValueError(f"texture yaw {yaw} input is unavailable")
+        if yaw == 0 and sha256_file(image) != inference["normalized_sha256"]:
+            raise ValueError("observed texture source differs from inference")
+        records.append(
+            {
+                "yaw": yaw,
+                "origin": origin,
+                "image_sha256": sha256_file(image),
+                "mask_sha256": sha256_file(mask),
+                "projection_sha256": sha256_file(projection) if yaw == 0 else None,
+            }
+        )
+    preimage = {
+        "schema_id": "asset-mania/private-dad-texture-plan",
+        "schema_version": "0.1",
+        "profile": TEXTURE_PROFILE,
+        "plugin_revision": DAD_REVISION,
+        "checkpoint_sha256": inference["checkpoint_sha256"],
+        "tile_size": 512,
+        "atlas_size": 1536,
+        "visibility_resolution": 512,
+        "views": records,
+        "gates": {
+            "minimum_textured_triangle_fraction": 0.80,
+            "minimum_textured_surface_area_fraction": 0.85,
+            "minimum_observed_face_area_fraction": 0.75,
+            "maximum_neutral_surface_area_fraction": 0.15,
+            "maximum_back_projection_violations": 0,
+        },
+        "overwrite_policy": "create_only",
+    }
+    plan = {**preimage, "plan_sha256": canonical_digest(preimage)}
+    (texture / "plan.json").write_text(canonical_json(plan), encoding="utf-8")
+    return 0
+
+
+def _verify_texture_plan_inputs(run: Path, views: Path) -> dict:
+    plan = _load_object(run / "texture/plan.json", "texture plan")
+    _verify_seal(plan, "plan_sha256", "texture plan")
+    for declared, (yaw, origin, image, mask, _projection) in zip(
+        plan["views"], _texture_paths(run, views), strict=True
+    ):
+        if declared["yaw"] != yaw or declared["origin"] != origin:
+            raise ValueError("texture view order differs from plan")
+        if sha256_file(image) != declared["image_sha256"]:
+            raise ValueError(f"texture yaw {yaw} image differs from plan")
+        if sha256_file(mask) != declared["mask_sha256"]:
+            raise ValueError(f"texture yaw {yaw} mask differs from plan")
+    return plan
+
+
+def _run_texture_infer(
+    arguments: argparse.Namespace,
+    *,
+    runtime_probe: Callable[[Path], dict],
+    plugin_runner: Callable,
+) -> int:
+    run = arguments.run.resolve(strict=True)
+    views = arguments.views.resolve(strict=True)
+    plan = _verify_texture_plan_inputs(run, views)
+    record_path = run / "texture/infer.json"
+    if record_path.exists():
+        raise FileExistsError("refusing to overwrite DAD texture inference")
+    records = []
+    for yaw in TEXTURE_YAWS[1:]:
+        image = views / f"yaw-{yaw:03d}.png"
+        stage = f"texture/views/yaw-{yaw:03d}"
+        _probe, receipt, result = _invoke_plugin(
+            run=run,
+            stage=stage,
+            source_image=image,
+            python=arguments.python.resolve(),
+            plugin_command=arguments.plugin_command.resolve(),
+            runtime_probe=runtime_probe,
+            plugin_runner=plugin_runner,
+        )
+        projection = run / stage / "plugin-output/projection.npz"
+        with np.load(projection, allow_pickle=False) as archive:
+            if archive["camera_vertices"].shape != (result.vertex_count, 3):
+                raise ValueError(f"texture yaw {yaw} camera vertices are invalid")
+        records.append(
+            {
+                "yaw": yaw,
+                "image_sha256": sha256_file(image),
+                "mesh_sha256": sha256_file(result.raw_mesh),
+                "projection_sha256": sha256_file(projection),
+                "vertex_count": result.vertex_count,
+                "triangle_count": result.triangle_count,
+                "checkpoint_sha256": receipt["checkpoint_sha256"],
+            }
+        )
+    preimage = {
+        "schema_id": "asset-mania/private-dad-texture-inference",
+        "schema_version": "0.1",
+        "profile": TEXTURE_PROFILE,
+        "plan_sha256": plan["plan_sha256"],
+        "views": records,
+    }
+    record = {**preimage, "record_sha256": canonical_digest(preimage)}
+    record_path.write_text(canonical_json(record), encoding="utf-8")
+    return 0
+
+
+def _texture_view_records(run: Path, views: Path) -> list[DADTextureView]:
+    return [
+        DADTextureView(yaw, origin, image, mask, projection)
+        for yaw, origin, image, mask, projection in _texture_paths(run, views)
+    ]
+
+
+def _run_texture_build(arguments: argparse.Namespace, *, texture_builder: Callable) -> int:
+    run = arguments.run.resolve(strict=True)
+    views = arguments.views.resolve(strict=True)
+    plan = _verify_texture_plan_inputs(run, views)
+    inference = _load_object(run / "texture/infer.json", "texture inference")
+    _verify_seal(inference, "record_sha256", "texture inference")
+    if inference["plan_sha256"] != plan["plan_sha256"]:
+        raise ValueError("texture inference does not belong to the plan")
+    build_directory = run / "texture/build"
+    atlas = build_directory / "atlas.png"
+    output = build_directory / "head-textured.glb"
+    record_path = build_directory / "record.json"
+    if atlas.exists() or output.exists() or record_path.exists():
+        raise FileExistsError("refusing to overwrite DAD texture build")
+    face_indices_path = (
+        run / "acquisition/source/model_training/model/static/flame_indices/face.npy"
+    )
+    face_indices = np.load(face_indices_path, allow_pickle=False)
+    measured = texture_builder(
+        geometry_obj=run / "inference/plugin-output/head.obj",
+        views=_texture_view_records(run, views),
+        face_indices=face_indices,
+        atlas_path=atlas,
+        output_path=output,
+    )
+    if not atlas.is_file() or not output.is_file():
+        raise ValueError("DAD texture builder wrote no output")
+    measurement_document = asdict(measured)
+    measurement_document["yaw_triangle_counts"] = {
+        str(yaw): count for yaw, count in measured.yaw_triangle_counts.items()
+    }
+    preimage = {
+        "schema_id": "asset-mania/private-dad-texture-build",
+        "schema_version": "0.1",
+        "profile": TEXTURE_PROFILE,
+        "plan_sha256": plan["plan_sha256"],
+        "inference_sha256": inference["record_sha256"],
+        "face_indices_sha256": sha256_file(face_indices_path),
+        "atlas_sha256": sha256_file(atlas),
+        "glb_sha256": sha256_file(output),
+        "measurements": measurement_document,
+        "identity_consistency": "unmeasured",
+    }
+    record = {**preimage, "record_sha256": canonical_digest(preimage)}
+    record_path.write_text(canonical_json(record), encoding="utf-8")
+    return 0
+
+
+def _run_texture_verify(
+    arguments: argparse.Namespace,
+    *,
+    preview_runner: Callable,
+) -> int:
+    run = arguments.run.resolve(strict=True)
+    views = arguments.views.resolve(strict=True)
+    _verify_texture_plan_inputs(run, views)
+    build = _load_object(run / "texture/build/record.json", "texture build")
+    _verify_seal(build, "record_sha256", "texture build")
+    source = arguments.source.resolve(strict=True)
+    before = fingerprint_source(source)
+    original = _load_object(run / "inference/record.json", "inference record")
+    if before.sha256 != original["source_sha256"]:
+        raise ValueError("private source differs from DAD inference")
+    blender = arguments.blender.resolve(strict=True)
+    textured = run / "texture/build/head-textured.glb"
+    sparse = arguments.sparse_dad.resolve(strict=True)
+    anchor = arguments.triposr_anchor.resolve(strict=True)
+    hybrid = arguments.triposr_hybrid.resolve(strict=True)
+    if sha256_file(textured) != build["glb_sha256"]:
+        raise ValueError("textured DAD GLB differs from build record")
+    output_directory = run / "texture/verification"
+    rows = [
+        ("DAD multi-view texture", textured, output_directory / "textured.png", True),
+        ("DAD sparse color", sparse, output_directory / "sparse.png", False),
+        ("TripoSR front anchor", anchor, output_directory / "anchor.png", False),
+        ("TripoSR face hybrid", hybrid, output_directory / "hybrid.png", False),
+    ]
+    for _label, mesh, output, imported in rows:
+        if output.exists():
+            raise FileExistsError(f"refusing to overwrite {output}")
+        preview_runner(mesh, output, blender, use_imported_material=imported)
+    comparison = output_directory / "comparison.png"
+    _write_comparison([(label, output) for label, _mesh, output, _imported in rows], comparison)
+    verify_source_unchanged(source, before)
+    report = {
+        "schema_id": "asset-mania/private-dad-texture-verification",
+        "schema_version": "0.1",
+        "status": "passed",
+        "profile": TEXTURE_PROFILE,
+        "source_unchanged": True,
+        "glb_sha256": build["glb_sha256"],
+        "comparison_sha256": sha256_file(comparison),
+        "visual_quality": "unreviewed",
+        "identity_consistency": "unmeasured",
+    }
+    (output_directory / "report.json").write_text(canonical_json(report), encoding="utf-8")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -630,6 +886,25 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--triposr-anchor", type=Path, required=True)
     verify.add_argument("--triposr-hybrid", type=Path, required=True)
     verify.add_argument("--attempt", type=int, choices=range(1, 10), default=1)
+    texture_plan = commands.add_parser("texture-plan")
+    texture_plan.add_argument("--run", type=Path, required=True)
+    texture_plan.add_argument("--views", type=Path, required=True)
+    texture_infer = commands.add_parser("texture-infer")
+    texture_infer.add_argument("--run", type=Path, required=True)
+    texture_infer.add_argument("--views", type=Path, required=True)
+    texture_infer.add_argument("--python", type=Path, required=True)
+    texture_infer.add_argument("--plugin-command", type=Path, required=True)
+    texture_build = commands.add_parser("texture-build")
+    texture_build.add_argument("--run", type=Path, required=True)
+    texture_build.add_argument("--views", type=Path, required=True)
+    texture_verify = commands.add_parser("texture-verify")
+    texture_verify.add_argument("--run", type=Path, required=True)
+    texture_verify.add_argument("--source", type=Path, required=True)
+    texture_verify.add_argument("--views", type=Path, required=True)
+    texture_verify.add_argument("--blender", type=Path, required=True)
+    texture_verify.add_argument("--sparse-dad", type=Path, required=True)
+    texture_verify.add_argument("--triposr-anchor", type=Path, required=True)
+    texture_verify.add_argument("--triposr-hybrid", type=Path, required=True)
     return parser
 
 
@@ -645,6 +920,7 @@ def main(
     runtime_probe: Callable[[Path], dict] | None = None,
     plugin_runner: Callable | None = None,
     preview_runner: Callable[[Path, Path, Path], None] | None = None,
+    texture_builder: Callable | None = None,
 ) -> int:
     arguments = build_parser().parse_args(list(argv) if argv is not None else None)
     timestamp = _parse_time(now)
@@ -678,7 +954,25 @@ def main(
         )
     if arguments.command == "convert":
         return _run_convert(arguments)
-    return _run_verify(arguments, preview_runner=preview_runner or _default_preview)
+    if arguments.command == "verify":
+        return _run_verify(arguments, preview_runner=preview_runner or _default_preview)
+    if arguments.command == "texture-plan":
+        return _run_texture_plan(arguments)
+    if arguments.command == "texture-infer":
+        return _run_texture_infer(
+            arguments,
+            runtime_probe=selected_probe,
+            plugin_runner=selected_runner,
+        )
+    if arguments.command == "texture-build":
+        return _run_texture_build(
+            arguments,
+            texture_builder=texture_builder or build_textured_dad_glb,
+        )
+    return _run_texture_verify(
+        arguments,
+        preview_runner=preview_runner or _default_preview,
+    )
 
 
 if __name__ == "__main__":

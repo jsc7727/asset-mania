@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from asset_mania_engine_dad3dheads import DADTextureMeasurements
 from asset_mania_pipeline import FacePluginResult
 from PIL import Image
 
@@ -39,6 +40,9 @@ def _acquired_run(tmp_path: Path) -> Path:
     def fake_git(_url: str, _revision: str, destination: Path) -> None:
         destination.mkdir()
         (destination / "LICENSE").write_text("CC BY-NC-SA 4.0", encoding="utf-8")
+        indices = destination / "model_training/model/static/flame_indices"
+        indices.mkdir(parents=True)
+        np.save(indices / "face.npy", np.array([0, 1, 2], dtype=np.int64))
 
     def fake_download(_url: str, destination: Path, _expected_bytes: int) -> None:
         destination.parent.mkdir(parents=True)
@@ -401,6 +405,15 @@ def _private_inference_run(tmp_path: Path) -> tuple[Path, Path]:
     return run, source
 
 
+def _private_texture_views(tmp_path: Path) -> Path:
+    directory = tmp_path / "texture-views"
+    directory.mkdir()
+    for yaw in (0, 45, 90, 135, 180, 225, 270, 315):
+        Image.new("RGB", (1024, 1024), (yaw % 255, 120, 180)).save(directory / f"yaw-{yaw:03d}.png")
+        Image.new("L", (1024, 1024), 255).save(directory / f"yaw-{yaw:03d}-mask.png")
+    return directory
+
+
 def test_convert_seals_plain_and_colored_glbs(tmp_path: Path) -> None:
     run, _source = _private_inference_run(tmp_path)
 
@@ -465,3 +478,133 @@ def test_verify_writes_three_row_comparison_and_unreviewed_report(tmp_path: Path
     assert report["identity_consistency"] == "unmeasured"
     assert report["source_unchanged"] is True
     assert (run / "verification/comparison.png").is_file()
+
+
+def test_texture_plan_uses_observed_front_and_generated_side_views(tmp_path: Path) -> None:
+    run, _source = _private_inference_run(tmp_path)
+    views = _private_texture_views(tmp_path)
+
+    assert main(["texture-plan", "--run", str(run), "--views", str(views)]) == 0
+
+    plan = json.loads((run / "texture/plan.json").read_text(encoding="utf-8"))
+    assert plan["profile"] == "dad-multiview-uv-atlas-v1"
+    assert [item["yaw"] for item in plan["views"]] == [0, 45, 90, 135, 180, 225, 270, 315]
+    assert plan["views"][0]["origin"] == "observed"
+    assert all(item["origin"] == "generated" for item in plan["views"][1:])
+    assert "path" not in json.dumps(plan).lower()
+
+
+def test_texture_infer_runs_exactly_seven_generated_yaws(tmp_path: Path) -> None:
+    run, _source = _private_inference_run(tmp_path)
+    views = _private_texture_views(tmp_path)
+    main(["texture-plan", "--run", str(run), "--views", str(views)])
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+    calls = []
+
+    def recording_plugin(**kwargs):
+        calls.append(kwargs["request"].source_image.name)
+        return _fake_plugin(**kwargs)
+
+    assert (
+        main(
+            [
+                "texture-infer",
+                "--run",
+                str(run),
+                "--views",
+                str(views),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=_cuda_probe,
+            plugin_runner=recording_plugin,
+        )
+        == 0
+    )
+    assert calls == [f"yaw-{yaw:03d}.png" for yaw in (45, 90, 135, 180, 225, 270, 315)]
+    record = json.loads((run / "texture/infer.json").read_text(encoding="utf-8"))
+    assert [item["yaw"] for item in record["views"]] == [45, 90, 135, 180, 225, 270, 315]
+
+
+def test_texture_build_and_verify_write_private_evidence(tmp_path: Path) -> None:
+    run, source = _private_inference_run(tmp_path)
+    views = _private_texture_views(tmp_path)
+    main(["texture-plan", "--run", str(run), "--views", str(views)])
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    blender = tmp_path / "blender.exe"
+    for executable in (python, plugin, blender):
+        executable.write_bytes(b"exe")
+    main(
+        [
+            "texture-infer",
+            "--run",
+            str(run),
+            "--views",
+            str(views),
+            "--python",
+            str(python),
+            "--plugin-command",
+            str(plugin),
+        ],
+        runtime_probe=_cuda_probe,
+        plugin_runner=_fake_plugin,
+    )
+
+    def fake_texture_builder(**kwargs):
+        Image.new("RGB", (16, 16), (10, 20, 30)).save(kwargs["atlas_path"])
+        kwargs["output_path"].write_bytes(b"synthetic textured glb")
+        return DADTextureMeasurements(
+            4, 8, 1.0, 1.0, 1.0, 0.5, 0.0, {yaw: 1 for yaw in range(0, 360, 45)}, 0, 0, True
+        )
+
+    assert (
+        main(
+            ["texture-build", "--run", str(run), "--views", str(views)],
+            texture_builder=fake_texture_builder,
+        )
+        == 0
+    )
+    sparse = tmp_path / "sparse.glb"
+    anchor = tmp_path / "anchor.glb"
+    hybrid = tmp_path / "hybrid.glb"
+    for path in (sparse, anchor, hybrid):
+        path.write_bytes(b"mesh")
+    calls = []
+
+    def fake_preview(mesh: Path, output: Path, executable: Path, **_kwargs) -> None:
+        calls.append(mesh.name)
+        Image.new("RGB", (80, 40), (20 * len(calls), 30, 40)).save(output)
+
+    assert (
+        main(
+            [
+                "texture-verify",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--views",
+                str(views),
+                "--blender",
+                str(blender),
+                "--sparse-dad",
+                str(sparse),
+                "--triposr-anchor",
+                str(anchor),
+                "--triposr-hybrid",
+                str(hybrid),
+            ],
+            preview_runner=fake_preview,
+        )
+        == 0
+    )
+    assert calls == ["head-textured.glb", "sparse.glb", "anchor.glb", "hybrid.glb"]
+    report = json.loads((run / "texture/verification/report.json").read_text(encoding="utf-8"))
+    assert report["visual_quality"] == "unreviewed"
+    assert report["identity_consistency"] == "unmeasured"
