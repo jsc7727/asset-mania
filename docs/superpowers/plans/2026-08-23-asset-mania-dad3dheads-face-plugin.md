@@ -104,9 +104,7 @@ class FacePluginRequest:
 class FacePluginResult:
     schema: str
     plugin: str
-    status: Literal[
-        "succeeded", "incompatible_runtime", "invalid_output", "execution_failed"
-    ]
+    status: Literal["succeeded", "incompatible_runtime", "invalid_output", "execution_failed"]
     raw_mesh: Path | None
     projection_data: Path | None
     vertex_count: int
@@ -208,7 +206,9 @@ class DADPluginSettings:
 
 
 def validate_dad_runtime(settings: DADPluginSettings) -> Path: ...
-def execute_dad_request(request_path: Path, result_path: Path, settings: DADPluginSettings) -> int: ...
+def execute_dad_request(
+    request_path: Path, result_path: Path, settings: DADPluginSettings
+) -> int: ...
 def main(argv: Sequence[str] | None = None) -> int: ...
 ```
 
@@ -348,11 +348,20 @@ Expected: synthetic conversion and GLB round-trip tests pass.
 - [ ] **Step 1: Write failing plan-stage test**
 
 ```python
-assert main([
-    "plan",
-    "--out", str(tmp_path / "runs"),
-    "--plugin", "dad3dheads-local",
-], now="2026-08-23T00:00:00+00:00", id_factory=lambda: "fixedrun") == 0
+assert (
+    main(
+        [
+            "plan",
+            "--out",
+            str(tmp_path / "runs"),
+            "--plugin",
+            "dad3dheads-local",
+        ],
+        now="2026-08-23T00:00:00+00:00",
+        id_factory=lambda: "fixedrun",
+    )
+    == 0
+)
 ```
 
 Assert the plan fixes the revision, official source/checkpoint URLs, expected byte count, CC

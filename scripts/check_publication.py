@@ -40,6 +40,8 @@ REJECTED_SUFFIXES = frozenset(
         ".pth",
         ".ckpt",
         ".safetensors",
+        ".trcd",
+        ".pkl",
         ".gguf",
         ".bin",
         ".weights",

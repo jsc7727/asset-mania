@@ -19,6 +19,7 @@ _THIRD_PARTY_NOTICES = PurePosixPath("THIRD_PARTY_NOTICES.md")
 
 _FORBIDDEN_DIRECTORY_NAMES = {
     ".asset-mania",
+    ".dad_checkpoints",
     ".cache",
     ".mypy_cache",
     ".pytest_cache",
@@ -40,7 +41,7 @@ _FORBIDDEN_FILE_NAMES = {
     "token",
     "token.json",
 }
-_FORBIDDEN_WEIGHT_SUFFIXES = {".ckpt", ".onnx", ".pt", ".pth", ".safetensors"}
+_FORBIDDEN_WEIGHT_SUFFIXES = {".ckpt", ".onnx", ".pt", ".pth", ".safetensors", ".trcd"}
 _TEXT_FIXTURE_SUFFIXES = {
     ".csv",
     ".json",
@@ -108,6 +109,7 @@ def _tracked_paths(root: Path) -> tuple[list[PurePosixPath], Finding | None]:
 
 def _is_forbidden_path(relative: PurePosixPath) -> bool:
     lowered_parts = tuple(part.lower() for part in relative.parts)
+    lowered_path = relative.as_posix().lower()
     name = lowered_parts[-1]
     stem = PurePosixPath(name).stem
     return (
@@ -120,6 +122,7 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
         or stem == "cookie"
         or stem == "cookies"
         or PurePosixPath(name).suffix in _FORBIDDEN_WEIGHT_SUFFIXES
+        or lowered_path.startswith("model_training/model/static/flame")
     )
 
 

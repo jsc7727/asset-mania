@@ -46,8 +46,15 @@ recognizable front face with stepped bands. Removing front hull clipping and cop
 from either X hemisphere did not restore it.
 
 That repeated failure closes this TripoSR voxel branch rather than inviting more threshold tuning.
-The next justified experiment is a face-specific DECA/FLAME-family model, with its own model,
-dependency, licence, and clearance review. Identity consistency remains unmeasured.
+The next experiment uses a private out-of-tree DAD-3DHeads plugin pinned at
+`68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7`. The public integration has a closed process protocol,
+synthetic fake-plugin E2E, create-only OBJ/GLB conversion, redaction checks, and Blender comparison
+orchestration. No live DAD face result is claimed yet.
+
+DAD is CC BY-NC-SA 4.0 non-commercial research software, not a permissive or commercially cleared
+engine. Asset Mania distributes only its own Apache adapter; the external source, checkpoint,
+FLAME assets, runtime, patches, and outputs stay under ignored private storage. Identity
+consistency remains unmeasured.
 
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.

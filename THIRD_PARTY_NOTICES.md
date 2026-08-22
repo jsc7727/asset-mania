@@ -43,6 +43,23 @@ for the engine code, the weights, the preprocessing model, and every runtime dep
 `docs/superpowers/specs/2026-08-21-asset-mania-v0-3-generic-image-to-3d-design.md`. No such
 clearance ships with this repository, and no engine has been executed.
 
+## Optional non-commercial face research adapter
+
+`packages/engine-dad3dheads/` is this repository's own Apache-2.0 integration code. It is a
+separate optional process adapter and contains no DAD source, checkpoint, FLAME asset, runtime
+environment, compatibility patch, or face output.
+
+- External source: [PinataFarms/DAD-3DHeads](https://github.com/PinataFarms/DAD-3DHeads), pinned
+  for the private experiment at `68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7`.
+- Upstream license: CC BY-NC-SA 4.0. This profile is non-commercial research only and must not be
+  described as OSI-open-source or commercially cleared.
+- Official checkpoint URL:
+  <https://media.pinatafarm.com/public/research/dad-3dheads/dad_3dheads.trcd>. The checkpoint is
+  downloaded only after fresh approval into ignored local storage. Its redistribution is
+  uncleared, and it never appears in an Asset Mania archive.
+- DAD's FLAME-family static assets and every compatibility dependency remain in the external
+  private checkout/runtime. Their terms are not replaced by this adapter's Apache license.
+
 ## External tools used but never redistributed
 
 Asset Mania invokes these tools as separate processes and bundles neither their binaries

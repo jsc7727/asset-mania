@@ -93,3 +93,20 @@ It never falls back from CUDA to CPU silently. Identity consistency remains unme
 face visual review failed in the measured private run even though topology and silhouette gates
 passed. The runner remains useful for reproducing that research result, not for producing a
 finished likeness.
+
+## Maintainer DAD-3DHeads face-plugin path
+
+`scripts/run_face_plugin_e2e.py` is a separate non-commercial research runner with `plan`,
+`acquire`, `smoke`, `run`, `convert`, and `verify` stages. The public deterministic E2E injects a
+synthetic fake plugin; it downloads no model and uses no real-person fixture.
+
+The real `acquire` stage is opt-in and requires the exact approval reference emitted for the
+pinned plan. It writes the external CC BY-NC-SA 4.0 source and the official checkpoint only below
+ignored `.asset-mania` storage. `smoke` and `run` require an explicit CUDA Python and absolute
+plugin executable and never search for or fall back to another model, device, or runtime.
+
+The DAD output is a research FLAME-family head mesh, not a scan. `convert` preserves the raw OBJ,
+creates plain and observed-front vertex-color GLBs, and records open-neck topology rather than
+silently capping it. `verify` renders DAD and the two prior TripoSR results with the same Blender
+settings. Manual visual review remains separate from structural validity, and identity consistency
+is always unmeasured.
