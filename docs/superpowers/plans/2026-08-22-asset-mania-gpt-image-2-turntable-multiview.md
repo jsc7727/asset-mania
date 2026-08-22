@@ -45,10 +45,10 @@
   - `TURNTABLE_YAWS: tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)`
   - `build_turntable_plan(*, source_image_sha256: str, source_width: int, source_height: int, source_mask_sha256: str, prompt_sha256: str, provider_evidence_sha256: str, controls: Mapping[str, Any], subject: str, estimated_cost: str, maximum_cost: str) -> dict[str, Any]`
   - `build_turntable_viewset(*, plan_sha256: str, views: Sequence[Mapping[str, Any]], audit: Mapping[str, Any], reported_usage: Mapping[str, int | float], actual_cost: str | None) -> dict[str, Any]`
-  - `build_multiview_reconstruction_record(*, viewset_sha256: str, meshes: Sequence[Mapping[str, Any]], fusion: Mapping[str, Any], fused_mesh: Mapping[str, Any], subject: str, rights_receipt_sha256: str | None) -> dict[str, Any]`
+  - `build_multiview_reconstruction_record(*, turntable_plan_sha256: str, viewset_sha256: str, observed_source_image_sha256: str, meshes: Sequence[Mapping[str, Any]], fusion: Mapping[str, Any], fused_mesh: Mapping[str, Any], subject: str, rights_receipt_sha256: str | None) -> dict[str, Any]`
   - schema registry entries for `turntable-plan`, `turntable-viewset`, and `multiview-reconstruction`, all version `1.0`.
 
-- [ ] **Step 1: Write the failing plan contract tests**
+- [x] **Step 1: Write the failing plan contract tests**
 
 ```python
 def test_real_person_plan_is_fixed_to_the_full_profile(validator_for):
@@ -76,17 +76,17 @@ def test_real_person_plan_is_fixed_to_the_full_profile(validator_for):
     assert list(validator_for("turntable-plan", "1.0").iter_errors(plan)) == []
 ```
 
-- [ ] **Step 2: Run the plan test and verify RED**
+- [x] **Step 2: Run the plan test and verify RED**
 
 Run: `uv run pytest packages/contracts/tests/test_turntable_plan.py -q`
 
 Expected: collection fails because `build_turntable_plan` and the schema do not exist.
 
-- [ ] **Step 3: Implement the plan schema, builder, registry, and exports**
+- [x] **Step 3: Implement the plan schema, builder, registry, and exports**
 
 The builder fixes provider, endpoint, model snapshot, yaw schedule, pitch, roll, call count, prompt-template revision, overwrite policy, and required gates. It accepts only the source digests, evidence digest, closed controls, subject, and aggregate cost strings, then seals `plan_sha256` with `canonical_digest`.
 
-- [ ] **Step 4: Add mutation tests for every approval-bound field**
+- [x] **Step 4: Add mutation tests for every approval-bound field**
 
 ```python
 @pytest.mark.parametrize("field", ["model", "yaws", "prompt_sha256", "controls", "maximum_cost"])
@@ -97,27 +97,27 @@ def test_editing_an_approval_bound_field_changes_the_digest(plan, field):
     assert canonical_digest(preimage) != plan["plan_sha256"]
 ```
 
-- [ ] **Step 5: Write failing viewset and reconstruction-record tests**
+- [x] **Step 5: Write failing viewset and reconstruction-record tests**
 
 The viewset test must require eight sorted records, observed yaw `0`, generated other yaws, no paths, `identity_consistency: unmeasured`, aggregate usage/cost, audit metrics, and a self-seal. The reconstruction test must require eight mesh records, fusion parameters, a neutral GLB record, and an eight-view likeness disclosure.
 
-- [ ] **Step 6: Run both new suites and verify RED**
+- [x] **Step 6: Run both new suites and verify RED**
 
 Run: `uv run pytest packages/contracts/tests/test_turntable_viewset.py packages/contracts/tests/test_multiview_reconstruction.py -q`
 
 Expected: failure because the builders and schemas are absent.
 
-- [ ] **Step 7: Implement the viewset and reconstruction builders**
+- [x] **Step 7: Implement the viewset and reconstruction builders**
 
 Reject missing, duplicate, or reordered yaw records before sealing. Call `build_likeness_disclosure` with `views=8` for `face_head` output.
 
-- [ ] **Step 8: Run contract tests and verify GREEN**
+- [x] **Step 8: Run contract tests and verify GREEN**
 
 Run: `uv run pytest packages/contracts/tests/test_turntable_plan.py packages/contracts/tests/test_turntable_viewset.py packages/contracts/tests/test_multiview_reconstruction.py -q`
 
 Expected: all new contract tests pass.
 
-- [ ] **Step 9: Commit Task 1**
+- [x] **Step 9: Commit Task 1**
 
 ```powershell
 git add packages/contracts

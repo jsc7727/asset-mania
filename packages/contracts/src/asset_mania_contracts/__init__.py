@@ -60,6 +60,20 @@ from .execution import (
     selection_digest,
 )
 from .models import build_manifest, canonical_json, load_manifest_schema
+from .turntable import (
+    ENDPOINT as TURNTABLE_ENDPOINT,
+)
+from .turntable import (
+    MODEL_SNAPSHOT as TURNTABLE_MODEL_SNAPSHOT,
+)
+from .turntable import (
+    PROMPT_TEMPLATE_REVISION,
+    TURNTABLE_CONTROLS,
+    TURNTABLE_YAWS,
+    build_multiview_reconstruction_record,
+    build_turntable_plan,
+    build_turntable_viewset,
+)
 
 __all__ = [
     "ARTIFACT_PARENT_RELATIONSHIPS",
@@ -90,6 +104,7 @@ __all__ = [
     "PASS_MEDIA_TYPES",
     "PASS_ROLES",
     "PROHIBITED_LIKENESS_CLAIMS",
+    "PROMPT_TEMPLATE_REVISION",
     "PROVIDER_STATE_ORDER",
     "RENDER_PROFILE",
     "SENSITIVITIES",
@@ -97,6 +112,10 @@ __all__ = [
     "STAGE_COMMANDS",
     "SUBJECTS",
     "TERMINAL_PROVIDER_STATES",
+    "TURNTABLE_CONTROLS",
+    "TURNTABLE_ENDPOINT",
+    "TURNTABLE_MODEL_SNAPSHOT",
+    "TURNTABLE_YAWS",
     "ApprovalGate",
     "DiagnosticCode",
     "ProviderState",
@@ -108,8 +127,11 @@ __all__ = [
     "build_likeness_disclosure",
     "build_manifest",
     "build_manifest_v2",
+    "build_multiview_reconstruction_record",
     "build_provider_plan",
     "build_reconstruction_plan",
+    "build_turntable_plan",
+    "build_turntable_viewset",
     "build_workflow_plan",
     "canonical_digest",
     "canonical_json",

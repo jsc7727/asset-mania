@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/turntable-plan-v1.schema.json",
+  "title": "Asset Mania turntable plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "source_image_sha256",
+    "source_width",
+    "source_height",
+    "source_mask_sha256",
+    "asset_kind",
+    "subject",
+    "provider",
+    "endpoint",
+    "model",
+    "yaws",
+    "pitch",
+    "roll",
+    "provider_call_count",
+    "prompt_template_revision",
+    "prompt_sha256",
+    "provider_evidence_sha256",
+    "controls",
+    "cost_estimate",
+    "required_gates",
+    "overwrite_policy",
+    "plan_sha256"
+  ],
+  "properties": {
+    "schema_id": { "const": "asset-mania/turntable-plan" },
+    "schema_version": { "const": "1.0" },
+    "source_image_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source_width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+    "source_height": { "type": "integer", "minimum": 1, "maximum": 8192 },
+    "source_mask_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "asset_kind": { "const": "face_head" },
+    "subject": { "enum": ["real_person", "synthetic_person"] },
+    "provider": { "const": "openai" },
+    "endpoint": { "const": "/v1/images/edits" },
+    "model": { "const": "gpt-image-2-2026-04-21" },
+    "yaws": { "const": [0, 45, 90, 135, 180, 225, 270, 315] },
+    "pitch": { "const": 0 },
+    "roll": { "const": 0 },
+    "provider_call_count": { "const": 7 },
+    "prompt_template_revision": { "const": "turntable-face-v1" },
+    "prompt_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "provider_evidence_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "quality", "background", "output_format", "moderation"],
+      "properties": {
+        "size": { "const": "1024x1024" },
+        "quality": { "const": "medium" },
+        "background": { "const": "opaque" },
+        "output_format": { "const": "png" },
+        "moderation": { "const": "auto" }
+      }
+    },
+    "cost_estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "estimated_cost", "maximum_cost", "provider_call_count"],
+      "properties": {
+        "currency": { "const": "USD" },
+        "estimated_cost": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$" },
+        "maximum_cost": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$" },
+        "provider_call_count": { "const": 7 }
+      }
+    },
+    "required_gates": {
+      "oneOf": [
+        { "const": ["face_rights", "external_egress", "paid_compute"] },
+        { "const": ["external_egress", "paid_compute"] }
+      ]
+    },
+    "overwrite_policy": { "const": "create_only" },
+    "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "subject": { "const": "real_person" } },
+        "required": ["subject"]
+      },
+      "then": {
+        "properties": {
+          "required_gates": { "const": ["face_rights", "external_egress", "paid_compute"] }
+        }
+      },
+      "else": {
+        "properties": {
+          "required_gates": { "const": ["external_egress", "paid_compute"] }
+        }
+      }
+    }
+  ]
+}
