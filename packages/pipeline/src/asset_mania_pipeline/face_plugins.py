@@ -28,9 +28,7 @@ _RESULT_FIELDS = frozenset(
         "checkpoint_sha256",
     }
 )
-_STATUSES = frozenset(
-    {"succeeded", "incompatible_runtime", "invalid_output", "execution_failed"}
-)
+_STATUSES = frozenset({"succeeded", "incompatible_runtime", "invalid_output", "execution_failed"})
 
 
 def _is_lower_hex(value: str, length: int) -> bool:
@@ -59,7 +57,10 @@ class FacePluginRequest:
             raise ValueError("source image must be absolute")
         if not self.output_directory.is_absolute():
             raise ValueError("output directory must be absolute")
-        if self.source_image == self.output_directory or self.output_directory in self.source_image.parents:
+        if (
+            self.source_image == self.output_directory
+            or self.output_directory in self.source_image.parents
+        ):
             raise ValueError("source image must not be contained by the output directory")
         if self.device != "cuda":
             raise ValueError("device must be cuda")
