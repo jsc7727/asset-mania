@@ -423,7 +423,7 @@ git commit -m "feat: fuse yaw-aware TripoSR meshes"
   - `reconstruct --viewset --clearance --engine-root --weights --hub-cache --out`
   - `verify --run --blender`
 
-- [ ] **Step 1: Write failing parser and offline-plan tests**
+- [x] **Step 1: Write failing parser and offline-plan tests**
 
 ```python
 def test_plan_is_offline_and_creates_no_provider_request(tmp_path, deny_sockets):
@@ -438,39 +438,39 @@ def test_plan_is_offline_and_creates_no_provider_request(tmp_path, deny_sockets)
     assert plan["yaws"] == list(TURNTABLE_YAWS)
 ```
 
-- [ ] **Step 2: Run the E2E test and verify RED**
+- [x] **Step 2: Run the E2E test and verify RED**
 
 Run: `uv run pytest tests/test_turntable_multiview_e2e.py -q`
 
 Expected: failure because the runner does not exist.
 
-- [ ] **Step 3: Implement create-only run layout and `plan`**
+- [x] **Step 3: Implement create-only run layout and `plan`**
 
 Run layout is `plan/`, `provider-quarantine/`, `viewset/`, `per-view-meshes/`, `fusion/`, and `verification/`. The source stays outside. Portable JSON contains no private path. Plan emits the exact acknowledgement strings needed for each gate but does not issue receipts.
 
-- [ ] **Step 4: Implement `generate` with injected provider dependencies**
+- [x] **Step 4: Implement `generate` with injected provider dependencies**
 
 The test entry accepts injected fake transport and secret resolver. The executable entry uses `HTTPSMultipartTransport` and resolves `OPENAI_API_KEY` only after approvals. On success, derive masks, audit, create the contact sheet, and publish `turntable-viewset.json`.
 
-- [ ] **Step 5: Implement `reconstruct` and fusion**
+- [x] **Step 5: Implement `reconstruct` and fusion**
 
 Run eight local TripoSR jobs sequentially, record each mesh, require six valid closed meshes, fuse with the selected profile, and publish `multiview-reconstruction.json` plus `fused.glb`.
 
-- [ ] **Step 6: Implement `verify`**
+- [x] **Step 6: Implement `verify`**
 
 Validate all three schemas and seals, recompute every artifact hash, validate GLB structure, load it with Trimesh, require watertight positive volume, verify source hash, confirm all content remains under the run root, and call Blender to render a four-view preview.
 
-- [ ] **Step 7: Complete the deterministic fake-provider E2E test**
+- [x] **Step 7: Complete the deterministic fake-provider E2E test**
 
 Use eight synthetic non-human ellipsoid portraits, fake provider responses, resolution `32`, fusion grid `48`, and a fake/optional extraction path. Assert ordered stages, no network, exact yaws, eight meshes, closed fused GLB, disclosure `views: 8`, and unchanged source.
 
-- [ ] **Step 8: Run deterministic E2E and verify GREEN**
+- [x] **Step 8: Run deterministic E2E and verify GREEN**
 
 Run: `uv run pytest tests/test_turntable_multiview_e2e.py -q`
 
 Expected: all deterministic E2E tests pass without network, model downloads, paid calls, or real-person fixtures.
 
-- [ ] **Step 9: Commit Task 5**
+- [x] **Step 9: Commit Task 5**
 
 ```powershell
 git add scripts/run_turntable_multiview_e2e.py tests/test_turntable_multiview_e2e.py tests/fixtures/v2
