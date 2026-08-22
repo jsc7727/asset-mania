@@ -109,4 +109,7 @@ The DAD output is a research FLAME-family head mesh, not a scan. `convert` prese
 creates plain and observed-front vertex-color GLBs, and records open-neck topology rather than
 silently capping it. `verify` renders DAD and the two prior TripoSR results with the same Blender
 settings. Manual visual review remains separate from structural validity, and identity consistency
-is always unmeasured.
+is always unmeasured. The measured private CUDA run completed and visibly improved on the two
+TripoSR voxel outputs, but it remains research-only: the fixed topology has 5,023 vertices and
+9,976 triangles, observed-front colour coverage was 30.6%, and neither hair nor rear appearance is
+reconstructed.

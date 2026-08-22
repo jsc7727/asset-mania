@@ -59,6 +59,10 @@ environment, compatibility patch, or face output.
   uncleared, and it never appears in an Asset Mania archive.
 - DAD's FLAME-family static assets and every compatibility dependency remain in the external
   private checkout/runtime. Their terms are not replaced by this adapter's Apache license.
+- The measured compatibility runtime used upstream-pinned `hydra-core==1.1.0`,
+  `chumpy==0.70`, `albumentations==1.0.0`, `smplx==0.1.26`, and
+  `pytorch-toolbelt==0.5.0` only from ignored local storage. None is bundled in an Asset Mania
+  wheel or source archive.
 
 ## External tools used but never redistributed
 

@@ -49,12 +49,28 @@ That repeated failure closes this TripoSR voxel branch rather than inviting more
 The next experiment uses a private out-of-tree DAD-3DHeads plugin pinned at
 `68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7`. The public integration has a closed process protocol,
 synthetic fake-plugin E2E, create-only OBJ/GLB conversion, redaction checks, and Blender comparison
-orchestration. No live DAD face result is claimed yet.
+orchestration.
 
 DAD is CC BY-NC-SA 4.0 non-commercial research software, not a permissive or commercially cleared
 engine. Asset Mania distributes only its own Apache adapter; the external source, checkpoint,
 FLAME assets, runtime, patches, and outputs stay under ignored private storage. Identity
 consistency remains unmeasured.
+
+The private live CUDA run completed on the pinned checkpoint under PyTorch `2.13.0+cu130`.
+Inference, including model construction in the plugin process, took 0.946 seconds. The fixed output
+contained 5,023 vertices and 9,976 triangles across the head and two equal eye shells. It had 62
+boundary edges in two neck/eye-related loops, zero non-manifold edges, and consistent winding.
+Observed-front vertex colour covered 30.6 percent of vertices.
+
+Blender review passed the experiment's bounded geometry criterion: the DAD result preserved a
+coherent head, nose, lips, chin, cheeks, eye sockets, ears, and side profiles and was clearly better
+than both prior voxel surfaces. It did not reconstruct hair or real rear appearance, and the colour
+projection remains incomplete. This result therefore supports only a face-specific geometry
+improvement claim; identity consistency remains unmeasured.
+
+Compatibility required two private lazy-import edits that keep Hydra training modules out of the
+inference import path, plus process-local Python 3.12/Chumpy aliases. No architecture, checkpoint,
+input resolution, topology, PyTorch build, CUDA device, or model fallback changed.
 
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.
