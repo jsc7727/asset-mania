@@ -15,6 +15,8 @@ code or documentation.
 
 - Keep changes scoped and preserve the portable manifest, privacy, and provenance contracts.
 - Do not silently substitute a provider, model, revision, quality, or workflow.
+- Treat reconstruction engines as replaceable plugins. Do not hard-code the current model as
+  permanent; define or change plugin interfaces only through a future approved design specification.
 - Do not upload external data, download models, spend money, invoke remote generation, or use
   paid compute without fresh explicit approval for that operation.
 - Keep detailed operational guidance in `rules/`; this file is only the entrypoint.
