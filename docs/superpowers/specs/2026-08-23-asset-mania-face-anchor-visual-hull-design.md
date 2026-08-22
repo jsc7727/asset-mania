@@ -309,4 +309,3 @@ Implementation is complete only when:
    claim;
 7. original image and mask hashes remain unchanged;
 8. Git contains no private images, masks, meshes, previews, model weights, or GPU logs.
-
