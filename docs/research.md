@@ -39,8 +39,15 @@ unmeasured.
 `face-anchor-visual-hull-v1` is the bounded follow-up. It preserves one observed-front TripoSR
 anchor and carves a robust seven-of-eight silhouette hull for side and rear completion. It adds no
 model or provider. The verified CUDA path reduces iteration time, but GPU acceleration changes
-runtime rather than likeness. The hybrid has deterministic and synthetic runtime coverage; live
-face quality unverified until the private Blender comparison is reviewed.
+runtime rather than likeness. The private run passed its numeric gates: one closed component,
+151,564 triangles, minimum/mean silhouette IoU 0.861/0.944, 96.1% front-volume retention, and 96.0%
+color coverage. Blender review nevertheless failed because voxel resurfacing replaced the
+recognizable front face with stepped bands. Removing front hull clipping and copying anchor colors
+from either X hemisphere did not restore it.
+
+That repeated failure closes this TripoSR voxel branch rather than inviting more threshold tuning.
+The next justified experiment is a face-specific DECA/FLAME-family model, with its own model,
+dependency, licence, and clearance review. Identity consistency remains unmeasured.
 
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.

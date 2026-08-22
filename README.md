@@ -27,7 +27,7 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | GPT Image 2 API turntable adapter | **experimental, fake-transport E2E verified** | approvals, no-retry ordering, audit, and provenance verified; the direct API adapter has made no live call |
 | Built-in OAuth turntable experiment | **experimental, private live run completed** | eight views passed structural audit through the Codex built-in image tool; the tool disclosed neither model snapshot nor cost, and identity consistency remains unmeasured |
 | Multi-view TripoSR voxel fusion | **experimental, visual review failed** | a private generated-face viewset produced a single watertight positive-volume GLB, but consensus removed recognizable facial detail |
-| Face-anchor visual hull | **experimental, deterministic/synthetic verified** | `face-anchor-visual-hull-v1` preserves one front anchor and completes the envelope from silhouettes; live face quality unverified |
+| Face-anchor visual hull | **experimental, private visual review failed** | one closed hybrid passed silhouette and topology gates, but voxel resurfacing still removed the recognizable face |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
 | Generic image to 3D | Runs, unbundled | measured below; **clearance is user-issued and unissued here**, and no wheel ships an engine or a weight |
 | Face/head reconstruction | Gated, unmeasured | `face_head` + `non_person` now refused (it sealed with no receipt before); every mesh carries a `likeness-disclosure-v1`; **no face accuracy has been measured** |
@@ -129,7 +129,11 @@ The first live private reconstruction geometrically completed, but eight indepen
 hallucinated TripoSR meshes lost facial detail when voxel-voted. The replacement research profile,
 `face-anchor-visual-hull-v1`, keeps a CUDA TripoSR mesh from the observed front and uses seven-of-
 eight silhouette support only for the side and rear envelope. Its deterministic and optional-
-runtime tests pass; live face quality unverified until the private Blender comparison is reviewed.
+runtime tests pass, and a private run produced one closed 151,564-triangle GLB with minimum/mean
+silhouette IoU 0.861/0.944 and 96.1% front-volume retention. Blender review still failed: the
+recognizable front texture and surface were lost during voxel resurfacing. GPU speed does not fix
+that model/profile limitation; a face-specific DECA/FLAME-family experiment is the next research
+step and requires a separate model-clearance decision.
 
 ## Project guide
 

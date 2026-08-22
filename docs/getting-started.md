@@ -90,4 +90,6 @@ verify  --run <run> --views <private-yaw-directory> [--blender <Blender 5.2>]
 The profile is `face-anchor-visual-hull-v1`. It runs TripoSR only for the observed yaw-0 anchor,
 uses the eight masks for a coarse full-head envelope, and projects view colors onto the final GLB.
 It never falls back from CUDA to CPU silently. Identity consistency remains unmeasured, and live
-face quality unverified until a human reviews the private Blender preview.
+face visual review failed in the measured private run even though topology and silhouette gates
+passed. The runner remains useful for reproducing that research result, not for producing a
+finished likeness.
