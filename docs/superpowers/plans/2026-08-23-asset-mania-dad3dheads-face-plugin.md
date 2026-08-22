@@ -258,7 +258,7 @@ Generate an asymmetric closed synthetic head plus a single neck boundary. Assert
 
 ```python
 measurements = inspect_dad_mesh(obj_path)
-assert measurements.component_count == 1
+    assert measurements.component_count in (1, 3)
 assert measurements.non_manifold_edge_count == 0
 assert measurements.boundary_loop_count == 1
 assert measurements.vertex_count == 12
@@ -503,8 +503,9 @@ Expected: `convert` subcommand is absent.
 
 - [ ] **Step 3: Implement conversion stage**
 
-Call `convert_dad_mesh`, reload both GLBs, verify exactly one component and zero non-manifold
-edges, and preserve the raw OBJ. Do not require a closed neck or positive watertight volume.
+Call `convert_dad_mesh`, reload both GLBs, verify either the synthetic one-component topology or
+the fixed DAD head plus two equal eye-shell components, require zero non-manifold edges, and
+preserve the raw OBJ. Do not require a closed neck or positive watertight volume.
 
 - [ ] **Step 4: Write failing verification-stage tests**
 

@@ -250,7 +250,7 @@ def _load_acquisition(run: Path) -> tuple[dict, Path, Path]:
 def _plugin_environment(source_root: Path, isolated_home: Path) -> dict[str, str]:
     environment = {
         key: os.environ[key]
-        for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATHEXT")
+        for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "PATH")
         if key in os.environ
     }
     environment.update(
@@ -294,7 +294,24 @@ def _invoke_plugin(
         device="cuda",
         checkpoint_sha256=receipt["checkpoint_sha256"],
     )
-    write_face_plugin_request(request, request_path)
+    if request_path.exists():
+        existing = _load_object(request_path, "face plugin request")
+        expected = {
+            "schema": request.schema,
+            "plugin": request.plugin,
+            "plugin_revision": request.plugin_revision,
+            "source_image": str(request.source_image),
+            "output_directory": str(request.output_directory),
+            "device": request.device,
+            "checkpoint_sha256": request.checkpoint_sha256,
+            "network": request.network,
+        }
+        if existing != expected:
+            raise ValueError("existing face plugin request differs from the resumed stage")
+        if output.exists() or result_path.exists():
+            raise FileExistsError("refusing to overwrite partial face plugin output")
+    else:
+        write_face_plugin_request(request, request_path)
     result = plugin_runner(
         command=[str(plugin_command)],
         request=request,
@@ -316,7 +333,7 @@ def _run_smoke(
 ) -> int:
     run = arguments.run.resolve(strict=True)
     source = run / "smoke/source.png"
-    if source.exists() or (run / "smoke/record.json").exists():
+    if (run / "smoke/record.json").exists():
         raise FileExistsError("refusing to overwrite face plugin smoke")
     image = Image.new("RGB", (256, 256), (238, 238, 238))
     draw = ImageDraw.Draw(image)
@@ -324,7 +341,14 @@ def _run_smoke(
     draw.ellipse((86, 98, 106, 112), fill=(30, 30, 30))
     draw.ellipse((150, 98, 170, 112), fill=(30, 30, 30))
     draw.arc((100, 132, 156, 180), 10, 170, fill=(80, 30, 30), width=3)
-    image.save(source, format="PNG", compress_level=9)
+    if source.exists():
+        with Image.open(source) as existing:
+            existing_rgb = existing.convert("RGB")
+            existing_rgb.load()
+        if existing_rgb.size != image.size or existing_rgb.tobytes() != image.tobytes():
+            raise ValueError("existing synthetic smoke input differs from the fixed fixture")
+    else:
+        image.save(source, format="PNG", compress_level=9)
     probe, receipt, result = _invoke_plugin(
         run=run,
         stage="smoke",
@@ -431,9 +455,10 @@ def _run_convert(arguments: argparse.Namespace) -> int:
         raise ValueError("DAD projection differs from the inference record")
     if sha256_file(source) != inference["normalized_sha256"]:
         raise ValueError("normalized source differs from the inference record")
-    plain = run / "conversion/head.glb"
-    colored = run / "conversion/head-colored.glb"
-    record_path = run / "conversion/record.json"
+    suffix = "" if arguments.attempt == 1 else f"-v{arguments.attempt}"
+    plain = run / f"conversion/head{suffix}.glb"
+    colored = run / f"conversion/head-colored{suffix}.glb"
+    record_path = run / f"conversion/record{suffix}.json"
     if record_path.exists():
         raise FileExistsError("refusing to overwrite DAD conversion")
     measured = convert_dad_mesh(
@@ -449,6 +474,7 @@ def _run_convert(arguments: argparse.Namespace) -> int:
         "status": "passed",
         "plugin": "dad3dheads-local",
         "plugin_revision": DAD_REVISION,
+        "conversion_attempt": arguments.attempt,
         "plain_glb_sha256": sha256_file(plain),
         "colored_glb_sha256": sha256_file(colored),
         "vertex_count": measured.vertex_count,
@@ -524,7 +550,8 @@ def _run_verify(
 ) -> int:
     run = arguments.run.resolve(strict=True)
     inference = _load_object(run / "inference/record.json", "inference record")
-    conversion = _load_object(run / "conversion/record.json", "conversion record")
+    suffix = "" if arguments.attempt == 1 else f"-v{arguments.attempt}"
+    conversion = _load_object(run / f"conversion/record{suffix}.json", "conversion record")
     _verify_seal(inference, "record_sha256", "inference record")
     _verify_seal(conversion, "record_sha256", "conversion record")
     source = arguments.source.resolve(strict=True)
@@ -532,22 +559,30 @@ def _run_verify(
     if before.sha256 != inference["source_sha256"]:
         raise ValueError("private source differs from the inference record")
     blender = arguments.blender.resolve(strict=True)
-    dad = run / "conversion/head-colored.glb"
+    dad = run / f"conversion/head-colored{suffix}.glb"
     anchor = arguments.triposr_anchor.resolve(strict=True)
     hybrid = arguments.triposr_hybrid.resolve(strict=True)
     if sha256_file(dad) != conversion["colored_glb_sha256"]:
         raise ValueError("colored DAD GLB differs from the conversion record")
     validate_glb(dad)
     previews = [
-        ("DAD-3DHeads", dad, run / "verification/dad.png"),
-        ("TripoSR front anchor", anchor, run / "verification/triposr-anchor.png"),
-        ("TripoSR face hybrid", hybrid, run / "verification/triposr-hybrid.png"),
+        ("DAD-3DHeads", dad, run / f"verification/dad{suffix}.png"),
+        (
+            "TripoSR front anchor",
+            anchor,
+            run / f"verification/triposr-anchor{suffix}.png",
+        ),
+        (
+            "TripoSR face hybrid",
+            hybrid,
+            run / f"verification/triposr-hybrid{suffix}.png",
+        ),
     ]
     for _label, mesh, output in previews:
         if output.exists():
             raise FileExistsError(f"refusing to overwrite {output}")
         preview_runner(mesh, output, blender)
-    comparison = run / "verification/comparison.png"
+    comparison = run / f"verification/comparison{suffix}.png"
     _write_comparison([(label, output) for label, _mesh, output in previews], comparison)
     verify_source_unchanged(source, before)
     report = {
@@ -555,13 +590,14 @@ def _run_verify(
         "schema_version": "0.1",
         "status": "passed",
         "plugin": "dad3dheads-local",
+        "conversion_attempt": arguments.attempt,
         "source_unchanged": True,
         "dad_glb_sha256": conversion["colored_glb_sha256"],
         "comparison_sha256": sha256_file(comparison),
         "visual_quality": "unreviewed",
         "identity_consistency": "unmeasured",
     }
-    report_path = run / "verification/report.json"
+    report_path = run / f"verification/report{suffix}.json"
     if report_path.exists():
         raise FileExistsError("refusing to overwrite face plugin verification")
     report_path.write_text(canonical_json(report), encoding="utf-8")
@@ -586,12 +622,14 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--source", type=Path, required=True)
     convert = commands.add_parser("convert")
     convert.add_argument("--run", type=Path, required=True)
+    convert.add_argument("--attempt", type=int, choices=range(1, 10), default=1)
     verify = commands.add_parser("verify")
     verify.add_argument("--run", type=Path, required=True)
     verify.add_argument("--source", type=Path, required=True)
     verify.add_argument("--blender", type=Path, required=True)
     verify.add_argument("--triposr-anchor", type=Path, required=True)
     verify.add_argument("--triposr-hybrid", type=Path, required=True)
+    verify.add_argument("--attempt", type=int, choices=range(1, 10), default=1)
     return parser
 
 

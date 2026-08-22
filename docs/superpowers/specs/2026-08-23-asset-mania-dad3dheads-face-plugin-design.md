@@ -255,7 +255,8 @@ The raw DAD OBJ remains preserved as model evidence. A separate deterministic st
 
 1. parses finite vertices and integer triangle indices;
 2. rejects empty, degenerate, non-finite, or out-of-range geometry;
-3. records connected components, boundary edges, winding consistency, signed volume when defined,
+3. records the fixed head and two equal eye-shell components, boundary edges, winding consistency,
+   signed volume when defined,
    bounds, vertex count, and triangle count;
 4. normalizes by bounds centre and longest extent without changing proportions;
 5. rotates only according to a fixed, synthetic-tested DAD-to-Blender axis transform;

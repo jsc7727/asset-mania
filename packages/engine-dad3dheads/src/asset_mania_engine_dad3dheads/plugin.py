@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import subprocess
@@ -134,6 +135,25 @@ def _deny_network() -> None:
     requests.sessions.Session.request = refuse
 
 
+def _install_python312_compatibility() -> None:
+    if not hasattr(inspect, "getargspec"):
+        inspect.getargspec = inspect.getfullargspec
+    import numpy as np
+
+    aliases = {
+        "bool": np.bool_,
+        "int": int,
+        "float": float,
+        "complex": complex,
+        "object": object,
+        "unicode": str,
+        "str": str,
+    }
+    for name, value in aliases.items():
+        if name not in np.__dict__:
+            setattr(np, name, value)
+
+
 def _tensor_numpy(value):
     if hasattr(value, "detach"):
         value = value.detach()
@@ -170,6 +190,7 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
         }
     )
     _deny_network()
+    _install_python312_compatibility()
     sys.path.insert(0, str(settings.source_root))
 
     import cv2

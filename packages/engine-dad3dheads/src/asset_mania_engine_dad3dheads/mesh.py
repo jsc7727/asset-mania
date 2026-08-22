@@ -15,7 +15,7 @@ _NEUTRAL_RGBA = np.array([160, 145, 140, 255], dtype=np.uint8)
 _DAD_TO_BLENDER = np.array(
     [
         [1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
         [0.0, -1.0, 0.0],
     ],
     dtype=np.float64,
@@ -64,7 +64,7 @@ def _edge_counts(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.unique(edges, axis=0, return_counts=True)
 
 
-def _component_count(vertex_count: int, faces: np.ndarray) -> int:
+def _component_face_counts(vertex_count: int, faces: np.ndarray) -> list[int]:
     parent = list(range(vertex_count))
 
     def find(index: int) -> int:
@@ -85,7 +85,11 @@ def _component_count(vertex_count: int, faces: np.ndarray) -> int:
         used.update((a, b, c))
         union(a, b)
         union(b, c)
-    return len({find(index) for index in used})
+    counts: dict[int, int] = {}
+    for face in faces:
+        root = find(int(face[0]))
+        counts[root] = counts.get(root, 0) + 1
+    return sorted(counts.values(), reverse=True)
 
 
 def _boundary_loop_count(boundary_edges: np.ndarray) -> int:
@@ -125,9 +129,15 @@ def _measure(mesh: trimesh.Trimesh, *, observed_color_coverage: float) -> DADMes
     areas = np.linalg.norm(np.cross(vectors_a, vectors_b), axis=1) * 0.5
     if np.count_nonzero(areas > _AREA_EPSILON) != len(areas):
         raise ValueError("DAD mesh contains zero-area triangles")
-    component_count = _component_count(len(vertices), faces)
-    if component_count != 1:
-        raise ValueError("DAD mesh must contain one connected component")
+    component_faces = _component_face_counts(len(vertices), faces)
+    component_count = len(component_faces)
+    fixed_eye_shells = (
+        component_count == 3
+        and component_faces[1] == component_faces[2]
+        and component_faces[0] >= 2 * component_faces[1]
+    )
+    if component_count != 1 and not fixed_eye_shells:
+        raise ValueError("DAD mesh has an unexpected fixed component topology")
     edges, counts = _edge_counts(faces)
     boundary_edges = edges[counts == 1]
     non_manifold = int(np.count_nonzero(counts > 2))

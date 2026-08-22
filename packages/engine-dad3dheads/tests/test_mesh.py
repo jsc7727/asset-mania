@@ -2,7 +2,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from asset_mania_engine_dad3dheads.mesh import convert_dad_mesh, inspect_dad_mesh
+from asset_mania_engine_dad3dheads.mesh import (
+    _DAD_TO_BLENDER,
+    convert_dad_mesh,
+    inspect_dad_mesh,
+)
+
+
+def test_dad_axes_face_blender_positive_y_camera_and_keep_image_up() -> None:
+    dad_front = np.array([0.0, 0.0, -1.0])
+    dad_image_up = np.array([0.0, -1.0, 0.0])
+
+    assert np.allclose(dad_front @ _DAD_TO_BLENDER.T, [0.0, 1.0, 0.0])
+    assert np.allclose(dad_image_up @ _DAD_TO_BLENDER.T, [0.0, 0.0, 1.0])
+
+
 from PIL import Image
 
 
@@ -56,8 +70,37 @@ f 4 5 6
 """.lstrip(),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="one connected component"):
+    with pytest.raises(ValueError, match="fixed component topology"):
         inspect_dad_mesh(fragmented)
+
+
+def test_inspect_accepts_fixed_head_plus_two_equal_eye_shells(tmp_path: Path) -> None:
+    obj = tmp_path / "three-shells.obj"
+    obj.write_text(
+        """
+v -1 -1 0
+v 1 -1 0
+v 0 1 0
+v 0 0 1
+v 3 0 0
+v 4 0 0
+v 3 1 0
+v -4 0 0
+v -3 0 0
+v -4 1 0
+f 1 3 2
+f 1 2 4
+f 2 3 4
+f 3 1 4
+f 5 6 7
+f 8 9 10
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = inspect_dad_mesh(obj)
+
+    assert result.component_count == 3
 
 
 def test_convert_writes_plain_and_front_colored_glbs(tmp_path: Path) -> None:

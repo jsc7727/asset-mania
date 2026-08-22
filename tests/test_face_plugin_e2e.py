@@ -15,6 +15,7 @@ from scripts.run_face_plugin_e2e import (
     CHECKPOINT_URL,
     DAD_REVISION,
     SOURCE_URL,
+    _plugin_environment,
     main,
 )
 
@@ -125,6 +126,18 @@ def test_plan_fixes_model_license_runtime_and_no_egress(tmp_path: Path) -> None:
     assert plan["retry_count"] == 0
     assert plan["face_egress"] == "none"
     assert len(plan["plan_sha256"]) == 64
+
+
+def test_plugin_environment_keeps_path_but_drops_provider_credentials(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("PATH", "synthetic-path")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
+
+    environment = _plugin_environment(tmp_path / "source", tmp_path / "home")
+
+    assert environment["PATH"] == "synthetic-path"
+    assert "OPENAI_API_KEY" not in environment
 
 
 def test_acquire_requires_exact_approval_reference(tmp_path: Path) -> None:
@@ -247,6 +260,49 @@ def test_smoke_refuses_cpu_or_wrong_torch(tmp_path: Path) -> None:
         )
 
 
+def test_smoke_resumes_same_created_input_after_plugin_failure(tmp_path: Path) -> None:
+    run = _acquired_run(tmp_path)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+
+    def fail_once(**_kwargs):
+        raise ValueError("synthetic plugin failure")
+
+    with pytest.raises(ValueError, match="synthetic plugin failure"):
+        main(
+            [
+                "smoke",
+                "--run",
+                str(run),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=_cuda_probe,
+            plugin_runner=fail_once,
+        )
+
+    assert (
+        main(
+            [
+                "smoke",
+                "--run",
+                str(run),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=_cuda_probe,
+            plugin_runner=_fake_plugin,
+        )
+        == 0
+    )
+
+
 def test_private_run_preserves_source_and_redacts_path(tmp_path: Path) -> None:
     run = _acquired_run(tmp_path)
     python = tmp_path / "python.exe"
@@ -347,6 +403,17 @@ def test_convert_seals_plain_and_colored_glbs(tmp_path: Path) -> None:
     assert record["identity_consistency"] == "unmeasured"
     assert len(record["plain_glb_sha256"]) == 64
     assert len(record["colored_glb_sha256"]) == 64
+
+
+def test_convert_attempt_two_uses_new_create_only_paths(tmp_path: Path) -> None:
+    run, _source = _private_inference_run(tmp_path)
+    main(["convert", "--run", str(run)])
+
+    assert main(["convert", "--run", str(run), "--attempt", "2"]) == 0
+
+    assert (run / "conversion/head-v2.glb").is_file()
+    assert (run / "conversion/head-colored-v2.glb").is_file()
+    assert (run / "conversion/record-v2.json").is_file()
 
 
 def test_verify_writes_three_row_comparison_and_unreviewed_report(tmp_path: Path) -> None:

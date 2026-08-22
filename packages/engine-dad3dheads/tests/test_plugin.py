@@ -1,10 +1,13 @@
+import inspect
 import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 from asset_mania_engine_dad3dheads.plugin import (
     DADPluginSettings,
+    _install_python312_compatibility,
     run_face_plugin,
     validate_dad_runtime,
 )
@@ -16,6 +19,23 @@ from asset_mania_pipeline import (
 
 REVISION = "68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7"
 DIGEST = "a" * 64
+
+
+def test_python312_compatibility_restores_getargspec(monkeypatch) -> None:
+    monkeypatch.delattr(inspect, "getargspec", raising=False)
+    for name in ("bool", "int", "float", "complex", "object", "unicode", "str"):
+        monkeypatch.delattr(np, name, raising=False)
+
+    _install_python312_compatibility()
+
+    assert inspect.getargspec is inspect.getfullargspec
+    assert np.bool is np.bool_
+    assert np.int is int
+    assert np.float is float
+    assert np.complex is complex
+    assert np.object is object
+    assert np.unicode is str
+    assert np.str is str
 
 
 def _request(tmp_path: Path):
