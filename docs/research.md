@@ -30,5 +30,17 @@ centering, area continuity, and duplicate pixels; it performs no identity embedd
 comparison. Yaw-aware TripoSR voxel voting is a research consensus method, not photogrammetry and
 not a face-accuracy benchmark.
 
+The private live turntable experiment confirmed that a geometrically valid result can still be a
+visual failure. Eight generated yaws passed structural checks and six of eight TripoSR meshes were
+closed at resolution 256. Cleanup produced one watertight, winding-consistent, positive-volume
+GLB, but majority voting removed recognizable facial detail. Identity consistency remains
+unmeasured.
+
+`face-anchor-visual-hull-v1` is the bounded follow-up. It preserves one observed-front TripoSR
+anchor and carves a robust seven-of-eight silhouette hull for side and rear completion. It adds no
+model or provider. The verified CUDA path reduces iteration time, but GPU acceleration changes
+runtime rather than likeness. The hybrid has deterministic and synthetic runtime coverage; live
+face quality unverified until the private Blender comparison is reviewed.
+
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.

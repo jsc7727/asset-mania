@@ -72,3 +72,22 @@ once in yaw order and never retry. `reconstruct` and `verify` are local and offl
 All source images, prompts, receipts, generated views, masks, per-view meshes, fused meshes, and
 previews belong below `.asset-mania/` and must never be committed. The path is currently
 fake-transport and synthetic-fusion verified, not live-provider verified.
+
+## Maintainer face-anchor visual-hull path
+
+`scripts/run_face_hybrid_e2e.py` is a separate private research runner. It never generates or
+uploads a view. It consumes an already approved local eight-view directory and exposes four
+create-only stages:
+
+```text
+prepare --views <private-yaw-directory> --out <private-run-parent>
+anchor  --run <run> --clearance <clearance.json> --engine-root <TripoSR> \
+        --weights <weights> --hub-cache <cache> --device cuda
+fuse    --run <run>
+verify  --run <run> --views <private-yaw-directory> [--blender <Blender 5.2>]
+```
+
+The profile is `face-anchor-visual-hull-v1`. It runs TripoSR only for the observed yaw-0 anchor,
+uses the eight masks for a coarse full-head envelope, and projects view colors onto the final GLB.
+It never falls back from CUDA to CPU silently. Identity consistency remains unmeasured, and live
+face quality unverified until a human reviews the private Blender preview.
