@@ -159,9 +159,145 @@ def canonicalize_views(
     ]
 
 
+def _validate_settings(settings: FaceHybridSettings) -> None:
+    if (
+        not isinstance(settings.grid_resolution, int)
+        or isinstance(settings.grid_resolution, bool)
+        or not 16 <= settings.grid_resolution <= 512
+    ):
+        raise ValueError("grid_resolution must be an integer in 16..512")
+    if (
+        not isinstance(settings.minimum_silhouette_votes, int)
+        or isinstance(settings.minimum_silhouette_votes, bool)
+        or not 1 <= settings.minimum_silhouette_votes <= len(TURNTABLE_YAWS)
+    ):
+        raise ValueError("minimum_silhouette_votes must be an integer in 1..8")
+    if not isinstance(settings.front_seam, (int, float)) or not 0 < settings.front_seam < 0.6:
+        raise ValueError("front_seam must be within the common cube")
+
+
+def _load_canonical_masks(views: Sequence[CanonicalView]) -> list[np.ndarray]:
+    records = list(views)
+    if [record.yaw for record in records] != list(TURNTABLE_YAWS):
+        raise ValueError(f"views must use the ordered yaws {list(TURNTABLE_YAWS)}")
+    masks = []
+    for record in records:
+        try:
+            with Image.open(record.mask_path) as opened:
+                opened.load()
+                if opened.size != (CANONICAL_RESOLUTION, CANONICAL_RESOLUTION):
+                    raise ValueError(f"yaw {record.yaw} mask must be 1024x1024")
+                mask = np.asarray(opened.convert("L")) >= 128
+        except OSError as error:
+            raise ValueError(f"yaw {record.yaw} mask is unreadable") from error
+        if not mask.any():
+            raise ValueError(f"yaw {record.yaw} mask has no foreground")
+        masks.append(mask)
+    return masks
+
+
+def _clean_volume(occupancy: np.ndarray) -> np.ndarray:
+    from scipy.ndimage import (
+        binary_closing,
+        binary_fill_holes,
+        generate_binary_structure,
+        label,
+    )
+
+    structure = generate_binary_structure(3, 3)
+    cleaned = binary_closing(np.asarray(occupancy, dtype=bool), structure=structure, iterations=1)
+    cleaned = binary_fill_holes(cleaned)
+    labels, count = label(cleaned, structure=structure)
+    if count == 0:
+        raise ValueError("visual hull is empty")
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    cleaned = labels == int(np.argmax(sizes))
+    boundary = np.concatenate(
+        (
+            cleaned[0].ravel(),
+            cleaned[-1].ravel(),
+            cleaned[:, 0].ravel(),
+            cleaned[:, -1].ravel(),
+            cleaned[:, :, 0].ravel(),
+            cleaned[:, :, -1].ravel(),
+        )
+    )
+    if boundary.any():
+        raise ValueError("visual hull touches the common grid boundary")
+    return cleaned
+
+
+def _reprojection_metrics(
+    occupancy: np.ndarray, views: Sequence[CanonicalView], masks: Sequence[np.ndarray]
+) -> dict[str, float]:
+    resolution = occupancy.shape[0]
+    indices = np.argwhere(occupancy)
+    coordinates = -COMMON_RADIUS + indices * (2 * COMMON_RADIUS / (resolution - 1))
+    values = []
+    for record, mask in zip(views, masks, strict=True):
+        projected = project_points(coordinates, yaw=record.yaw, resolution=resolution)
+        pixels = np.rint(projected).astype(int)
+        valid = np.logical_and(pixels >= 0, pixels < resolution).all(axis=1)
+        silhouette = np.zeros((resolution, resolution), dtype=bool)
+        pixels = pixels[valid]
+        silhouette[pixels[:, 1], pixels[:, 0]] = True
+        target = np.asarray(
+            Image.fromarray(mask).resize((resolution, resolution), Image.Resampling.NEAREST),
+            dtype=bool,
+        )
+        union = np.logical_or(silhouette, target).sum()
+        intersection = np.logical_and(silhouette, target).sum()
+        values.append(float(intersection / union) if union else 0.0)
+    return {
+        "minimum_reprojection_iou": float(min(values)),
+        "mean_reprojection_iou": float(np.mean(values)),
+    }
+
+
+def build_visual_hull(
+    views: Sequence[CanonicalView], settings: FaceHybridSettings
+) -> tuple[np.ndarray, dict[str, float]]:
+    """Carve a robust seven-of-eight visual hull from canonical head silhouettes."""
+    _validate_settings(settings)
+    records = list(views)
+    masks = _load_canonical_masks(records)
+    resolution = settings.grid_resolution
+    coordinates = np.linspace(-COMMON_RADIUS, COMMON_RADIUS, resolution)
+    occupancy = np.zeros((resolution, resolution, resolution), dtype=bool)
+    slab_depth = min(16, resolution)
+    for start in range(0, resolution, slab_depth):
+        stop = min(start + slab_depth, resolution)
+        x, y, z = np.meshgrid(
+            coordinates,
+            coordinates,
+            coordinates[start:stop],
+            indexing="ij",
+        )
+        points = np.column_stack((x.ravel(), y.ravel(), z.ravel()))
+        votes = np.zeros(len(points), dtype=np.uint8)
+        for record, mask in zip(records, masks, strict=True):
+            projected = project_points(points, yaw=record.yaw, resolution=CANONICAL_RESOLUTION)
+            pixels = np.rint(projected).astype(int)
+            valid = np.logical_and(pixels >= 0, pixels < CANONICAL_RESOLUTION).all(axis=1)
+            supported = np.zeros(len(points), dtype=bool)
+            valid_pixels = pixels[valid]
+            supported[valid] = mask[valid_pixels[:, 1], valid_pixels[:, 0]]
+            votes += supported
+        occupancy[:, :, start:stop] = (
+            votes.reshape(resolution, resolution, stop - start) >= settings.minimum_silhouette_votes
+        )
+    occupancy = _clean_volume(occupancy)
+    metrics = _reprojection_metrics(occupancy, records, masks)
+    if metrics["minimum_reprojection_iou"] < 0.72 or metrics["mean_reprojection_iou"] < 0.82:
+        raise ValueError("visual hull reprojection gate failed")
+    return occupancy, metrics
+
+
 __all__ = [
     "CanonicalView",
     "FaceHybridSettings",
+    "build_visual_hull",
     "canonicalize_views",
     "project_points",
 ]

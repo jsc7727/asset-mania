@@ -3,6 +3,7 @@
 from .face_hybrid import (
     CanonicalView,
     FaceHybridSettings,
+    build_visual_hull,
     canonicalize_views,
     project_points,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "FusionResult",
     "FusionSettings",
     "YawMesh",
+    "build_visual_hull",
     "canonicalize_views",
     "fuse_turntable_meshes",
     "normalize_and_rotate",

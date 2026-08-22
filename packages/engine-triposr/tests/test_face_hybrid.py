@@ -8,6 +8,8 @@ import pytest
 from asset_mania_contracts import TURNTABLE_YAWS
 from asset_mania_engine_triposr.face_hybrid import (
     CanonicalView,
+    FaceHybridSettings,
+    build_visual_hull,
     canonicalize_views,
     project_points,
 )
@@ -114,3 +116,87 @@ def test_canonicalization_rejects_duplicate_decoded_images(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="duplicate"):
         canonicalize_views(views, tmp_path / "canonical")
+
+
+def _analytic_views(
+    directory: Path,
+    *,
+    smaller_yaws: set[int] | None = None,
+    smaller_factor: float = 0.86,
+) -> list[CanonicalView]:
+    directory.mkdir(parents=True, exist_ok=True)
+    smaller = smaller_yaws or set()
+    centre = 511.5
+    pixels_per_unit = 1023 / 1.2
+    result = []
+    for index, yaw in enumerate(TURNTABLE_YAWS):
+        radians = np.deg2rad(yaw)
+        # One 14% scale outlier still overlaps about 74% by area and is tolerated; two
+        # independent outliers force the seven-vote hull to shrink and fail the mean-IoU gate.
+        factor = smaller_factor if yaw in smaller else 1.0
+        base_x, base_y, base_z = 0.40 * factor, 0.32 * factor, 0.50 * factor
+        radius_u = np.sqrt((base_x * np.sin(radians)) ** 2 + (base_y * np.cos(radians)) ** 2)
+        mask = Image.new("L", (1024, 1024), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse(
+            (
+                centre - radius_u * pixels_per_unit,
+                centre - base_z * pixels_per_unit,
+                centre + radius_u * pixels_per_unit,
+                centre + base_z * pixels_per_unit,
+            ),
+            fill=255,
+        )
+        if yaw not in smaller:
+            bump_x, bump_y, bump_z = 0.11, 0.09, 0.12
+            bump_u = -np.sin(radians) * 0.39
+            bump_radius_u = np.sqrt(
+                (bump_x * np.sin(radians)) ** 2 + (bump_y * np.cos(radians)) ** 2
+            )
+            draw.ellipse(
+                (
+                    centre + (bump_u - bump_radius_u) * pixels_per_unit,
+                    centre - bump_z * pixels_per_unit,
+                    centre + (bump_u + bump_radius_u) * pixels_per_unit,
+                    centre + bump_z * pixels_per_unit,
+                ),
+                fill=255,
+            )
+        image_path = directory / f"yaw-{yaw:03d}.png"
+        mask_path = directory / f"yaw-{yaw:03d}-mask.png"
+        Image.new("RGB", (1024, 1024), (40 + index * 20, 80, 120)).save(image_path)
+        mask.save(mask_path)
+        result.append(CanonicalView(yaw, image_path, mask_path))
+    return result
+
+
+def test_visual_hull_reconstructs_one_supported_subject_volume(tmp_path: Path) -> None:
+    views = _analytic_views(tmp_path / "views")
+
+    occupancy, metrics = build_visual_hull(views, FaceHybridSettings(48, 7, 0.08))
+
+    assert occupancy.dtype == bool
+    assert occupancy.shape == (48, 48, 48)
+    assert occupancy.any()
+    assert metrics["minimum_reprojection_iou"] >= 0.72
+    assert metrics["mean_reprojection_iou"] >= 0.82
+
+
+def test_visual_hull_tolerates_one_inconsistent_generated_silhouette(tmp_path: Path) -> None:
+    views = _analytic_views(tmp_path / "views", smaller_yaws={315})
+
+    occupancy, metrics = build_visual_hull(views, FaceHybridSettings(48, 7, 0.08))
+
+    assert occupancy.any()
+    assert metrics["minimum_reprojection_iou"] >= 0.72
+
+
+def test_visual_hull_rejects_two_inconsistent_silhouettes(tmp_path: Path) -> None:
+    views = _analytic_views(
+        tmp_path / "views",
+        smaller_yaws={90, 180},
+        smaller_factor=0.60,
+    )
+
+    with pytest.raises(ValueError, match="visual hull reprojection gate failed"):
+        build_visual_hull(views, FaceHybridSettings(48, 7, 0.08))
