@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import subprocess
 import urllib.request
@@ -13,7 +14,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from asset_mania_contracts import canonical_digest, canonical_json
-from asset_mania_pipeline import sha256_file
+from asset_mania_engine_dad3dheads import run_face_plugin
+from asset_mania_pipeline import (
+    build_face_plugin_request,
+    fingerprint_source,
+    sha256_file,
+    verify_source_unchanged,
+    write_face_plugin_request,
+)
+from PIL import Image, ImageDraw, ImageOps
 
 DAD_REVISION = "68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7"
 SOURCE_URL = "https://github.com/PinataFarms/DAD-3DHeads.git"
@@ -188,6 +197,225 @@ def _run_acquire(
     return 0
 
 
+def _runtime_probe(python: Path) -> dict:
+    script = (
+        "import json,platform,torch;"
+        "print(json.dumps({'python':platform.python_version(),'torch':torch.__version__,"
+        "'cuda_runtime':torch.version.cuda,'cuda_available':torch.cuda.is_available(),"
+        "'device_type':'cuda' if torch.cuda.is_available() else 'cpu'}))"
+    )
+    completed = subprocess.run(
+        [str(python), "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise ValueError("approved CUDA runtime probe failed")
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError("approved CUDA runtime probe was unreadable") from error
+    if not isinstance(result, dict):
+        raise TypeError("approved CUDA runtime probe must return an object")
+    return result
+
+
+def _validate_runtime_probe(probe: dict) -> None:
+    if (
+        probe.get("torch") != "2.13.0+cu130"
+        or probe.get("cuda_available") is not True
+        or probe.get("device_type") != "cuda"
+    ):
+        raise ValueError("approved CUDA runtime is unavailable")
+
+
+def _load_acquisition(run: Path) -> tuple[dict, Path, Path]:
+    plan = _load_object(run / "plan/plan.json", "face plugin plan")
+    receipt = _load_object(run / "acquisition/receipt.json", "acquisition receipt")
+    _verify_seal(plan, "plan_sha256", "face plugin plan")
+    _verify_seal(receipt, "receipt_sha256", "acquisition receipt")
+    if receipt["plan_sha256"] != plan["plan_sha256"]:
+        raise ValueError("acquisition receipt does not belong to the plan")
+    source_root = run / "acquisition/source"
+    isolated_home = run / "acquisition/home"
+    checkpoint = isolated_home / ".dad_checkpoints/dad_3dheads.trcd"
+    if sha256_file(checkpoint) != receipt["checkpoint_sha256"]:
+        raise ValueError("checkpoint differs from the acquisition receipt")
+    return receipt, source_root, isolated_home
+
+
+def _plugin_environment(source_root: Path, isolated_home: Path) -> dict[str, str]:
+    environment = {
+        key: os.environ[key]
+        for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATHEXT")
+        if key in os.environ
+    }
+    environment.update(
+        {
+            "HOME": str(isolated_home),
+            "USERPROFILE": str(isolated_home),
+            "XDG_CACHE_HOME": str(isolated_home / "xdg-cache"),
+            "TORCH_HOME": str(isolated_home / "torch-cache"),
+            "HF_HOME": str(isolated_home / "hf-cache"),
+            "PYTHONNOUSERSITE": "1",
+            "ASSET_MANIA_DAD_SOURCE_ROOT": str(source_root),
+            "ASSET_MANIA_DAD_ISOLATED_HOME": str(isolated_home),
+        }
+    )
+    return environment
+
+
+def _invoke_plugin(
+    *,
+    run: Path,
+    stage: str,
+    source_image: Path,
+    python: Path,
+    plugin_command: Path,
+    runtime_probe: Callable[[Path], dict],
+    plugin_runner: Callable,
+):
+    if not python.is_file() or not plugin_command.is_file():
+        raise ValueError("explicit face plugin executable is unavailable")
+    probe = runtime_probe(python)
+    _validate_runtime_probe(probe)
+    receipt, source_root, isolated_home = _load_acquisition(run)
+    output = run / stage / "plugin-output"
+    request_path = run / stage / "request.json"
+    result_path = run / stage / "result.json"
+    request = build_face_plugin_request(
+        plugin="dad3dheads-local",
+        plugin_revision=DAD_REVISION,
+        source_image=source_image,
+        output_directory=output,
+        device="cuda",
+        checkpoint_sha256=receipt["checkpoint_sha256"],
+    )
+    write_face_plugin_request(request, request_path)
+    result = plugin_runner(
+        command=[str(plugin_command)],
+        request=request,
+        request_path=request_path,
+        result_path=result_path,
+        timeout_seconds=300,
+        environment=_plugin_environment(source_root, isolated_home),
+    )
+    if result.status != "succeeded":
+        raise ValueError(f"face plugin returned {result.status}")
+    return probe, receipt, result
+
+
+def _run_smoke(
+    arguments: argparse.Namespace,
+    *,
+    runtime_probe: Callable[[Path], dict],
+    plugin_runner: Callable,
+) -> int:
+    run = arguments.run.resolve(strict=True)
+    source = run / "smoke/source.png"
+    if source.exists() or (run / "smoke/record.json").exists():
+        raise FileExistsError("refusing to overwrite face plugin smoke")
+    image = Image.new("RGB", (256, 256), (238, 238, 238))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((48, 24, 208, 232), fill=(196, 160, 132))
+    draw.ellipse((86, 98, 106, 112), fill=(30, 30, 30))
+    draw.ellipse((150, 98, 170, 112), fill=(30, 30, 30))
+    draw.arc((100, 132, 156, 180), 10, 170, fill=(80, 30, 30), width=3)
+    image.save(source, format="PNG", compress_level=9)
+    probe, receipt, result = _invoke_plugin(
+        run=run,
+        stage="smoke",
+        source_image=source,
+        python=arguments.python.resolve(),
+        plugin_command=arguments.plugin_command.resolve(),
+        runtime_probe=runtime_probe,
+        plugin_runner=plugin_runner,
+    )
+    preimage = {
+        "schema_id": "asset-mania/private-face-plugin-smoke",
+        "schema_version": "0.1",
+        "status": "passed",
+        "plugin": "dad3dheads-local",
+        "plugin_revision": DAD_REVISION,
+        "checkpoint_sha256": receipt["checkpoint_sha256"],
+        "torch": probe["torch"],
+        "device": "cuda",
+        "vertex_count": result.vertex_count,
+        "triangle_count": result.triangle_count,
+        "elapsed_seconds": result.elapsed_seconds,
+    }
+    record = {**preimage, "record_sha256": canonical_digest(preimage)}
+    (run / "smoke/record.json").write_text(canonical_json(record), encoding="utf-8")
+    return 0
+
+
+def _normalise_source(source: Path, output: Path) -> None:
+    if output.exists():
+        raise FileExistsError(f"refusing to overwrite {output}")
+    try:
+        with Image.open(source) as opened:
+            normalized = ImageOps.exif_transpose(opened).convert("RGB")
+            normalized.load()
+    except OSError as error:
+        raise ValueError("private face source is unreadable") from error
+    normalized.save(output, format="PNG", compress_level=9)
+
+
+def _run_private_inference(
+    arguments: argparse.Namespace,
+    *,
+    runtime_probe: Callable[[Path], dict],
+    plugin_runner: Callable,
+) -> int:
+    run = arguments.run.resolve(strict=True)
+    smoke = _load_object(run / "smoke/record.json", "smoke record")
+    _verify_seal(smoke, "record_sha256", "smoke record")
+    receipt, _source_root, _isolated_home = _load_acquisition(run)
+    if (
+        smoke["plugin_revision"] != DAD_REVISION
+        or smoke["checkpoint_sha256"] != receipt["checkpoint_sha256"]
+    ):
+        raise ValueError("smoke record differs from the acquired plugin")
+    source = arguments.source.resolve(strict=True)
+    before = fingerprint_source(source)
+    normalized = run / "inference/source.png"
+    record_path = run / "inference/record.json"
+    if record_path.exists():
+        raise FileExistsError("refusing to overwrite private face inference")
+    _normalise_source(source, normalized)
+    _probe, _receipt, result = _invoke_plugin(
+        run=run,
+        stage="inference",
+        source_image=normalized,
+        python=arguments.python.resolve(),
+        plugin_command=arguments.plugin_command.resolve(),
+        runtime_probe=runtime_probe,
+        plugin_runner=plugin_runner,
+    )
+    verify_source_unchanged(source, before)
+    preimage = {
+        "schema_id": "asset-mania/private-face-plugin-inference",
+        "schema_version": "0.1",
+        "status": "passed",
+        "plugin": "dad3dheads-local",
+        "plugin_revision": DAD_REVISION,
+        "checkpoint_sha256": receipt["checkpoint_sha256"],
+        "source_sha256": before.sha256,
+        "source_unchanged": True,
+        "normalized_sha256": sha256_file(normalized),
+        "raw_mesh_sha256": sha256_file(result.raw_mesh),
+        "projection_sha256": sha256_file(result.projection_data),
+        "vertex_count": result.vertex_count,
+        "triangle_count": result.triangle_count,
+        "elapsed_seconds": result.elapsed_seconds,
+        "identity_consistency": "unmeasured",
+    }
+    record = {**preimage, "record_sha256": canonical_digest(preimage)}
+    record_path.write_text(canonical_json(record), encoding="utf-8")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -197,6 +425,13 @@ def build_parser() -> argparse.ArgumentParser:
     acquire = commands.add_parser("acquire")
     acquire.add_argument("--run", type=Path, required=True)
     acquire.add_argument("--approval-reference", required=True)
+    for name in ("smoke", "run"):
+        command = commands.add_parser(name)
+        command.add_argument("--run", type=Path, required=True)
+        command.add_argument("--python", type=Path, required=True)
+        command.add_argument("--plugin-command", type=Path, required=True)
+        if name == "run":
+            command.add_argument("--source", type=Path, required=True)
     return parser
 
 
@@ -209,6 +444,8 @@ def main(
     checkpoint_downloader: Callable[[str, Path, int], None] | None = None,
     revision_reader: Callable[[Path], str] | None = None,
     expected_checkpoint_bytes: int = CHECKPOINT_BYTES,
+    runtime_probe: Callable[[Path], dict] | None = None,
+    plugin_runner: Callable | None = None,
 ) -> int:
     arguments = build_parser().parse_args(list(argv) if argv is not None else None)
     timestamp = _parse_time(now)
@@ -218,12 +455,26 @@ def main(
             now=timestamp,
             run_id=(id_factory or (lambda: secrets.token_hex(4)))(),
         )
-    return _run_acquire(
+    if arguments.command == "acquire":
+        return _run_acquire(
+            arguments,
+            git_acquirer=git_acquirer or _acquire_git,
+            checkpoint_downloader=checkpoint_downloader or _download_checkpoint,
+            revision_reader=revision_reader or _git_revision,
+            expected_checkpoint_bytes=expected_checkpoint_bytes,
+        )
+    selected_probe = runtime_probe or _runtime_probe
+    selected_runner = plugin_runner or run_face_plugin
+    if arguments.command == "smoke":
+        return _run_smoke(
+            arguments,
+            runtime_probe=selected_probe,
+            plugin_runner=selected_runner,
+        )
+    return _run_private_inference(
         arguments,
-        git_acquirer=git_acquirer or _acquire_git,
-        checkpoint_downloader=checkpoint_downloader or _download_checkpoint,
-        revision_reader=revision_reader or _git_revision,
-        expected_checkpoint_bytes=expected_checkpoint_bytes,
+        runtime_probe=selected_probe,
+        plugin_runner=selected_runner,
     )
 
 

@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from asset_mania_pipeline import FacePluginResult
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -27,6 +29,63 @@ def _planned_run(tmp_path: Path) -> Path:
         == 0
     )
     return output / "20260823T000000Z-fixedrun"
+
+
+def _acquired_run(tmp_path: Path) -> Path:
+    run = _planned_run(tmp_path)
+
+    def fake_git(_url: str, _revision: str, destination: Path) -> None:
+        destination.mkdir()
+        (destination / "LICENSE").write_text("CC BY-NC-SA 4.0", encoding="utf-8")
+
+    def fake_download(_url: str, destination: Path, _expected_bytes: int) -> None:
+        destination.parent.mkdir(parents=True)
+        destination.write_bytes(b"checkpoint")
+
+    main(
+        [
+            "acquire",
+            "--run",
+            str(run),
+            "--approval-reference",
+            "face-plugin-approval-20260823",
+        ],
+        git_acquirer=fake_git,
+        checkpoint_downloader=fake_download,
+        revision_reader=lambda _source: DAD_REVISION,
+        expected_checkpoint_bytes=len(b"checkpoint"),
+    )
+    return run
+
+
+def _cuda_probe(_python: Path) -> dict:
+    return {
+        "python": "3.11.9",
+        "torch": "2.13.0+cu130",
+        "cuda_runtime": "13.0",
+        "cuda_available": True,
+        "device_type": "cuda",
+    }
+
+
+def _fake_plugin(*, request, **_kwargs) -> FacePluginResult:
+    request.output_directory.mkdir()
+    mesh = request.output_directory / "head.obj"
+    projection = request.output_directory / "projection.npz"
+    mesh.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n", encoding="utf-8")
+    projection.write_bytes(b"synthetic")
+    return FacePluginResult(
+        schema="asset-mania.face-plugin-result.v0",
+        plugin=request.plugin,
+        status="succeeded",
+        raw_mesh=mesh,
+        projection_data=projection,
+        vertex_count=3,
+        triangle_count=1,
+        elapsed_seconds=0.01,
+        device="cuda",
+        checkpoint_sha256=request.checkpoint_sha256,
+    )
 
 
 def test_plan_fixes_model_license_runtime_and_no_egress(tmp_path: Path) -> None:
@@ -107,3 +166,110 @@ def test_acquire_is_create_only(tmp_path: Path) -> None:
                 "face-plugin-approval-20260823",
             ]
         )
+
+
+def test_smoke_requires_exact_cuda_runtime_and_seals_result(tmp_path: Path) -> None:
+    run = _acquired_run(tmp_path)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+
+    assert (
+        main(
+            [
+                "smoke",
+                "--run",
+                str(run),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=_cuda_probe,
+            plugin_runner=_fake_plugin,
+        )
+        == 0
+    )
+    record = json.loads((run / "smoke/record.json").read_text(encoding="utf-8"))
+    assert record["status"] == "passed"
+    assert record["device"] == "cuda"
+    assert record["torch"] == "2.13.0+cu130"
+    assert record["vertex_count"] == 3
+    assert len(record["record_sha256"]) == 64
+
+
+def test_smoke_refuses_cpu_or_wrong_torch(tmp_path: Path) -> None:
+    run = _acquired_run(tmp_path)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+
+    def bad_probe(_python: Path) -> dict:
+        return {**_cuda_probe(_python), "torch": "2.12.0+cu130", "cuda_available": False}
+
+    with pytest.raises(ValueError, match="approved CUDA runtime"):
+        main(
+            [
+                "smoke",
+                "--run",
+                str(run),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=bad_probe,
+            plugin_runner=_fake_plugin,
+        )
+
+
+def test_private_run_preserves_source_and_redacts_path(tmp_path: Path) -> None:
+    run = _acquired_run(tmp_path)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "plugin.exe"
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
+    main(
+        [
+            "smoke",
+            "--run",
+            str(run),
+            "--python",
+            str(python),
+            "--plugin-command",
+            str(plugin),
+        ],
+        runtime_probe=_cuda_probe,
+        plugin_runner=_fake_plugin,
+    )
+    source = tmp_path / "private-person.png"
+    Image.new("RGB", (32, 32), (210, 180, 160)).save(source)
+    before = source.read_bytes()
+
+    assert (
+        main(
+            [
+                "run",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--python",
+                str(python),
+                "--plugin-command",
+                str(plugin),
+            ],
+            runtime_probe=_cuda_probe,
+            plugin_runner=_fake_plugin,
+        )
+        == 0
+    )
+    assert source.read_bytes() == before
+    record_text = (run / "inference/record.json").read_text(encoding="utf-8")
+    assert str(source) not in record_text
+    assert source.name not in record_text
+    record = json.loads(record_text)
+    assert record["source_unchanged"] is True
+    assert record["identity_consistency"] == "unmeasured"
