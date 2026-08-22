@@ -49,7 +49,8 @@ Pillow, trimesh 4.0.5, DAD-3DHeads pinned at
 - Consumes: an explicit executable command, one private source path, one new output directory,
   pinned plugin revision, checkpoint digest, device, and timeout.
 - Produces: `FacePluginRequest`, `FacePluginResult`, `build_face_plugin_request`,
-  `write_face_plugin_request`, `run_face_plugin`, and `load_face_plugin_result`.
+  `write_face_plugin_request`, and `load_face_plugin_result`. The pipeline remains pure and starts
+  no subprocess; Task 2 owns `run_face_plugin` in the optional engine package.
 
 - [ ] **Step 1: Write failing request-validation tests**
 
@@ -118,22 +119,15 @@ class FacePluginResult:
 `build_face_plugin_request` accepts only `dad3dheads-local` in v0. Absolute paths are required in
 the private request, but no public serialization helper may accept that document.
 
-- [ ] **Step 4: Write failing subprocess and result tests**
+- [ ] **Step 4: Write failing closed-result tests**
 
-Create a fake Python executable script that reads `--request` and writes `--result`. Assert that
-`run_face_plugin(command, request, request_path, result_path, timeout_seconds=30)`:
+Write result JSON directly and assert mismatched plugin, digest, device, missing output, extra
+fields, unexpected files, and failure-shaped output paths are rejected.
 
-- passes no shell string;
-- uses `shell=False` and the explicit command only;
-- rejects nonzero exit, timeout, stderr containing an absolute source path, mismatched plugin,
-  digest, device, revision, missing output, extra fields, and unexpected files;
-- never invokes a fallback command.
+- [ ] **Step 5: Implement create-only JSON I/O and closed result validation**
 
-- [ ] **Step 5: Implement create-only JSON I/O and subprocess execution**
-
-Use `canonical_json` for request/result files, `subprocess.run(..., shell=False, check=False)`, and
-an allowlisted environment supplied by the caller. Reserve the output directory before launch and
-accept only `head.obj`, `projection.npz`, and `result.json` from a successful v0 plugin.
+Use `canonical_json` for request files. Accept only `head.obj` and `projection.npz` in the plugin
+output directory for a successful v0 result. Do not import `subprocess` or `socket` in pipeline.
 
 - [ ] **Step 6: Run focused tests and commit**
 
@@ -160,7 +154,8 @@ Expected: all face-plugin protocol tests pass.
 **Interfaces:**
 - Consumes: `--request`, `--result`, `ASSET_MANIA_DAD_SOURCE_ROOT`, and
   `ASSET_MANIA_DAD_ISOLATED_HOME`.
-- Produces: a v0 result plus exactly `head.obj` and `projection.npz` inside the reserved output.
+- Produces: `run_face_plugin`, a v0 result, and exactly `head.obj` plus `projection.npz` inside the
+  reserved output.
 
 - [ ] **Step 1: Write failing adapter-boundary tests**
 

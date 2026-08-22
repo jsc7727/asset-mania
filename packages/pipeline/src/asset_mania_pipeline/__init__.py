@@ -50,6 +50,14 @@ from .containers import (
     validate_glb_alpha_profile,
     validate_glb_has_no_absolute_resource,
 )
+from .face_plugins import (
+    DAD_PLUGIN,
+    FacePluginRequest,
+    FacePluginResult,
+    build_face_plugin_request,
+    load_face_plugin_result,
+    write_face_plugin_request,
+)
 from .hashing import (
     SourceChanged,
     SourceFingerprint,
@@ -173,6 +181,7 @@ __all__ = [
     "BUNDLE_PROFILE",
     "DEPTH_ABSOLUTE_TOLERANCE_METERS",
     "DEPTH_RELATIVE_TOLERANCE",
+    "DAD_PLUGIN",
     "FBX_MAXIMUM_VERSION",
     "FBX_MINIMUM_VERSION",
     "GATE_SPELLINGS",
@@ -200,6 +209,8 @@ __all__ = [
     "EngineLicenseUncleared",
     "EngineNotCleared",
     "FbxHeader",
+    "FacePluginRequest",
+    "FacePluginResult",
     "GlbContainer",
     "OutputCollision",
     "ParentManifest",
@@ -227,6 +238,7 @@ __all__ = [
     "authorize_conditioning",
     "barycentric",
     "build_alignment_attestation",
+    "build_face_plugin_request",
     "build_selection_map",
     "clearance_summary",
     "clip_to_pixel",
@@ -254,6 +266,7 @@ __all__ = [
     "launch_if_authorized",
     "linear_to_srgb",
     "load_parent",
+    "load_face_plugin_result",
     "load_plan",
     "multiply4",
     "normalize_pixels",
@@ -305,5 +318,6 @@ __all__ = [
     "verify_source_unchanged",
     "within_pixel_bounds",
     "write_contact_sheet",
+    "write_face_plugin_request",
     "write_normalized_png",
 ]
