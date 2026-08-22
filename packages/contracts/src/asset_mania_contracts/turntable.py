@@ -50,6 +50,7 @@ def build_turntable_plan(
     source_width: int,
     source_height: int,
     source_mask_sha256: str,
+    source_cutout_sha256: str,
     prompt_sha256: str,
     provider_evidence_sha256: str,
     controls: Mapping[str, Any],
@@ -61,6 +62,7 @@ def build_turntable_plan(
     for name, digest in (
         ("source_image_sha256", source_image_sha256),
         ("source_mask_sha256", source_mask_sha256),
+        ("source_cutout_sha256", source_cutout_sha256),
         ("prompt_sha256", prompt_sha256),
         ("provider_evidence_sha256", provider_evidence_sha256),
     ):
@@ -86,6 +88,7 @@ def build_turntable_plan(
             "source_width": source_width,
             "source_height": source_height,
             "source_mask_sha256": source_mask_sha256,
+            "source_cutout_sha256": source_cutout_sha256,
             "asset_kind": "face_head",
             "subject": subject,
             "provider": "openai",

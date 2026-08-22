@@ -43,7 +43,7 @@
 - Consumes: `canonical_digest`, `required_gates_for`, and `build_likeness_disclosure` from `asset_mania_contracts`.
 - Produces:
   - `TURNTABLE_YAWS: tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)`
-  - `build_turntable_plan(*, source_image_sha256: str, source_width: int, source_height: int, source_mask_sha256: str, prompt_sha256: str, provider_evidence_sha256: str, controls: Mapping[str, Any], subject: str, estimated_cost: str, maximum_cost: str) -> dict[str, Any]`
+  - `build_turntable_plan(*, source_image_sha256: str, source_width: int, source_height: int, source_mask_sha256: str, source_cutout_sha256: str, prompt_sha256: str, provider_evidence_sha256: str, controls: Mapping[str, Any], subject: str, estimated_cost: str, maximum_cost: str) -> dict[str, Any]`
   - `build_turntable_viewset(*, plan_sha256: str, views: Sequence[Mapping[str, Any]], audit: Mapping[str, Any], reported_usage: Mapping[str, int | float], actual_cost: str | None) -> dict[str, Any]`
   - `build_multiview_reconstruction_record(*, turntable_plan_sha256: str, viewset_sha256: str, observed_source_image_sha256: str, meshes: Sequence[Mapping[str, Any]], fusion: Mapping[str, Any], fused_mesh: Mapping[str, Any], subject: str, rights_receipt_sha256: str | None) -> dict[str, Any]`
   - schema registry entries for `turntable-plan`, `turntable-viewset`, and `multiview-reconstruction`, all version `1.0`.
@@ -57,6 +57,7 @@ def test_real_person_plan_is_fixed_to_the_full_profile(validator_for):
         source_width=1024,
         source_height=1024,
         source_mask_sha256="a2" * 32,
+        source_cutout_sha256="a5" * 32,
         prompt_sha256="a3" * 32,
         provider_evidence_sha256="a4" * 32,
         controls={
@@ -233,7 +234,7 @@ git commit -m "feat: prepare and audit turntable views"
   - `generate_turntable(*, plan: Mapping[str, Any], evidence: Mapping[str, Any], receipts: Sequence[Mapping[str, Any]], base_prompt: str, cutout_path: Path, journal: ConsumptionJournal, now: datetime, consumed_at: str, transport: Transport, secret_resolver: SecretResolver) -> list[TurntableCallResult]`
   - `HTTPSMultipartTransport(connection_factory: Callable[[str, int], Any] | None = None)` implementing `Transport`.
 
-- [ ] **Step 1: Write the failing seven-call fake-transport test**
+- [x] **Step 1: Write the failing seven-call fake-transport test**
 
 ```python
 def test_one_approved_run_sends_seven_ordered_calls(turntable_plan, evidence, receipts, cutout):
@@ -254,21 +255,21 @@ def test_one_approved_run_sends_seven_ordered_calls(turntable_plan, evidence, re
     assert [sent["target_yaw"] for sent in transport.sent] == list(TURNTABLE_YAWS[1:])
 ```
 
-- [ ] **Step 2: Run the generation test and verify RED**
+- [x] **Step 2: Run the generation test and verify RED**
 
 Run: `uv run pytest packages/provider-openai/tests/test_turntable_generation.py -q`
 
 Expected: collection fails because the turntable provider does not exist.
 
-- [ ] **Step 3: Implement fixed prompt and request normalization**
+- [x] **Step 3: Implement fixed prompt and request normalization**
 
 The request uses `/v1/images/edits`, model `gpt-image-2-2026-04-21`, one `image[]` part named `source-cutout.png`, `n=1`, `1024x1024`, `medium`, opaque background, PNG, and the exact yaw-specific prompt. The redacted request record includes yaw and prompt digest, never prompt or bytes.
 
-- [ ] **Step 4: Implement approval ordering and sequential generation**
+- [x] **Step 4: Implement approval ordering and sequential generation**
 
 Verify evidence, plan seal, prompt-template digest, cutout digest, and all controls. Consume all three receipts once, resolve the secret once, then loop over yaws `45..315`. Validate each response before continuing. On the first exception, return no viewset and make no later call.
 
-- [ ] **Step 5: Add no-retry and quarantine tests**
+- [x] **Step 5: Add no-retry and quarantine tests**
 
 ```python
 @pytest.mark.parametrize("failure_index", range(7))
@@ -291,27 +292,27 @@ def test_a_failed_paid_call_stops_without_retry(failure_index, prepared_run):
     assert not (prepared_run / "turntable-viewset.json").exists()
 ```
 
-- [ ] **Step 6: Write live transport tests with an injected fake HTTPS connection**
+- [x] **Step 6: Write live transport tests with an injected fake HTTPS connection**
 
 Assert exact host `api.openai.com`, POST endpoint, authorization header presence without logging, multipart field ordering, bounded response reads, status/request-id extraction, JSON rejection, timeout mapping, and refusal of redirects or another host.
 
-- [ ] **Step 7: Run transport tests and verify RED**
+- [x] **Step 7: Run transport tests and verify RED**
 
 Run: `uv run pytest packages/provider-openai/tests/test_live_transport.py -q`
 
 Expected: failure because `HTTPSMultipartTransport` is absent.
 
-- [ ] **Step 8: Implement the standard-library HTTPS transport**
+- [x] **Step 8: Implement the standard-library HTTPS transport**
 
 Use `http.client.HTTPSConnection` with an injected factory, a random multipart boundary, exact-host construction, no proxy inheritance, an `Authorization` header containing the resolved bearer credential, and a `MAX_RESPONSE_BYTES + 1` bounded read. Return `ProviderResponse`; never print or persist the credential, multipart body, prompt, or image.
 
-- [ ] **Step 9: Run provider tests and verify GREEN**
+- [x] **Step 9: Run provider tests and verify GREEN**
 
 Run: `uv run pytest packages/provider-openai/tests/test_turntable_generation.py packages/provider-openai/tests/test_live_transport.py packages/provider-openai/tests/test_transport_boundary.py packages/provider-openai/tests/test_response_validation.py -q`
 
 Expected: all selected tests pass with sockets denied outside the injected live transport test.
 
-- [ ] **Step 10: Commit Task 3**
+- [x] **Step 10: Commit Task 3**
 
 ```powershell
 git add packages/provider-openai

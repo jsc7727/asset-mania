@@ -9,6 +9,7 @@ def _build(**overrides):
         "source_width": 1024,
         "source_height": 1024,
         "source_mask_sha256": "a2" * 32,
+        "source_cutout_sha256": "a5" * 32,
         "prompt_sha256": "a3" * 32,
         "provider_evidence_sha256": "a4" * 32,
         "controls": {
