@@ -1,7 +1,9 @@
 # Asset Mania GPT Image 2 Turntable and Multi-view Reconstruction Design
 
-**Status:** approved design, frozen before implementation  
-**Date:** 2026-08-22  
+**Status:** approved design, frozen before implementation
+
+**Date:** 2026-08-22
+
 **Scope:** one real-person face/head photograph to an eight-view generated turntable and one
 locally fused, provenance-carrying GLB
 
@@ -295,4 +297,3 @@ the immutable viewset.
 - Source bytes remain unchanged, private content stays ignored, and `git diff --check`, relevant
   tests, `make check`, `make test`, `make skill-check`, and `make release-check` pass on a supported
   platform. Windows-specific skips or failures must be reported separately rather than hidden.
-
