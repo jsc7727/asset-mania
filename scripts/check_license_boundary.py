@@ -29,6 +29,10 @@ APACHE_PACKAGES = frozenset(
         "asset_mania_pipeline",
         "asset_mania_blender_client",
         "asset_mania_provider_openai",
+        "asset_mania_engine_dad3dheads",
+        "asset_mania_engine_deca",
+        "asset_mania_engine_mica",
+        "asset_mania_engine_triposr",
     }
 )
 APACHE_PACKAGE_ROOT = PurePosixPath("packages")

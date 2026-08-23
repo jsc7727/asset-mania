@@ -50,6 +50,14 @@ _FORBIDDEN_WEIGHT_SUFFIXES = {
     ".pth",
     ".safetensors",
     ".trcd",
+    ".tar",
+    ".pkl",
+}
+_FORBIDDEN_FACE_ARTIFACT_NAMES = {
+    "aligned-face.png",
+    "mica-clay.glb",
+    "deca-clay.glb",
+    "mica-deca-clay.glb",
 }
 _TEXT_FIXTURE_SUFFIXES = {
     ".csv",
@@ -131,6 +139,7 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
         or stem == "cookie"
         or stem == "cookies"
         or PurePosixPath(name).suffix in _FORBIDDEN_WEIGHT_SUFFIXES
+        or name in _FORBIDDEN_FACE_ARTIFACT_NAMES
         or lowered_path.startswith("model_training/model/static/flame")
     )
 

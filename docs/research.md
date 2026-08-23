@@ -74,3 +74,17 @@ input resolution, topology, PyTorch build, CUDA device, or model fallback change
 
 See [the roadmap](roadmap.md) for the staged decision sequence and
 [security and privacy](security-and-privacy.md) for non-negotiable approval gates.
+
+## Planned clay-first face geometry comparison
+
+The textured DAD result is not accepted as evidence that person-specific 3D face geometry was
+recovered. A corrected-axis untextured audit showed a coherent but generalized FLAME face; most
+recognizability came from texture. The next local experiment therefore compares MICA identity
+geometry, DECA coarse/detail geometry, their bounded fusion, and corrected DAD using identical
+texture-free Blender clay renders.
+
+The new adapters persist only 5,023 FLAME positions, 9,976 triangles, source projection, and
+per-vertex detail displacement. MICA's identity feature and all detector crops and landmarks remain
+transient in a network-denied process. No external source, weight, FLAME asset, detector model, or
+real-person result is bundled. This capability remains planned and unverified until a separately
+approved private model acquisition and clay evaluation records a result.

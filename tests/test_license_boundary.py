@@ -70,6 +70,10 @@ APACHE_PACKAGES = frozenset(
         "asset_mania_pipeline",
         "asset_mania_blender_client",
         "asset_mania_provider_openai",
+        "asset_mania_engine_dad3dheads",
+        "asset_mania_engine_deca",
+        "asset_mania_engine_mica",
+        "asset_mania_engine_triposr",
     }
 )
 
@@ -88,6 +92,12 @@ def test_the_gpl_tree_imports_no_apache_package() -> None:
         if forbidden:
             offenders.append((path.relative_to(ROOT).as_posix(), forbidden))
     assert offenders == []
+
+
+def test_checker_knows_every_face_geometry_adapter_is_apache() -> None:
+    checker = CHECKER.read_text(encoding="utf-8")
+    for package in ("asset_mania_engine_mica", "asset_mania_engine_deca"):
+        assert package in checker
 
 
 def test_every_gpl_source_file_carries_the_spdx_header() -> None:

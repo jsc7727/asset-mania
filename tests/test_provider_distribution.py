@@ -179,6 +179,42 @@ def test_the_engine_adapter_names_no_download_url() -> None:
         assert "https://" not in text, path
 
 
+@pytest.mark.parametrize(
+    ("directory", "module"),
+    [
+        ("engine-mica", "asset_mania_engine_mica"),
+        ("engine-deca", "asset_mania_engine_deca"),
+    ],
+)
+def test_face_geometry_adapter_bundles_no_external_model_or_runtime(
+    directory: str, module: str
+) -> None:
+    package = ROOT / "packages" / directory
+    manifest = _manifest(package / "pyproject.toml")
+    dependencies = manifest["project"]["dependencies"]
+    assert not any(
+        forbidden in dependency.lower()
+        for dependency in dependencies
+        for forbidden in ("torch", "mica", "deca", "flame", "insightface", "onnx")
+    )
+    forbidden_suffixes = {".tar", ".pkl", ".npy", ".npz", ".onnx", ".pt", ".pth"}
+    assert not [path for path in package.rglob("*") if path.suffix.lower() in forbidden_suffixes]
+    assert not any(
+        "http://" in path.read_text(encoding="utf-8")
+        or "https://" in path.read_text(encoding="utf-8")
+        for path in (package / "src" / module).rglob("*.py")
+    )
+
+
+def test_notices_and_rules_name_the_local_face_geometry_boundary() -> None:
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    rules = (ROOT / "rules" / "agent" / "behavior-rules.md").read_text(encoding="utf-8")
+    assert "packages/engine-mica/" in notices
+    assert "packages/engine-deca/" in notices
+    assert "transient" in rules.lower()
+    assert "persisted_identity_feature_count" in rules
+
+
 @pytest.mark.parametrize("package", ["asset_mania_cli", "asset_mania_contracts"])
 def test_no_apache_wheel_bundles_the_engine(tmp_path: Path, package: str) -> None:
     distribution = tmp_path / "dist"

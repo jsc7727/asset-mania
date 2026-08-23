@@ -64,6 +64,26 @@ environment, compatibility patch, or face output.
   `pytorch-toolbelt==0.5.0` only from ignored local storage. None is bundled in an Asset Mania
   wheel or source archive.
 
+## Optional local face-geometry research adapters
+
+`packages/engine-mica/` and `packages/engine-deca/` are this repository's own Apache-2.0 process
+adapters. They contain no MICA, DECA, FLAME, InsightFace, face-detector, model-weight, runtime, or
+face-output bytes.
+
+- External MICA source and weights remain under the upstream Max Planck non-commercial scientific
+  research license. They are user-supplied, locally hashed, network-denied during inference, and
+  never redistributed by Asset Mania.
+- External DECA source and weights remain under the upstream Max Planck non-commercial scientific
+  research license. They are user-supplied, locally hashed, network-denied during inference, and
+  never redistributed by Asset Mania.
+- FLAME2020 and detector assets are separately licensed user-supplied dependencies. Asset Mania
+  never accepts account credentials, downloads those assets implicitly, or places them in a wheel.
+- Identity features, aligned crops, landmarks, parameter vectors, texture maps, and real-person
+  geometry are private transient or ignored-run data and are forbidden in public distributions.
+
+The adapters expose only a closed numeric geometry protocol. Their Apache license does not replace
+or broaden any external model, source, dataset, or asset license.
+
 ## External tools used but never redistributed
 
 Asset Mania invokes these tools as separate processes and bundles neither their binaries
