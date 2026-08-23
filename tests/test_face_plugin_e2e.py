@@ -43,6 +43,24 @@ def _acquired_run(tmp_path: Path) -> Path:
         indices = destination / "model_training/model/static/flame_indices"
         indices.mkdir(parents=True)
         np.save(indices / "face.npy", np.array([0, 1, 2], dtype=np.int64))
+        inference = destination / "inference"
+        inference.mkdir()
+        np.save(
+            inference / "texture_data.npy",
+            {
+                "img_size": 4,
+                "vt": np.array(
+                    [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+                    dtype=np.float64,
+                ),
+                "ft": np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]], dtype=np.int64),
+                "valid_pixel_3d_faces": np.array([[0, 2, 1]], dtype=np.int64),
+                "valid_pixel_b_coords": np.array([[1.0, 0.0, 0.0]]),
+                "valid_pixel_ids": np.array([0], dtype=np.int64),
+                "x_coords": np.array([0.5]),
+                "y_coords": np.array([0.5]),
+            },
+        )
 
     def fake_download(_url: str, destination: Path, _expected_bytes: int) -> None:
         destination.parent.mkdir(parents=True)
@@ -487,7 +505,8 @@ def test_texture_plan_uses_observed_front_and_generated_side_views(tmp_path: Pat
     assert main(["texture-plan", "--run", str(run), "--views", str(views)]) == 0
 
     plan = json.loads((run / "texture/plan.json").read_text(encoding="utf-8"))
-    assert plan["profile"] == "dad-multiview-uv-atlas-v1"
+    assert plan["profile"] == "dad-multiview-fixed-uv-blend-v2"
+    assert plan["atlas_layout"] == "dad-fixed-flame-uv"
     assert [item["yaw"] for item in plan["views"]] == [0, 45, 90, 135, 180, 225, 270, 315]
     assert plan["views"][0]["origin"] == "observed"
     assert all(item["origin"] == "generated" for item in plan["views"][1:])
@@ -608,3 +627,24 @@ def test_texture_build_and_verify_write_private_evidence(tmp_path: Path) -> None
     report = json.loads((run / "texture/verification/report.json").read_text(encoding="utf-8"))
     assert report["visual_quality"] == "unreviewed"
     assert report["identity_consistency"] == "unmeasured"
+
+    assert (
+        main(
+            [
+                "texture-review",
+                "--run",
+                str(run),
+                "--verdict",
+                "passed",
+                "--reason",
+                "synthetic visual criteria passed",
+            ]
+        )
+        == 0
+    )
+    review = json.loads(
+        (run / "texture/verification/manual-review.json").read_text(encoding="utf-8")
+    )
+    assert review["visual_quality"] == "passed"
+    assert review["reason"] == "synthetic visual criteria passed"
+    assert len(review["review_sha256"]) == 64

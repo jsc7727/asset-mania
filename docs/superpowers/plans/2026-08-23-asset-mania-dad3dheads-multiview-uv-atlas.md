@@ -374,17 +374,21 @@ git commit -m "docs: bound DAD multi-view texture research"
 
 ### Task 7: Actual private atlas E2E and completion audit
 
+**Live correction:** Task 7 uses the spec's `dad-multiview-fixed-uv-blend-v2` correction after the
+v1 per-triangle atlas failed manual seam review. The model, checkpoint, views, and plugin remain
+unchanged. A fresh create-only texture attempt is required; v1/v2 evidence is retained.
+
 **Files:**
 - Create only under the ignored successful DAD run's `texture/` and `verification/` directories.
 - Modify `README.md` and `docs/research.md` only from measured evidence.
 
-- [ ] **Step 1: Prove the current run and viewset inputs**
+- [x] **Step 1: Prove the current run and viewset inputs**
 
 Verify the pinned checkpoint/revision, compatibility patch, successful observed inference, original
 source hash, ordered view/mask hashes, CUDA Python, plugin executable, Blender 5.2, and absence of
 existing texture outputs.
 
-- [ ] **Step 2: Run the four live texture stages**
+- [x] **Step 2: Run the four live texture stages with fixed-UV profile v2**
 
 ```powershell
 uv run python scripts/run_face_plugin_e2e.py texture-plan --run $env:ASSET_MANIA_DAD_RUN --views $env:ASSET_MANIA_DAD_VIEWS
@@ -393,19 +397,19 @@ uv run python scripts/run_face_plugin_e2e.py texture-build --run $env:ASSET_MANI
 uv run python scripts/run_face_plugin_e2e.py texture-verify --run $env:ASSET_MANIA_DAD_RUN --source $env:ASSET_MANIA_FACE_SOURCE --views $env:ASSET_MANIA_DAD_VIEWS --blender $env:ASSET_MANIA_BLENDER --sparse-dad $env:ASSET_MANIA_DAD_SPARSE --triposr-anchor $env:ASSET_MANIA_TRIPOSR_ANCHOR --triposr-hybrid $env:ASSET_MANIA_TRIPOSR_HYBRID
 ```
 
-- [ ] **Step 3: Inspect the atlas, renders, and Blender material**
+- [x] **Step 3: Inspect the atlas, eight-view renders, and Blender material**
 
 Open the atlas and comparison. Import the textured GLB into an empty Blender scene, frame the mesh,
 switch to material preview, choose the face-facing axis, and confirm the texture is visible without
 node edits.
 
-- [ ] **Step 4: Record the manual verdict honestly**
+- [x] **Step 4: Record the manual verdict honestly**
 
 Set `visual_quality=passed` only when the original person is recognizable from front and one
 three-quarter view, central facial features align, no rear face leakage exists, no central seam is
 obvious, and the result improves on sparse DAD. Otherwise set `failed` with the exact reason.
 
-- [ ] **Step 5: Run full verification and private-data audit**
+- [x] **Step 5: Run full verification and private-data audit**
 
 ```powershell
 uv run ruff check .
@@ -424,7 +428,24 @@ git status --short
 Require focused tests and every repository gate to pass. Report the known Windows/POSIX failures
 separately from new regression evidence. Require no tracked private file.
 
-- [ ] **Step 6: Commit measured documentation and finish**
+- [x] **Step 6: Commit measured documentation and finish**
 
 Update public wording only with measured atlas coverage and manual verdict, commit documentation,
 leave the non-commercial private artifacts ignored, and open the final GLB in Blender.
+
+### Task 7 measured outcome
+
+- Profile: `dad-multiview-fixed-uv-blend-v2`
+- Fixed-UV valid-pixel coverage: `0.9370746580`
+- Observed-face area retained by yaw 0: `0.8899959429`
+- Textured surface area: `0.8534889984`
+- Back-projection violations: `0`
+- Output topology: `5,118` seam-aware vertices, `9,976` triangles, no non-manifold edges,
+  consistent winding
+- Manual review: passed for observed-front recognizability, both three-quarter views, central
+  feature alignment, absence of central-face seams, absence of rear face leakage, and improvement
+  over the sparse DAD and TripoSR comparisons
+- Repository gates: check, skill, release, license, schema, and publication passed
+- Full Windows suite: `1,193 passed`, `115 skipped`, `83 failed`; all 83 are the existing
+  POSIX/fake-executable, chmod, symlink, or platform-boundary failures, while all changed DAD,
+  runner, and Blender-preview tests passed

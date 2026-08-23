@@ -5,11 +5,14 @@ from asset_mania_engine_dad3dheads.texture import (
     ATLAS_SIZE,
     DAD_TEXTURE_YAWS,
     DADTextureView,
+    DADUVTemplate,
     ViewVisibility,
+    _bake_blended_uv_texture,
     _remap_texture_seams,
     build_texture_atlas,
     build_textured_dad_glb,
     compute_view_visibility,
+    load_dad_uv_template,
     select_triangle_views,
 )
 from asset_mania_pipeline import validate_glb
@@ -133,6 +136,52 @@ def test_atlas_uses_fixed_tiles_and_neutral_fallback(tmp_path: Path) -> None:
     assert pixels[256, 256].tolist() == [0, 100, 150]
     assert pixels[1280, 1280].tolist() == [160, 145, 140]
     assert output.is_file()
+
+
+def test_safe_uv_template_loads_without_pickle(tmp_path: Path) -> None:
+    path = tmp_path / "uv-template.npz"
+    np.savez_compressed(
+        path,
+        image_size=np.array([4], dtype=np.int64),
+        uv_coordinates=np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]),
+        uv_faces=np.array([[0, 1, 2]], dtype=np.int64),
+        pixel_vertices=np.array([[0, 2, 1]], dtype=np.int64),
+        pixel_barycentric=np.array([[1.0, 0.0, 0.0]]),
+        pixel_x=np.array([1], dtype=np.int64),
+        pixel_y=np.array([2], dtype=np.int64),
+    )
+
+    template = load_dad_uv_template(path, vertex_count=3, face_count=1)
+
+    assert template.image_size == 4
+    assert template.uv_faces.tolist() == [[0, 1, 2]]
+    assert template.pixel_x.tolist() == [1]
+
+
+def test_blended_uv_texture_fills_fixed_template_from_visible_views(tmp_path: Path) -> None:
+    camera = np.array([[-1.0, -1.0, -0.4], [1.0, -1.0, -0.4], [-1.0, 1.0, -0.4]])
+    camera = np.vstack([camera, camera])
+    views = [_write_view(tmp_path, yaw, camera) for yaw in DAD_TEXTURE_YAWS]
+    template = DADUVTemplate(
+        image_size=4,
+        uv_coordinates=np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]),
+        uv_faces=np.array([[0, 1, 2]], dtype=np.int64),
+        pixel_vertices=np.repeat(np.array([[0, 2, 1]], dtype=np.int64), 4, axis=0),
+        pixel_barycentric=np.repeat(np.array([[1.0, 0.0, 0.0]]), 4, axis=0),
+        pixel_x=np.array([0, 1, 0, 1], dtype=np.int64),
+        pixel_y=np.array([0, 0, 1, 1], dtype=np.int64),
+    )
+
+    atlas, coverage = _bake_blended_uv_texture(
+        views,
+        template,
+        np.array([[0, 2, 1]], dtype=np.int64),
+        np.array([0, 1, 2], dtype=np.int64),
+    )
+
+    assert atlas.size == (4, 4)
+    assert coverage == 1.0
+    assert np.asarray(atlas)[0, 0].tolist() != [160, 145, 140]
 
 
 def test_seam_remap_duplicates_only_cross_tile_vertices() -> None:

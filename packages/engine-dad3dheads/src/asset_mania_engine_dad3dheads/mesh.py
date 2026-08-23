@@ -12,11 +12,15 @@ from PIL import Image
 
 _AREA_EPSILON = 1e-12
 _NEUTRAL_RGBA = np.array([160, 145, 140, 255], dtype=np.uint8)
+# Trimesh writes glTF's Y-up coordinates. Blender's glTF importer then performs
+# the Y-up to Z-up conversion itself, so the payload must not be pre-rotated to
+# Blender axes. DAD uses +Z toward the viewer and -Y as image-up; a 180 degree
+# X rotation makes those glTF -Z (front) and +Y (up) while preserving handedness.
 _DAD_TO_BLENDER = np.array(
     [
         [1.0, 0.0, 0.0],
-        [0.0, 0.0, -1.0],
         [0.0, -1.0, 0.0],
+        [0.0, 0.0, -1.0],
     ],
     dtype=np.float64,
 )

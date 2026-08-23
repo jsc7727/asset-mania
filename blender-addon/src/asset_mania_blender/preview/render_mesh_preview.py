@@ -32,6 +32,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", required=True, help="PNG to write")
     parser.add_argument("--samples", type=int, default=32)
     parser.add_argument("--resolution", type=int, default=720)
+    parser.add_argument("--elevation", type=float, default=0.42)
+    parser.add_argument(
+        "--orbit-axis",
+        choices=("X", "Y", "Z"),
+        default="Z",
+        help="world axis around which the camera orbits",
+    )
     parser.add_argument(
         "--views",
         type=int,
@@ -97,6 +104,33 @@ def build_material(
     for polygon in target.data.polygons:
         polygon.use_smooth = True
     if use_imported_material and target.data.materials:
+        material = target.data.materials[0]
+        material.use_nodes = True
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        principled = nodes.get("Principled BSDF")
+        texture_nodes = [node for node in nodes if node.bl_idname == "ShaderNodeTexImage"]
+        if principled is not None:
+            imported_images = [
+                image
+                for image in bpy.data.images
+                if image.source == "FILE" and image.size[0] > 0 and image.size[1] > 0
+            ]
+            if len(imported_images) != 1:
+                raise ValueError("imported textured GLB must expose exactly one file image")
+            texture = texture_nodes[0] if texture_nodes else nodes.new("ShaderNodeTexImage")
+            texture.image = imported_images[0]
+            if not texture.inputs["Vector"].is_linked:
+                coordinates = nodes.new("ShaderNodeTexCoord")
+                links.new(coordinates.outputs["UV"], texture.inputs["Vector"])
+            if not principled.inputs["Base Color"].is_linked:
+                links.new(texture.outputs["Color"], principled.inputs["Base Color"])
+            principled.inputs["Roughness"].default_value = 0.65
+            emission = principled.inputs.get("Emission Color")
+            emission_strength = principled.inputs.get("Emission Strength")
+            if emission is not None and emission_strength is not None:
+                if not emission.is_linked:
+                    links.new(texture.outputs["Color"], emission)
+                emission_strength.default_value = 0.35
         return
     material = bpy.data.materials.new("preview")
     material.use_nodes = True
@@ -168,13 +202,33 @@ def configure_render(samples: int, resolution: int) -> None:
     scene.render.image_settings.color_mode = "RGB"
 
 
-def add_camera(radius: float, angle: float) -> bpy.types.Object:
+def camera_location(
+    radius: float,
+    angle: float,
+    elevation: float = 0.42,
+    orbit_axis: str = "Z",
+) -> tuple[float, float, float]:
+    radial_a = radius * math.cos(angle)
+    radial_b = radius * math.sin(angle)
+    offset = radius * elevation
+    values = {
+        "X": (offset, radial_a, radial_b),
+        "Y": (radial_a, offset, radial_b),
+        "Z": (radial_a, radial_b, offset),
+    }
+    if orbit_axis not in values:
+        raise ValueError(f"unsupported orbit axis: {orbit_axis}")
+    return tuple(0.0 if abs(value) < 1e-12 else value for value in values[orbit_axis])
+
+
+def add_camera(
+    radius: float,
+    angle: float,
+    elevation: float = 0.42,
+    orbit_axis: str = "Z",
+) -> bpy.types.Object:
     camera = bpy.data.objects.new("camera", bpy.data.cameras.new("camera"))
-    camera.location = (
-        radius * math.cos(angle),
-        radius * math.sin(angle),
-        radius * 0.42,
-    )
+    camera.location = camera_location(radius, angle, elevation, orbit_axis)
     bpy.context.scene.collection.objects.link(camera)
     bpy.context.scene.camera = camera
 
@@ -198,7 +252,7 @@ def main() -> int:
     tiles: list[str] = []
     for index in range(args.views):
         angle = -math.pi / 2 + index * (2 * math.pi / args.views)
-        camera = add_camera(radius, angle)
+        camera = add_camera(radius, angle, args.elevation, args.orbit_axis)
         tile = f"{args.out}.view{index}.png"
         bpy.context.scene.render.filepath = tile
         bpy.ops.render.render(write_still=True)

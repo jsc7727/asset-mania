@@ -9,12 +9,13 @@ from asset_mania_engine_dad3dheads.mesh import (
 )
 
 
-def test_dad_axes_face_blender_positive_y_camera_and_keep_image_up() -> None:
-    dad_front = np.array([0.0, 0.0, -1.0])
+def test_dad_axes_convert_to_gltf_y_up_without_a_second_blender_rotation() -> None:
+    dad_front = np.array([0.0, 0.0, 1.0])
     dad_image_up = np.array([0.0, -1.0, 0.0])
 
-    assert np.allclose(dad_front @ _DAD_TO_BLENDER.T, [0.0, 1.0, 0.0])
-    assert np.allclose(dad_image_up @ _DAD_TO_BLENDER.T, [0.0, 0.0, 1.0])
+    assert np.allclose(dad_front @ _DAD_TO_BLENDER.T, [0.0, 0.0, -1.0])
+    assert np.allclose(dad_image_up @ _DAD_TO_BLENDER.T, [0.0, 1.0, 0.0])
+    assert np.isclose(np.linalg.det(_DAD_TO_BLENDER), 1.0)
 
 
 from PIL import Image

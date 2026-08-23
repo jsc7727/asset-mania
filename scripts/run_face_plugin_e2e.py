@@ -38,7 +38,7 @@ SOURCE_URL = "https://github.com/PinataFarms/DAD-3DHeads.git"
 CHECKPOINT_URL = "https://media.pinatafarm.com/public/research/dad-3dheads/dad_3dheads.trcd"
 CHECKPOINT_BYTES = 132_711_657
 APPROVAL_REFERENCE = "face-plugin-approval-20260823"
-TEXTURE_PROFILE = "dad-multiview-uv-atlas-v1"
+TEXTURE_PROFILE = "dad-multiview-fixed-uv-blend-v2"
 TEXTURE_YAWS = (0, 45, 90, 135, 180, 225, 270, 315)
 RUN_DIRECTORIES = ("plan", "acquisition", "smoke", "inference", "conversion", "verification")
 
@@ -508,6 +508,9 @@ def _default_preview(
     blender: Path,
     *,
     use_imported_material: bool = False,
+    elevation: float = 0.42,
+    views: int = 4,
+    orbit_axis: str = "Z",
 ) -> None:
     command = [
         sys.executable,
@@ -524,7 +527,11 @@ def _default_preview(
         "--resolution",
         "500",
         "--views",
-        "4",
+        str(views),
+        "--elevation",
+        str(elevation),
+        "--orbit-axis",
+        orbit_axis,
     ]
     if use_imported_material:
         command.append("--use-imported-material")
@@ -643,6 +650,48 @@ def _texture_paths(
     return records
 
 
+def _dad_uv_source(run: Path) -> Path:
+    return run / "acquisition/source/inference/texture_data.npy"
+
+
+def _extract_safe_dad_uv_template(source: Path, target: Path) -> None:
+    """Convert the pinned upstream object NPY to numeric-only, non-pickle NPZ arrays."""
+    if target.exists():
+        raise FileExistsError(f"refusing to overwrite {target}")
+    try:
+        # The object NPY is read only from the pinned acquired DAD revision. Downstream
+        # package code consumes only the numeric-only NPZ written here with pickle disabled.
+        value = np.load(source, allow_pickle=True, encoding="latin1").item()
+        required = {
+            "img_size",
+            "vt",
+            "ft",
+            "valid_pixel_3d_faces",
+            "valid_pixel_b_coords",
+            "valid_pixel_ids",
+            "x_coords",
+            "y_coords",
+        }
+        if not isinstance(value, dict) or not required.issubset(value):
+            raise ValueError("required arrays are absent")
+        valid_ids = np.asarray(value["valid_pixel_ids"], dtype=np.int64)
+        pixel_x = np.asarray(value["x_coords"], dtype=np.float64)[valid_ids].astype(np.int64)
+        pixel_y = np.asarray(value["y_coords"], dtype=np.float64)[valid_ids].astype(np.int64)
+        arrays = {
+            "image_size": np.array([int(value["img_size"])], dtype=np.int64),
+            "uv_coordinates": np.asarray(value["vt"], dtype=np.float64),
+            "uv_faces": np.asarray(value["ft"], dtype=np.int64),
+            "pixel_vertices": np.asarray(value["valid_pixel_3d_faces"], dtype=np.int64),
+            "pixel_barycentric": np.asarray(value["valid_pixel_b_coords"], dtype=np.float64),
+            "pixel_x": pixel_x,
+            "pixel_y": pixel_y,
+        }
+    except (OSError, ValueError, KeyError, IndexError, AttributeError) as error:
+        raise ValueError("pinned DAD UV source is unreadable") from error
+    target.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(target, **arrays)
+
+
 def _run_texture_plan(arguments: argparse.Namespace) -> int:
     run = arguments.run.resolve(strict=True)
     views = arguments.views.resolve(strict=True)
@@ -654,6 +703,9 @@ def _run_texture_plan(arguments: argparse.Namespace) -> int:
         (texture / relative).mkdir()
     inference = _load_object(run / "inference/record.json", "inference record")
     _verify_seal(inference, "record_sha256", "inference record")
+    uv_source = _dad_uv_source(run)
+    if not uv_source.is_file():
+        raise ValueError("pinned DAD UV source is unavailable")
     records = []
     for yaw, origin, image, mask, projection in _texture_paths(run, views, texture):
         if not image.is_file() or not mask.is_file():
@@ -675,8 +727,10 @@ def _run_texture_plan(arguments: argparse.Namespace) -> int:
         "profile": TEXTURE_PROFILE,
         "plugin_revision": DAD_REVISION,
         "checkpoint_sha256": inference["checkpoint_sha256"],
-        "tile_size": 512,
-        "atlas_size": 1536,
+        "atlas_size": 512,
+        "atlas_layout": "dad-fixed-flame-uv",
+        "blend_policy": "facing-cosine-observed-face-priority",
+        "uv_source_sha256": sha256_file(uv_source),
         "visibility_resolution": 512,
         "views": records,
         "gates": {
@@ -685,6 +739,7 @@ def _run_texture_plan(arguments: argparse.Namespace) -> int:
             "minimum_observed_face_area_fraction": 0.75,
             "maximum_neutral_surface_area_fraction": 0.15,
             "maximum_back_projection_violations": 0,
+            "minimum_uv_pixel_coverage_fraction": 0.90,
         },
         "overwrite_policy": "create_only",
     }
@@ -696,6 +751,8 @@ def _run_texture_plan(arguments: argparse.Namespace) -> int:
 def _verify_texture_plan_inputs(run: Path, views: Path, texture_root: Path) -> dict:
     plan = _load_object(texture_root / "plan.json", "texture plan")
     _verify_seal(plan, "plan_sha256", "texture plan")
+    if sha256_file(_dad_uv_source(run)) != plan["uv_source_sha256"]:
+        raise ValueError("DAD UV source differs from the texture plan")
     for declared, (yaw, origin, image, mask, _projection) in zip(
         plan["views"], _texture_paths(run, views, texture_root), strict=True
     ):
@@ -820,12 +877,15 @@ def _run_texture_build(arguments: argparse.Namespace, *, texture_builder: Callab
         run / "acquisition/source/model_training/model/static/flame_indices/face.npy"
     )
     face_indices = np.load(face_indices_path, allow_pickle=False)
+    uv_template = texture_root / "views/uv-template.npz"
+    _extract_safe_dad_uv_template(_dad_uv_source(run), uv_template)
     measured = texture_builder(
         geometry_obj=run / "inference/plugin-output/head.obj",
         views=_texture_view_records(run, views, texture_root),
         face_indices=face_indices,
         atlas_path=atlas,
         output_path=output,
+        uv_template_path=uv_template,
     )
     if not atlas.is_file() or not output.is_file():
         raise ValueError("DAD texture builder wrote no output")
@@ -840,6 +900,7 @@ def _run_texture_build(arguments: argparse.Namespace, *, texture_builder: Callab
         "plan_sha256": plan["plan_sha256"],
         "inference_sha256": inference["record_sha256"],
         "face_indices_sha256": sha256_file(face_indices_path),
+        "uv_template_sha256": sha256_file(uv_template),
         "atlas_sha256": sha256_file(atlas),
         "glb_sha256": sha256_file(output),
         "measurements": measurement_document,
@@ -883,7 +944,15 @@ def _run_texture_verify(
     for _label, mesh, output, imported in rows:
         if output.exists():
             raise FileExistsError(f"refusing to overwrite {output}")
-        preview_runner(mesh, output, blender, use_imported_material=imported)
+        preview_runner(
+            mesh,
+            output,
+            blender,
+            use_imported_material=imported,
+            elevation=0.15,
+            views=8,
+            orbit_axis="Z",
+        )
     comparison = output_directory / "comparison.png"
     _write_comparison([(label, output) for label, _mesh, output, _imported in rows], comparison)
     verify_source_unchanged(source, before)
@@ -899,6 +968,39 @@ def _run_texture_verify(
         "identity_consistency": "unmeasured",
     }
     (output_directory / "report.json").write_text(canonical_json(report), encoding="utf-8")
+    return 0
+
+
+def _run_texture_review(arguments: argparse.Namespace) -> int:
+    run = arguments.run.resolve(strict=True)
+    texture_root = _texture_root(run, arguments.attempt)
+    verification = texture_root / "verification"
+    report_path = verification / "report.json"
+    report = _load_object(report_path, "texture verification report")
+    if report.get("status") != "passed" or report.get("visual_quality") != "unreviewed":
+        raise ValueError("texture verification is not awaiting manual review")
+    reason = arguments.reason.strip()
+    if not reason or len(reason) > 500 or "\n" in reason or "\r" in reason:
+        raise ValueError("manual review reason must be one line of 1 to 500 characters")
+    output = verification / "manual-review.json"
+    if output.exists():
+        raise FileExistsError("refusing to overwrite DAD texture manual review")
+    preimage = {
+        "schema_id": "asset-mania/private-dad-texture-manual-review",
+        "schema_version": "0.1",
+        "profile": report["profile"],
+        "verification_sha256": sha256_file(report_path),
+        "comparison_sha256": report["comparison_sha256"],
+        "glb_sha256": report["glb_sha256"],
+        "visual_quality": arguments.verdict,
+        "identity_consistency": "visually-consistent"
+        if arguments.verdict == "passed"
+        else "not-accepted",
+        "reason": reason,
+        "review_basis": "front-and-eight-view-Blender-comparison",
+    }
+    review = {**preimage, "review_sha256": canonical_digest(preimage)}
+    output.write_text(canonical_json(review), encoding="utf-8")
     return 0
 
 
@@ -951,6 +1053,11 @@ def build_parser() -> argparse.ArgumentParser:
     texture_verify.add_argument("--triposr-anchor", type=Path, required=True)
     texture_verify.add_argument("--triposr-hybrid", type=Path, required=True)
     texture_verify.add_argument("--attempt", type=int, choices=range(1, 10), default=1)
+    texture_review = commands.add_parser("texture-review")
+    texture_review.add_argument("--run", type=Path, required=True)
+    texture_review.add_argument("--attempt", type=int, choices=range(1, 10), default=1)
+    texture_review.add_argument("--verdict", choices=("passed", "failed"), required=True)
+    texture_review.add_argument("--reason", required=True)
     return parser
 
 
@@ -1015,6 +1122,8 @@ def main(
             arguments,
             texture_builder=texture_builder or build_textured_dad_glb,
         )
+    if arguments.command == "texture-review":
+        return _run_texture_review(arguments)
     return _run_texture_verify(
         arguments,
         preview_runner=preview_runner or _default_preview,

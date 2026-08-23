@@ -24,6 +24,7 @@ from .mesh import (
 DAD_TEXTURE_YAWS = (0, 45, 90, 135, 180, 225, 270, 315)
 ATLAS_TILE_SIZE = 512
 ATLAS_SIZE = 1536
+DAD_UV_ATLAS_SIZE = 512
 NEUTRAL_TILE = 8
 _NEUTRAL_RGB = (160, 145, 140)
 _TILE_BY_YAW = {yaw: index for index, yaw in enumerate(DAD_TEXTURE_YAWS)}
@@ -66,6 +67,73 @@ class DADTextureMeasurements:
     back_projection_violation_count: int
     non_manifold_edge_count: int
     winding_consistent: bool
+    uv_pixel_coverage_fraction: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class DADUVTemplate:
+    image_size: int
+    uv_coordinates: np.ndarray
+    uv_faces: np.ndarray
+    pixel_vertices: np.ndarray
+    pixel_barycentric: np.ndarray
+    pixel_x: np.ndarray
+    pixel_y: np.ndarray
+
+
+def load_dad_uv_template(
+    path: Path,
+    *,
+    vertex_count: int,
+    face_count: int,
+) -> DADUVTemplate:
+    """Load the runner's numeric-only copy of DAD's fixed FLAME UV data."""
+    try:
+        with np.load(path, allow_pickle=False) as archive:
+            image_size_array = np.asarray(archive["image_size"], dtype=np.int64)
+            template = DADUVTemplate(
+                image_size=int(image_size_array.reshape(-1)[0]),
+                uv_coordinates=np.asarray(archive["uv_coordinates"], dtype=np.float64),
+                uv_faces=np.asarray(archive["uv_faces"], dtype=np.int64),
+                pixel_vertices=np.asarray(archive["pixel_vertices"], dtype=np.int64),
+                pixel_barycentric=np.asarray(archive["pixel_barycentric"], dtype=np.float64),
+                pixel_x=np.asarray(archive["pixel_x"], dtype=np.int64),
+                pixel_y=np.asarray(archive["pixel_y"], dtype=np.int64),
+            )
+    except (OSError, KeyError, ValueError, IndexError) as error:
+        raise ValueError("DAD UV template is unreadable") from error
+    pixel_count = len(template.pixel_x)
+    if template.image_size <= 0 or image_size_array.size != 1:
+        raise ValueError("DAD UV template image size is invalid")
+    if template.uv_coordinates.ndim != 2 or template.uv_coordinates.shape[1] != 2:
+        raise ValueError("DAD UV coordinates are invalid")
+    if template.uv_faces.shape != (face_count, 3):
+        raise ValueError("DAD UV face topology differs from the mesh")
+    if template.pixel_vertices.shape != (pixel_count, 3):
+        raise ValueError("DAD UV pixel vertices are invalid")
+    if template.pixel_barycentric.shape != (pixel_count, 3):
+        raise ValueError("DAD UV pixel barycentric coordinates are invalid")
+    if template.pixel_y.shape != (pixel_count,):
+        raise ValueError("DAD UV pixel coordinates are invalid")
+    arrays = (
+        template.uv_coordinates,
+        template.pixel_barycentric,
+    )
+    if any(not np.isfinite(array).all() for array in arrays):
+        raise ValueError("DAD UV template contains non-finite values")
+    if (
+        template.uv_faces.size == 0
+        or template.uv_faces.min() < 0
+        or template.uv_faces.max() >= len(template.uv_coordinates)
+        or template.pixel_vertices.min() < 0
+        or template.pixel_vertices.max() >= vertex_count
+        or template.pixel_x.min() < 0
+        or template.pixel_x.max() >= template.image_size
+        or template.pixel_y.min() < 0
+        or template.pixel_y.max() >= template.image_size
+    ):
+        raise ValueError("DAD UV template index is out of range")
+    return template
 
 
 def _load_view_arrays(view: DADTextureView) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -250,6 +318,117 @@ def build_texture_atlas(views: list[DADTextureView], output_path: Path) -> Image
     return atlas
 
 
+def _bake_blended_uv_texture(
+    views: list[DADTextureView],
+    template: DADUVTemplate,
+    faces: np.ndarray,
+    face_indices: np.ndarray,
+) -> tuple[Image.Image, float]:
+    """Blend all facing source views into DAD's continuous fixed UV layout."""
+    if [item.yaw for item in views] != list(DAD_TEXTURE_YAWS):
+        raise ValueError(f"texture views must use ordered yaws {list(DAD_TEXTURE_YAWS)}")
+    triangles = np.asarray(faces, dtype=np.int64)
+    face_lookup = {
+        tuple(sorted(map(int, triangle))): index for index, triangle in enumerate(triangles)
+    }
+    try:
+        pixel_faces = np.asarray(
+            [
+                face_lookup[tuple(sorted(map(int, triangle)))]
+                for triangle in template.pixel_vertices
+            ],
+            dtype=np.int64,
+        )
+    except KeyError as error:
+        raise ValueError("DAD UV pixel topology differs from the mesh") from error
+    face_set = {int(index) for index in np.asarray(face_indices, dtype=np.int64)}
+    indexed_face = np.asarray(
+        [sum(int(vertex) in face_set for vertex in triangle) >= 2 for triangle in triangles],
+        dtype=bool,
+    )
+    accumulated = np.zeros((len(pixel_faces), 3), dtype=np.float64)
+    weights = np.zeros(len(pixel_faces), dtype=np.float64)
+    for view in views:
+        projected, camera, mask = _load_view_arrays(view)
+        if len(projected) <= int(template.pixel_vertices.max()):
+            raise ValueError(f"yaw {view.yaw} projection differs from the UV topology")
+        camera_triangles = camera[triangles]
+        cross = np.cross(
+            camera_triangles[:, 1] - camera_triangles[:, 0],
+            camera_triangles[:, 2] - camera_triangles[:, 0],
+        )
+        lengths = np.linalg.norm(cross, axis=1)
+        cosine = np.zeros(len(triangles), dtype=np.float64)
+        valid_normal = lengths > 1e-12
+        cosine[valid_normal] = -cross[valid_normal, 2] / lengths[valid_normal]
+        pixel_projection = (
+            projected[template.pixel_vertices] * template.pixel_barycentric[..., None]
+        ).sum(axis=1)
+        rounded = np.rint(pixel_projection).astype(np.int64)
+        in_bounds = (
+            (rounded[:, 0] >= 0)
+            & (rounded[:, 0] < mask.shape[1])
+            & (rounded[:, 1] >= 0)
+            & (rounded[:, 1] < mask.shape[0])
+        )
+        safe_x = np.clip(rounded[:, 0], 0, mask.shape[1] - 1)
+        safe_y = np.clip(rounded[:, 1], 0, mask.shape[0] - 1)
+        valid = in_bounds & mask[safe_y, safe_x] & (cosine[pixel_faces] > 0.05)
+        score = np.maximum(cosine[pixel_faces], 0.0)
+        if view.yaw == 0:
+            score *= np.where(indexed_face[pixel_faces], 12.0, 2.0)
+        score[~valid] = 0.0
+        with Image.open(view.image_path) as opened:
+            opened.load()
+            image = np.asarray(opened.convert("RGB"), dtype=np.float64)
+        colors = image[safe_y, safe_x]
+        accumulated += colors * score[:, None]
+        weights += score
+    covered = weights > 1e-12
+    blended = np.full((len(weights), 3), _NEUTRAL_RGB, dtype=np.float64)
+    blended[covered] = accumulated[covered] / weights[covered, None]
+    pixels = np.full((template.image_size, template.image_size, 3), _NEUTRAL_RGB, dtype=np.uint8)
+    pixels[template.pixel_y, template.pixel_x] = np.clip(np.rint(blended), 0, 255).astype(np.uint8)
+    coverage = float(np.count_nonzero(covered) / len(covered))
+    return Image.fromarray(pixels, mode="RGB"), coverage
+
+
+def _remap_fixed_uv_seams(
+    vertices: np.ndarray,
+    normals: np.ndarray,
+    faces: np.ndarray,
+    template: DADUVTemplate,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    positions: list[np.ndarray] = []
+    smooth_normals: list[np.ndarray] = []
+    uvs: list[np.ndarray] = []
+    remapped_faces = np.empty_like(faces)
+    indices: dict[tuple[int, int], int] = {}
+    for face_index, (triangle, uv_triangle) in enumerate(
+        zip(faces, template.uv_faces, strict=True)
+    ):
+        for corner, (original_value, uv_value) in enumerate(
+            zip(triangle, uv_triangle, strict=True)
+        ):
+            original_index = int(original_value)
+            uv_index = int(uv_value)
+            key = (original_index, uv_index)
+            output_index = indices.get(key)
+            if output_index is None:
+                output_index = len(positions)
+                indices[key] = output_index
+                positions.append(vertices[original_index])
+                smooth_normals.append(normals[original_index])
+                uvs.append(template.uv_coordinates[uv_index])
+            remapped_faces[face_index, corner] = output_index
+    return (
+        np.asarray(positions, dtype=np.float64),
+        np.asarray(smooth_normals, dtype=np.float64),
+        remapped_faces,
+        np.asarray(uvs, dtype=np.float64),
+    )
+
+
 def _tile_uv(projected: np.ndarray, yaw: int, image_shape: tuple[int, int]) -> np.ndarray:
     if yaw == -1:
         row, column = divmod(NEUTRAL_TILE, 3)
@@ -337,6 +516,7 @@ def build_textured_dad_glb(
     face_indices: np.ndarray,
     atlas_path: Path,
     output_path: Path,
+    uv_template_path: Path | None = None,
     visibility_resolution: int = 512,
     enforce_gates: bool = True,
 ) -> DADTextureMeasurements:
@@ -354,7 +534,21 @@ def build_textured_dad_glb(
         compute_view_visibility(view, faces, resolution=visibility_resolution) for view in views
     ]
     assignments = select_triangle_views(visibilities, faces, face_indices)
-    atlas = build_texture_atlas(views, atlas_path)
+    uv_pixel_coverage = 0.0
+    template = None
+    if uv_template_path is None:
+        atlas = build_texture_atlas(views, atlas_path)
+    else:
+        if atlas_path.exists():
+            raise FileExistsError(f"refusing to overwrite {atlas_path}")
+        template = load_dad_uv_template(
+            uv_template_path,
+            vertex_count=len(source_vertices),
+            face_count=len(faces),
+        )
+        atlas, uv_pixel_coverage = _bake_blended_uv_texture(views, template, faces, face_indices)
+        atlas_path.parent.mkdir(parents=True, exist_ok=True)
+        atlas.save(atlas_path, format="PNG", compress_level=9)
     center = (source_vertices.min(axis=0) + source_vertices.max(axis=0)) * 0.5
     centered = source_vertices - center
     extent = float(np.ptp(centered, axis=0).max())
@@ -364,15 +558,20 @@ def build_textured_dad_glb(
     source_normals = _vertex_normals(source_vertices, faces) @ _DAD_TO_BLENDER.T
     normal_lengths = np.linalg.norm(source_normals, axis=1)
     source_normals[normal_lengths > 0] /= normal_lengths[normal_lengths > 0, None]
-    projections = {yaw: arrays[0] for yaw, arrays in view_arrays.items()}
-    vertices, normals, remapped_faces, uvs = _remap_texture_seams(
-        transformed,
-        source_normals,
-        faces,
-        assignments,
-        projections,
-        (1024, 1024),
-    )
+    if template is None:
+        projections = {yaw: arrays[0] for yaw, arrays in view_arrays.items()}
+        vertices, normals, remapped_faces, uvs = _remap_texture_seams(
+            transformed,
+            source_normals,
+            faces,
+            assignments,
+            projections,
+            (1024, 1024),
+        )
+    else:
+        vertices, normals, remapped_faces, uvs = _remap_fixed_uv_seams(
+            transformed, source_normals, faces, template
+        )
     material = PBRMaterial(
         name="DAD multi-view texture",
         baseColorTexture=atlas,
@@ -433,6 +632,7 @@ def build_textured_dad_glb(
         back_projection_violation_count=violations,
         non_manifold_edge_count=source_measurements.non_manifold_edge_count,
         winding_consistent=source_measurements.winding_consistent,
+        uv_pixel_coverage_fraction=uv_pixel_coverage,
     )
     if enforce_gates:
         if result.textured_triangle_fraction < 0.45:
@@ -443,6 +643,8 @@ def build_textured_dad_glb(
             raise ValueError("observed face area gate failed")
         if result.neutral_surface_area_fraction > 0.15:
             raise ValueError("neutral surface area gate failed")
+        if template is not None and result.uv_pixel_coverage_fraction < 0.90:
+            raise ValueError("UV pixel coverage gate failed")
         if result.back_projection_violation_count:
             raise ValueError("back projection gate failed")
         if any(counts[yaw] == 0 for yaw in DAD_TEXTURE_YAWS):

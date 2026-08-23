@@ -372,3 +372,29 @@ Blender, and records the manual verdict.
 - Release and publication gates continue rejecting `.trcd`, external DAD/FLAME assets, private
   output directories, textures, OBJ/GLB artifacts, and real-person fixtures.
 - README/research claims change only after the private live comparison is manually reviewed.
+
+## 2026-08-23 live-run correction: fixed UV blend and glTF axes
+
+The first live atlas satisfied the numeric triangle and surface gates but failed the manual seam
+criterion. It exposed two implementation assumptions that the synthetic fixtures had not tested:
+
+- assigning one 1536-square source tile per triangle produced visible triangular boundaries on
+  the jaw, ears, neck, and rear scalp;
+- `_DAD_TO_BLENDER` pre-rotated coordinates into Blender Z-up before trimesh wrote a glTF Y-up
+  payload, so Blender's importer applied a second axis conversion and laid the head on its back.
+
+The approved implementation therefore uses DAD's pinned fixed FLAME UV layout. The runner converts
+the acquired revision's object NPY to a numeric-only, pickle-disabled NPZ after sealing its source
+hash. The engine rasterizes all eight views into one 512-square continuous UV map. Each UV texel
+uses mask-valid projections from camera-facing source triangles, cosine weights, and a 12x observed
+yaw-0 preference on the indexed face region. Generated views may fill side and rear texels but do
+not displace the observed central face. UV seams duplicate `(position index, UV index)` pairs only.
+
+The glTF payload transform is a handedness-preserving 180-degree X rotation: DAD +Z front becomes
+glTF -Z and DAD -Y image-up becomes glTF +Y. Blender performs the standard glTF Y-up import once,
+leaving the head upright. The private gate additionally requires at least 0.90 valid UV-pixel
+coverage. The earlier triangle/surface, observed-face, neutral-area, topology, and no-back-
+projection measurements remain diagnostics and gates; they no longer define the texture layout.
+
+This is profile `dad-multiview-fixed-uv-blend-v2`. It is an explicit workflow revision, not a
+silent provider, model, checkpoint, quality, or reconstruction-plugin substitution.
