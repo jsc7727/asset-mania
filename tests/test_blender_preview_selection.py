@@ -34,3 +34,18 @@ def test_camera_location_orbits_selected_world_axis(monkeypatch) -> None:
     assert module.camera_location(2.0, 0.0, 0.5, "Z") == (2.0, 0.0, 1.0)
     assert module.camera_location(2.0, math.pi / 2, 0.5, "Y") == (0.0, 1.0, 2.0)
     assert module.camera_location(2.0, math.pi, 0.5, "X") == (1.0, -2.0, 0.0)
+
+
+def test_orbit_angles_start_from_explicit_face_axis(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "bpy", types.ModuleType("bpy"))
+    spec = importlib.util.spec_from_file_location("render_mesh_preview_angles_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.orbit_angles(4, 90.0) == [
+        math.pi / 2,
+        math.pi,
+        3 * math.pi / 2,
+        2 * math.pi,
+    ]

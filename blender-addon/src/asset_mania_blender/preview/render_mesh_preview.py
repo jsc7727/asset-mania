@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--samples", type=int, default=32)
     parser.add_argument("--resolution", type=int, default=720)
     parser.add_argument("--elevation", type=float, default=0.42)
+    parser.add_argument("--start-angle-degrees", type=float, default=-90.0)
     parser.add_argument(
         "--orbit-axis",
         choices=("X", "Y", "Z"),
@@ -241,6 +242,13 @@ def add_camera(
     return camera
 
 
+def orbit_angles(views: int, start_angle_degrees: float) -> list[float]:
+    if views <= 0:
+        raise ValueError("views must be positive")
+    start = math.radians(start_angle_degrees)
+    return [start + index * (2 * math.pi / views) for index in range(views)]
+
+
 def main() -> int:
     args = parse_args()
     clear_scene()
@@ -250,8 +258,7 @@ def main() -> int:
     configure_render(args.samples, args.resolution)
 
     tiles: list[str] = []
-    for index in range(args.views):
-        angle = -math.pi / 2 + index * (2 * math.pi / args.views)
+    for index, angle in enumerate(orbit_angles(args.views, args.start_angle_degrees)):
         camera = add_camera(radius, angle, args.elevation, args.orbit_axis)
         tile = f"{args.out}.view{index}.png"
         bpy.context.scene.render.filepath = tile

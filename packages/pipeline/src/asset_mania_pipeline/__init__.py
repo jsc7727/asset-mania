@@ -59,6 +59,7 @@ from .face_geometry import (
     fuse_mica_deca_geometry,
     load_face_geometry,
 )
+from .face_geometry_glb import export_clay_glb
 from .face_geometry_plugins import (
     DECA_PLUGIN,
     MICA_PLUGIN,
@@ -283,6 +284,7 @@ __all__ = [
     "describe_reconstruction_output",
     "dilate_same_island",
     "euclidean_distance",
+    "export_clay_glb",
     "faces_camera",
     "fingerprint_source",
     "fit_similarity_transform",
