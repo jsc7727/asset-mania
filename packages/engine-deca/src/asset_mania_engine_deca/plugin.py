@@ -437,9 +437,9 @@ def _validate_prediction(
         raise ValueError("DECA returned non-finite geometry")
     if faces.min() < 0 or faces.max() >= len(vertices):
         raise ValueError("DECA returned an out-of-range face index")
-    extent = float(np.ptp(vertices, axis=0).max())
-    if not 0.15 <= extent <= 0.32:
-        raise ValueError("DECA geometry extent must be between 0.15 and 0.32 metres")
+    axis_extents = np.ptp(vertices, axis=0)
+    if not np.isfinite(axis_extents).all() or not (axis_extents > 0).all():
+        raise ValueError("DECA geometry must have positive finite extent on every axis")
     return vertices, faces, projection, displacement
 
 

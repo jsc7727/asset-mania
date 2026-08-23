@@ -114,6 +114,7 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
         "gates": {
             "minimum_head_extent_metres": 0.15,
             "maximum_head_extent_metres": 0.32,
+            "deca_extent_validation": "positive-finite-prealignment-then-similarity-fit",
             "maximum_displacement_metres": 0.003,
             "maximum_rms_displacement_metres": 0.0015,
             "minimum_face_displacement_coverage": 0.90,

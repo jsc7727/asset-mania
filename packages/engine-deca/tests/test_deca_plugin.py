@@ -314,6 +314,8 @@ def test_private_request_rejects_source_inside_output_directory(tmp_path: Path) 
 def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction:
     vertices = np.zeros((5023, 3), dtype=np.float32)
     vertices[:, 0] = np.linspace(-0.08, 0.08, 5023)
+    vertices[:, 1] = np.linspace(-0.06, 0.06, 5023)
+    vertices[:, 2] = np.linspace(-0.04, 0.04, 5023)
     return DecaPrediction(
         vertices=vertices,
         faces=topology(),
@@ -323,22 +325,38 @@ def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction
     )
 
 
-@pytest.mark.parametrize("extent", [0.309499189, 0.32])
-def test_prediction_validator_accepts_full_head_extent_boundaries(extent: float) -> None:
+def test_prediction_validator_defers_raw_absolute_extent_until_alignment() -> None:
     prediction = fake_backend(Path(), object())
-    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+    prediction.vertices[:, 0] = np.linspace(0.0, 0.324885711, 5023)
 
     vertices, _faces, _projection, _displacement = deca_plugin._validate_prediction(prediction)
 
-    assert np.isclose(np.ptp(vertices, axis=0).max(), extent)
+    assert np.isclose(np.ptp(vertices, axis=0).max(), 0.324885711)
+    assert np.array_equal(vertices, prediction.vertices)
 
 
-@pytest.mark.parametrize("extent", [0.149999, 0.320001])
-def test_prediction_validator_rejects_extent_outside_full_head_boundaries(extent: float) -> None:
+@pytest.mark.parametrize("axis", [0, 1, 2])
+def test_prediction_validator_rejects_zero_extent_on_every_axis(axis: int) -> None:
     prediction = fake_backend(Path(), object())
-    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+    prediction.vertices[:, axis] = 0.0
 
-    with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
+    with pytest.raises(ValueError, match="positive finite extent on every axis"):
+        deca_plugin._validate_prediction(prediction)
+
+
+def test_prediction_validator_rejects_nonfinite_vertices() -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.vertices[0, 1] = np.inf
+
+    with pytest.raises(ValueError, match="non-finite"):
+        deca_plugin._validate_prediction(prediction)
+
+
+def test_prediction_validator_rejects_invalid_topology() -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.faces[0, 0] = 5023
+
+    with pytest.raises(ValueError, match="out-of-range face index"):
         deca_plugin._validate_prediction(prediction)
 
 

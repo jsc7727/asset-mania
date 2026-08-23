@@ -115,6 +115,10 @@ def test_geometry_plan_seals_plugins_gates_and_no_source_path(tmp_path: Path) ->
     assert plan["required_gate"] == "face_rights"
     assert plan["gates"]["minimum_head_extent_metres"] == 0.15
     assert plan["gates"]["maximum_head_extent_metres"] == 0.32
+    assert (
+        plan["gates"]["deca_extent_validation"]
+        == "positive-finite-prealignment-then-similarity-fit"
+    )
     plan_preimage = {key: value for key, value in plan.items() if key != "plan_sha256"}
     assert plan["plan_sha256"] == canonical_digest(plan_preimage)
     assert plan["source_image_sha256"] == sha256_file(source)
