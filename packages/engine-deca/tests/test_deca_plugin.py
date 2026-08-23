@@ -1,4 +1,8 @@
+import ast
+import inspect
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -156,6 +160,70 @@ def request_files(tmp_path: Path):
     request_path = tmp_path / "request.json"
     write_face_geometry_plugin_request(request, request_path)
     return request, request_path, tmp_path / "result.json"
+
+
+def test_sealed_worker_runs_help_from_an_isolated_copy(tmp_path: Path) -> None:
+    worker = tmp_path / "plugin.py"
+    shutil.copyfile(Path(inspect.getfile(DecaPluginSettings)), worker)
+
+    completed = subprocess.run(
+        ["py", "-3.9", "-I", str(worker), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "--request" in completed.stdout
+
+
+def test_sealed_worker_parses_as_cpython_39() -> None:
+    worker = Path(inspect.getfile(DecaPluginSettings))
+
+    ast.parse(worker.read_text(encoding="utf-8"), filename=str(worker), feature_version=(3, 9))
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"schema": "asset-mania.face-geometry-plugin-request.v2"}, "schema"),
+        ({"plugin": "unknown-local"}, "unsupported face geometry plugin"),
+        ({"plugin": "mica-local"}, "profile does not belong"),
+        ({"profile": "identity-neutral-v1"}, "profile does not belong"),
+        ({"plugin_revision": "A" * 40}, "revision"),
+        ({"checkpoint_sha256": "B" * 64}, "checkpoint digest"),
+        ({"face_rights_receipt_sha256": "D" * 64}, "rights digest"),
+        ({"source_image": "relative.png"}, "source image must be absolute"),
+        ({"output_directory": "relative-output"}, "output directory must be absolute"),
+        ({"device": "cpu"}, "device must be cuda"),
+        ({"topology": "other"}, "topology"),
+        ({"network": "allowed"}, "network must be denied"),
+    ],
+)
+def test_private_request_validation_matches_public_v1(
+    tmp_path: Path, changes: dict[str, str], message: str
+) -> None:
+    _request, request_path, _result_path = request_files(tmp_path)
+    document = json.loads(request_path.read_text(encoding="utf-8"))
+    document.update(changes)
+    request_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        __import__("asset_mania_engine_deca.plugin", fromlist=["_load_request"])._load_request(
+            request_path
+        )
+
+
+def test_private_request_rejects_source_inside_output_directory(tmp_path: Path) -> None:
+    _request, request_path, _result_path = request_files(tmp_path)
+    document = json.loads(request_path.read_text(encoding="utf-8"))
+    document["source_image"] = str(Path(document["output_directory"]) / "source.png")
+    request_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source image must not be contained"):
+        __import__("asset_mania_engine_deca.plugin", fromlist=["_load_request"])._load_request(
+            request_path
+        )
 
 
 def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction:

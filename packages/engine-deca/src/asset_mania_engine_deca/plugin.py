@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import socket
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
-from asset_mania_contracts import canonical_json
-from asset_mania_pipeline import FaceGeometryPluginRequest, sha256_file
+if TYPE_CHECKING:
+    import numpy as np
 
 _REQUEST_FIELDS = frozenset(
     {
@@ -34,7 +35,7 @@ _REQUEST_FIELDS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DecaPluginSettings:
     source_root: Path
     isolated_home: Path
@@ -45,13 +46,78 @@ class DecaPluginSettings:
     flame_sha256: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DecaPrediction:
     vertices: np.ndarray
     faces: np.ndarray
     source_projection: np.ndarray
     detail_displacement: np.ndarray
     coordinate_unit: str
+
+
+@dataclass(frozen=True)
+class _FaceGeometryPluginRequest:
+    schema: str
+    plugin: str
+    profile: str
+    plugin_revision: str
+    source_image: Path
+    output_directory: Path
+    device: str
+    checkpoint_sha256: str
+    topology: str
+    face_rights_receipt_sha256: str
+    network: str
+
+    def __post_init__(self) -> None:
+        if self.schema != "asset-mania.face-geometry-plugin-request.v1":
+            raise ValueError("unsupported face geometry request schema")
+        profiles = {"mica-local": "identity-neutral-v1", "deca-local": "detail-displacement-v1"}
+        if self.plugin not in profiles:
+            raise ValueError("unsupported face geometry plugin")
+        if self.profile != profiles[self.plugin]:
+            raise ValueError("profile does not belong to plugin")
+        if not _is_lower_hex(self.plugin_revision, 40):
+            raise ValueError("revision must be a SHA-1")
+        if not self.source_image.is_absolute():
+            raise ValueError("source image must be absolute")
+        if not self.output_directory.is_absolute():
+            raise ValueError("output directory must be absolute")
+        if (
+            self.source_image == self.output_directory
+            or self.output_directory in self.source_image.parents
+        ):
+            raise ValueError("source image must not be contained by output directory")
+        if self.device != "cuda":
+            raise ValueError("device must be cuda")
+        if not _is_lower_hex(self.checkpoint_sha256, 64):
+            raise ValueError("checkpoint digest must be SHA-256")
+        if self.topology != "flame-2020-5023":
+            raise ValueError("topology must be flame-2020-5023")
+        if not _is_lower_hex(self.face_rights_receipt_sha256, 64):
+            raise ValueError("rights digest must be SHA-256")
+        if self.network != "denied-during-inference":
+            raise ValueError("network must be denied during inference")
+
+
+def _is_lower_hex(value: object, length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _git_revision(source_root: Path) -> str:
@@ -80,7 +146,7 @@ def validate_deca_runtime(
     settings: DecaPluginSettings,
     *,
     revision_reader: Callable[[Path], str] = _git_revision,
-    digest_reader: Callable[[Path], str] = sha256_file,
+    digest_reader: Callable[[Path], str] = _sha256_file,
     clean_reader: Callable[[Path], bool] = _git_is_clean,
 ) -> Path:
     marker = settings.source_root / "decalib" / "deca.py"
@@ -104,6 +170,8 @@ def validate_deca_runtime(
 
 
 def sample_uv_displacement(displacement: np.ndarray, uv_coordinates: np.ndarray) -> np.ndarray:
+    import numpy as np
+
     image = np.asarray(displacement, dtype=np.float64)
     uv = np.asarray(uv_coordinates, dtype=np.float64)
     if image.ndim != 2 or uv.ndim != 2 or uv.shape[1] != 2:
@@ -136,6 +204,8 @@ def sample_position_uv_displacement(
     uv_coordinates: np.ndarray,
     uv_faces: np.ndarray,
 ) -> np.ndarray:
+    import numpy as np
+
     raw_triangles = np.asarray(faces)
     raw_texture_triangles = np.asarray(uv_faces)
     coordinates = np.asarray(uv_coordinates, dtype=np.float64)
@@ -199,14 +269,14 @@ def _decompose_code(parameters, model_cfg):
     return code
 
 
-def _load_request(path: Path) -> FaceGeometryPluginRequest:
+def _load_request(path: Path) -> _FaceGeometryPluginRequest:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("DECA request is unreadable") from error
     if not isinstance(document, dict) or set(document) != _REQUEST_FIELDS:
         raise ValueError("DECA request contains fields outside the v1 allowlist")
-    return FaceGeometryPluginRequest(
+    return _FaceGeometryPluginRequest(
         schema=document["schema"],
         plugin=document["plugin"],
         profile=document["profile"],
@@ -249,6 +319,7 @@ def _require_checkpoint_keys(checkpoint: object) -> dict:
 
 def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaPrediction:
     import cv2
+    import numpy as np
     import torch
     from decalib.models.decoders import Generator as DetailGenerator
     from decalib.models.encoders import ResnetEncoder
@@ -332,6 +403,8 @@ def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaP
 def _validate_prediction(
     prediction: DecaPrediction,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    import numpy as np
+
     vertices = np.asarray(prediction.vertices, dtype=np.float32)
     faces = np.asarray(prediction.faces, dtype=np.int64)
     projection = np.asarray(prediction.source_projection, dtype=np.float32)
@@ -363,9 +436,11 @@ def execute_deca_request(
     *,
     backend: Callable[[Path, DecaPluginSettings], DecaPrediction] = _official_backend,
     revision_reader: Callable[[Path], str] = _git_revision,
-    digest_reader: Callable[[Path], str] = sha256_file,
+    digest_reader: Callable[[Path], str] = _sha256_file,
     clean_reader: Callable[[Path], bool] = _git_is_clean,
 ) -> int:
+    import numpy as np
+
     request = _load_request(request_path)
     if request.plugin != "deca-local" or request.profile != "detail-displacement-v1":
         raise ValueError("request differs from DECA detail profile")
@@ -422,7 +497,7 @@ def execute_deca_request(
         "ephemeral_identity_feature_used": False,
         "persisted_identity_feature_count": 0,
     }
-    result_path.write_text(canonical_json(result), encoding="utf-8")
+    result_path.write_text(_canonical_json(result), encoding="utf-8")
     return 0
 
 
@@ -433,7 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv=None) -> int:
     arguments = build_parser().parse_args(list(argv) if argv is not None else None)
     required = {
         "source_root": os.environ.get("ASSET_MANIA_DECA_SOURCE_ROOT"),

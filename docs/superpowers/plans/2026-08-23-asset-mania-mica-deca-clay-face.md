@@ -285,6 +285,12 @@ Expected: all pass.
 
 ### Task 3: Add the isolated MICA identity adapter
 
+The public CPython 3.11-3.13 pipeline is the launcher and validator. The hash-sealed MICA and DECA
+`plugin.py` files are also self-contained CPython 3.9 workers: they duplicate only canonical JSON,
+chunked SHA-256, and exact v1 request validation, keep model imports lazy, and do not import
+workspace packages. Verify each copied worker with `python -I plugin.py --help`, CPython 3.9 AST
+parsing, and behavioral request-validation parity tests; package metadata remains unchanged.
+
 **Files:**
 - Create: `packages/engine-mica/pyproject.toml`
 - Create: `packages/engine-mica/LICENSE`

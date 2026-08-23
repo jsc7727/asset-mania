@@ -151,6 +151,11 @@ path is allowed in the inventory.
 
 Each adapter uses a user-supplied Python executable and source checkout in its own private runtime.
 The public workspace does not import torch, MICA, DECA, InsightFace, face-alignment, or FLAME.
+The public controller and package workspace remain on CPython 3.11-3.13, while each hash-sealed
+single-file `plugin.py` worker is directly executable by its validated CPython 3.9 runtime. The
+sealed worker has no workspace-package dependency: it carries only canonical JSON, chunked SHA-256,
+and the exact v1 request validation needed to fail closed before inference. Model and numeric
+runtime imports stay lazy so `python -I plugin.py --help` works from an isolated copy.
 
 Before source open, the launcher verifies:
 
