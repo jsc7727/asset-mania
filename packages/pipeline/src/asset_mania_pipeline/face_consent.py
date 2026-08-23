@@ -3,7 +3,7 @@
 import os
 import re
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,7 @@ _SUBJECT = "real_person"
 _SCOPE = "local-network-denied-face-geometry-v1"
 _ISSUER_TYPE = "user"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_RFC3339_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+_RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
 _FIELDS = {
     "schema_id",
     "schema_version",
@@ -49,12 +49,14 @@ def _require_sha256(value: object, field: str) -> str:
 
 
 def _require_issued_at(value: object) -> str:
-    if not isinstance(value, str) or _RFC3339_UTC.fullmatch(value) is None:
-        raise ValueError("issued_at must be an RFC 3339 UTC timestamp ending in Z")
+    if not isinstance(value, str) or _RFC3339.fullmatch(value) is None:
+        raise ValueError("issued_at must be an RFC 3339 timestamp with an explicit UTC offset")
     try:
-        datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError as error:
         raise ValueError("issued_at must be a valid RFC 3339 UTC instant") from error
+    if parsed.utcoffset() != timedelta(0):
+        raise ValueError("issued_at must represent an RFC 3339 UTC instant")
     return value
 
 
