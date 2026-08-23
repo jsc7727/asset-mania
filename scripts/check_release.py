@@ -311,16 +311,6 @@ def check_release(root: Path) -> list[Finding]:
     third_party_notices = _inventory_entries(root, tracked, _THIRD_PARTY_NOTICES)
 
     for relative in tracked_paths:
-        if _is_forbidden_path(relative):
-            findings.append(
-                Finding(
-                    code="FORBIDDEN_TRACKED_PATH",
-                    path=relative.as_posix(),
-                    message="tracked release path is forbidden",
-                )
-            )
-            continue
-
         if _has_standing_consent_filename(relative):
             findings.append(
                 Finding(
@@ -332,10 +322,7 @@ def check_release(root: Path) -> list[Finding]:
             continue
 
         path = _safe_regular_file(root, relative)
-        if path is None:
-            continue
-
-        text = _read_text(path)
+        text = _read_text(path) if path is not None else None
         if _is_standing_consent_content(text):
             findings.append(
                 Finding(
@@ -344,6 +331,19 @@ def check_release(root: Path) -> list[Finding]:
                     message="tracked local face standing consent is forbidden",
                 )
             )
+            continue
+
+        if _is_forbidden_path(relative):
+            findings.append(
+                Finding(
+                    code="FORBIDDEN_TRACKED_PATH",
+                    path="private-release-entry",
+                    message="tracked release path is forbidden",
+                )
+            )
+            continue
+
+        if path is None:
             continue
 
         if (
@@ -416,7 +416,7 @@ def check_release(root: Path) -> list[Finding]:
             )
         )
 
-    return sorted(set(findings))
+    return sorted(findings)
 
 
 def main(arguments: list[str] | None = None) -> int:

@@ -99,7 +99,7 @@ def test_forbidden_tracked_paths_are_reported(tmp_path: Path, relative: str) -> 
 
     findings = _findings_with_code(root, "FORBIDDEN_TRACKED_PATH")
 
-    assert [finding.path for finding in findings] == [relative]
+    assert [finding.path for finding in findings] == ["private-release-entry"]
 
 
 def test_absolute_home_string_is_reported_without_echoing_it(tmp_path: Path) -> None:
@@ -186,6 +186,56 @@ def test_standing_consent_cli_diagnostic_is_fully_sanitized(
         "tracked local face standing consent is forbidden\n"
     )
     for private_value in (private_path, private_basename, source_digest, raw_content):
+        assert private_value not in rendered
+
+
+@pytest.mark.parametrize(
+    ("relative", "content", "expected"),
+    [
+        (
+            ".asset-mania/subject-standing-consent.json",
+            "private standing consent bytes",
+            (
+                "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+                "tracked local face standing consent is forbidden\n"
+            ),
+        ),
+        (
+            ".asset-mania/innocuous.json",
+            '{"schema_id":"asset-mania/local-face-standing-consent",'
+            '"source_sha256":"' + "a" * 64 + '","raw":"PRIVATE-CONTENT"}\n',
+            (
+                "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+                "tracked local face standing consent is forbidden\n"
+            ),
+        ),
+        (
+            ".asset-mania/ordinary-artifact.json",
+            "PRIVATE-CONTENT",
+            "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden\n",
+        ),
+    ],
+)
+def test_private_release_cli_findings_do_not_render_private_entry_details(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    relative: str,
+    content: str,
+    expected: str,
+) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, relative, content)
+
+    assert main([str(root)]) == 1
+
+    rendered = capsys.readouterr().out
+    assert rendered == expected
+    for private_value in (
+        relative,
+        Path(relative).name,
+        "a" * 64,
+        "PRIVATE-CONTENT",
+    ):
         assert private_value not in rendered
 
 
@@ -407,8 +457,8 @@ def test_command_prints_sorted_findings_and_returns_one(
     assert captured.err == ""
     assert captured.out.splitlines() == sorted(captured.out.splitlines())
     assert captured.out.splitlines() == [
-        "FORBIDDEN_TRACKED_PATH a.env: tracked release path is forbidden",
-        "FORBIDDEN_TRACKED_PATH z-token.json: tracked release path is forbidden",
+        "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden",
+        "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden",
     ]
 
 
