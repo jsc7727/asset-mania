@@ -3,6 +3,7 @@ import inspect
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -96,7 +97,7 @@ def test_sealed_worker_runs_help_from_an_isolated_copy(tmp_path: Path) -> None:
     shutil.copyfile(Path(inspect.getfile(MicaPluginSettings)), worker)
 
     completed = subprocess.run(
-        ["py", "-3.9", "-I", str(worker), "--help"],
+        [sys.executable, "-I", str(worker), "--help"],
         check=False,
         capture_output=True,
         text=True,
