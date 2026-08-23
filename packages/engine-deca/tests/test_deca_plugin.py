@@ -2,10 +2,13 @@ import ast
 import inspect
 import json
 import shutil
+import socket
 import subprocess
 import sys
+import types
 from pathlib import Path
 
+import asset_mania_engine_deca.plugin as deca_plugin
 import numpy as np
 import pytest
 from asset_mania_engine_deca.plugin import (
@@ -37,6 +40,67 @@ def topology() -> np.ndarray:
 def test_checkpoint_keys_fail_closed() -> None:
     with pytest.raises(ValueError, match="missing required model keys"):
         _require_checkpoint_keys({"E_flame": {}, "E_detail": {}})
+
+
+def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeypatch) -> None:
+    original_socket = (
+        socket.socket.__base__
+        if getattr(socket.socket, "_asset_mania_network_denied", False)
+        else socket.socket
+    )
+    original_create_connection = socket.create_connection
+    requests = types.ModuleType("requests")
+
+    class Session:
+        def request(self, *_args, **_kwargs):
+            pytest.fail("request must be denied")
+
+        def get(self, url: str):
+            return self.request("GET", url)
+
+    requests.sessions = types.SimpleNamespace(Session=Session)
+    requests.Session = Session
+    monkeypatch.setattr(socket, "socket", original_socket)
+    monkeypatch.setattr(socket, "create_connection", original_create_connection)
+    monkeypatch.setitem(sys.modules, "requests", requests)
+
+    deca_plugin._deny_network()
+    denied_socket = socket.socket
+    deca_plugin._deny_network()
+
+    class ImportStyleSocket(socket.socket):
+        pass
+
+    assert socket.socket is denied_socket
+    assert issubclass(ImportStyleSocket, original_socket)
+    with socket.socket() as connection:
+        with pytest.raises(RuntimeError, match="network denied during DECA inference"):
+            connection.connect(("127.0.0.1", 9))
+        with pytest.raises(RuntimeError, match="network denied during DECA inference"):
+            connection.connect_ex(("127.0.0.1", 9))
+    with pytest.raises(RuntimeError, match="network denied during DECA inference"):
+        socket.create_connection(("127.0.0.1", 9))
+    with pytest.raises(RuntimeError, match="network denied during DECA inference"):
+        requests.Session().get("https://example.invalid")
+
+
+def test_network_denial_allows_fresh_ssl_import_without_requests() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from asset_mania_engine_deca.plugin import _deny_network; "
+                "_deny_network(); import socket, ssl; "
+                "assert issubclass(ssl.SSLSocket, socket.socket)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_decompose_code_preserves_sealed_numeric_parameter_slices() -> None:

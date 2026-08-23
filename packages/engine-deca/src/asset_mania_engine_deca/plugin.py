@@ -295,12 +295,26 @@ def _deny_network() -> None:
     def refuse(*_args, **_kwargs):
         raise RuntimeError("network denied during DECA inference")
 
-    socket.socket = refuse
     try:
         import requests
     except ImportError:
-        return
-    requests.sessions.Session.request = refuse
+        requests = None
+
+    if not getattr(socket.socket, "_asset_mania_network_denied", False):
+
+        class DeniedSocket(socket.socket):
+            _asset_mania_network_denied = True
+
+            def connect(self, _address) -> None:
+                refuse()
+
+            def connect_ex(self, _address) -> int:
+                refuse()
+
+        socket.socket = DeniedSocket
+        socket.create_connection = refuse
+    if requests is not None:
+        requests.sessions.Session.request = refuse
 
 
 def _sanitize_credentials() -> None:
