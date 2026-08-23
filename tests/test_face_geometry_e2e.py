@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from asset_mania_contracts import canonical_json
+from asset_mania_contracts import canonical_digest, canonical_json
 from asset_mania_pipeline import (
     export_clay_glb,
     issue_receipt,
@@ -12,6 +12,7 @@ from asset_mania_pipeline import (
     sha256_file,
 )
 from PIL import Image
+from scipy.spatial import Delaunay
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -20,18 +21,32 @@ from scripts.run_face_geometry_e2e import main
 
 
 def topology_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    indices = np.arange(9976, dtype=np.int64)
-    faces = np.stack([indices % 5023, (indices + 1) % 5023, (indices + 2) % 5023], axis=1)
+    faces = Delaunay(geometry_points()).simplices.astype(np.int64)
+    assert faces.shape == (9976, 3)
     face_indices = np.arange(5023, dtype=np.int64)
     inner = np.arange(256, dtype=np.int64)
     return faces, face_indices, inner
 
 
 def geometry_vertices() -> np.ndarray:
-    index = np.arange(5023, dtype=np.float64)
-    angle = index / 5023 * 2 * np.pi
-    y = np.linspace(-0.12, 0.12, 5023)
-    return np.stack([0.08 * np.cos(angle), y, -0.06 * np.sin(angle)], axis=1)
+    points = geometry_points()
+    radius_squared = np.sum(points**2, axis=1)
+    return np.stack(
+        [0.08 * points[:, 0], 0.12 * points[:, 1], 0.03 * (1 - radius_squared)],
+        axis=1,
+    )
+
+
+def geometry_points() -> np.ndarray:
+    boundary_count = 68
+    boundary_angle = np.arange(boundary_count) / boundary_count * 2 * np.pi
+    boundary = np.stack([np.cos(boundary_angle), np.sin(boundary_angle)], axis=1)
+    interior_count = 5023 - boundary_count
+    index = np.arange(interior_count, dtype=np.float64)
+    angle = index * np.pi * (3 - np.sqrt(5))
+    radius = 0.95 * np.sqrt((index + 0.5) / interior_count)
+    interior = np.stack([radius * np.cos(angle), radius * np.sin(angle)], axis=1)
+    return np.concatenate([boundary, interior], axis=0)
 
 
 def planned_run(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -193,6 +208,9 @@ def test_plugin_stages_consume_rights_once_and_write_closed_records(tmp_path: Pa
     assert len(list((rights / "consumed").glob("*.json"))) == 1
     assert (run / "mica/record.json").is_file()
     assert (run / "deca/record.json").is_file()
+    mica_record = json.loads((run / "mica/record.json").read_text(encoding="utf-8"))
+    assert mica_record["python_sha256"] == sha256_file(python)
+    assert mica_record["plugin_executable_sha256"] == sha256_file(mica)
 
 
 def completed_plugin_run(tmp_path: Path) -> tuple[Path, Path]:
@@ -233,6 +251,35 @@ def completed_plugin_run(tmp_path: Path) -> tuple[Path, Path]:
         plugin_runner=fake_plugin_runner,
     )
     return run, source
+
+
+def verified_run(tmp_path: Path) -> Path:
+    run, _source = completed_plugin_run(tmp_path)
+    assert main(["geometry-fuse", "--run", str(run)]) == 0
+    dad = tmp_path / "dad.glb"
+    dad.write_bytes(b"baseline")
+    blender = tmp_path / "blender.exe"
+    blender.write_bytes(b"blender")
+
+    def fake_preview(_mesh: Path, output: Path, _blender: Path) -> None:
+        Image.new("RGB", (8, 8), (120, 120, 120)).save(output)
+
+    assert (
+        main(
+            [
+                "geometry-verify",
+                "--run",
+                str(run),
+                "--blender",
+                str(blender),
+                "--dad-baseline",
+                str(dad),
+            ],
+            preview_runner=fake_preview,
+        )
+        == 0
+    )
+    return run
 
 
 def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
@@ -303,3 +350,129 @@ def test_fusion_rejects_topology_changed_after_plan(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="topology digest mismatch"):
         main(["geometry-fuse", "--run", str(run)])
+
+
+@pytest.mark.parametrize("stage", ["mica", "deca"])
+def test_fusion_rejects_plugin_geometry_changed_after_record(tmp_path: Path, stage: str) -> None:
+    run, _source = completed_plugin_run(tmp_path)
+    (run / stage / "plugin-output/geometry.npz").write_bytes(b"tampered")
+
+    with pytest.raises(ValueError, match=f"{stage.upper()} geometry digest mismatch"):
+        main(["geometry-fuse", "--run", str(run)])
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    ["mica-clay.glb", "deca-clay.glb", "mica-deca-clay.glb"],
+)
+def test_verification_rejects_fusion_artifact_changed_after_record(
+    tmp_path: Path, artifact: str
+) -> None:
+    run, _source = completed_plugin_run(tmp_path)
+    assert main(["geometry-fuse", "--run", str(run)]) == 0
+    (run / "fusion" / artifact).write_bytes(b"tampered")
+    blender = tmp_path / "blender.exe"
+    blender.write_bytes(b"blender")
+    dad = tmp_path / "dad.glb"
+    dad.write_bytes(b"baseline")
+
+    with pytest.raises(ValueError, match="fusion artifact digest mismatch"):
+        main(
+            [
+                "geometry-verify",
+                "--run",
+                str(run),
+                "--blender",
+                str(blender),
+                "--dad-baseline",
+                str(dad),
+            ],
+            preview_runner=lambda *_args: pytest.fail("preview must not run"),
+        )
+
+
+def test_verification_report_is_canonically_self_sealed(tmp_path: Path) -> None:
+    run = verified_run(tmp_path)
+    report = json.loads((run / "verification/report.json").read_text(encoding="utf-8"))
+
+    seal = report.pop("report_sha256")
+    assert seal == canonical_digest(report)
+
+
+def test_review_rejects_mutated_verification_report(tmp_path: Path) -> None:
+    run = verified_run(tmp_path)
+    report_path = run / "verification/report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["status"] = "failed"
+    report_path.write_text(canonical_json(report), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="verification report digest"):
+        main(
+            [
+                "geometry-review",
+                "--run",
+                str(run),
+                "--verdict",
+                "failed",
+                "--reason",
+                "tampered report",
+            ]
+        )
+
+
+def test_review_rejects_comparison_changed_after_verification(tmp_path: Path) -> None:
+    run = verified_run(tmp_path)
+    (run / "verification/comparison.png").write_bytes(b"tampered")
+
+    with pytest.raises(ValueError, match="comparison digest mismatch"):
+        main(
+            [
+                "geometry-review",
+                "--run",
+                str(run),
+                "--verdict",
+                "failed",
+                "--reason",
+                "tampered comparison",
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [("python", "Python runtime digest mismatch"), ("plugin", "plugin executable digest mismatch")],
+)
+def test_plugin_stage_rejects_executable_changed_during_execution(
+    tmp_path: Path, target: str, message: str
+) -> None:
+    run, source, _topology = planned_run(tmp_path)
+    rights = tmp_path / "rights"
+    issue_rights(run, rights)
+    python = tmp_path / "python.exe"
+    plugin = tmp_path / "mica.exe"
+    python.write_bytes(b"runtime")
+    plugin.write_bytes(b"plugin")
+
+    def mutating_runner(*args, **kwargs):
+        result = fake_plugin_runner(*args, **kwargs)
+        (python if target == "python" else plugin).write_bytes(b"mutated executable")
+        return result
+
+    with pytest.raises(ValueError, match=message):
+        main(
+            [
+                "mica-run",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--rights-store",
+                str(rights),
+                "--python",
+                str(python),
+                "--plugin",
+                str(plugin),
+            ],
+            plugin_runner=mutating_runner,
+            now="2026-08-23T00:00:00+00:00",
+        )

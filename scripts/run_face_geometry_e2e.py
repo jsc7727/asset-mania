@@ -62,6 +62,11 @@ def _verify_seal(document: dict, field: str, label: str) -> None:
         raise ValueError(f"{label} digest does not match its content")
 
 
+def _verify_file_digest(path: Path, expected: str, label: str) -> None:
+    if sha256_file(path) != expected:
+        raise ValueError(f"{label} digest mismatch")
+
+
 def _create_run(output: Path, timestamp: datetime, run_id: str) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     run = output / f"{timestamp.strftime('%Y%m%dT%H%M%SZ')}-{run_id}"
@@ -196,15 +201,21 @@ def _plugin_stage(
     )
     request_path = stage / "request.json"
     result_path = stage / "result.json"
+    python = arguments.python.resolve(strict=True)
+    plugin = arguments.plugin.resolve(strict=True)
+    python_sha256 = sha256_file(python)
+    plugin_executable_sha256 = sha256_file(plugin)
     write_face_geometry_plugin_request(request, request_path)
     result = plugin_runner(
-        [str(arguments.python.resolve(strict=True)), str(arguments.plugin.resolve(strict=True))],
+        [str(python), str(plugin)],
         request,
         request_path,
         result_path,
         timeout_seconds=300,
         environment=_plugin_environment(plugin_name),
     )
+    _verify_file_digest(python, python_sha256, "Python runtime")
+    _verify_file_digest(plugin, plugin_executable_sha256, "plugin executable")
     verify_source_unchanged(source, before)
     geometry = result.geometry
     if geometry is None:
@@ -217,6 +228,8 @@ def _plugin_stage(
         "plugin": plugin_name,
         "plugin_profile": profile,
         "checkpoint_sha256": checkpoint,
+        "python_sha256": python_sha256,
+        "plugin_executable_sha256": plugin_executable_sha256,
         "source_unchanged": True,
         "geometry_sha256": sha256_file(geometry),
         "vertex_count": result.vertex_count,
@@ -256,6 +269,16 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
     deca_record = _load(run / "deca/record.json", "DECA record")
     _verify_seal(mica_record, "record_sha256", "MICA record")
     _verify_seal(deca_record, "record_sha256", "DECA record")
+    _verify_file_digest(
+        run / "mica/plugin-output/geometry.npz",
+        mica_record["geometry_sha256"],
+        "MICA geometry",
+    )
+    _verify_file_digest(
+        run / "deca/plugin-output/geometry.npz",
+        deca_record["geometry_sha256"],
+        "DECA geometry",
+    )
     if sha256_file(run / "topology.npz") != plan["topology_sha256"]:
         raise ValueError("topology digest mismatch")
     faces, face_indices, inner = _topology(run)
@@ -370,29 +393,54 @@ def _run_verify(arguments: argparse.Namespace, *, preview_runner: Callable) -> i
     if report_path.exists():
         raise FileExistsError("refusing to overwrite face geometry verification")
     blender = arguments.blender.resolve(strict=True)
+    blender_sha256 = sha256_file(blender)
+    fusion_meshes = {
+        "mica": run / "fusion/mica-clay.glb",
+        "deca": run / "fusion/deca-clay.glb",
+        "fusion": run / "fusion/mica-deca-clay.glb",
+    }
+    for label, mesh in fusion_meshes.items():
+        _verify_file_digest(
+            mesh,
+            fusion["artifacts"][label]["mesh_sha256"],
+            "fusion artifact",
+        )
+    dad_baseline = arguments.dad_baseline.resolve(strict=True)
+    dad_baseline_sha256 = sha256_file(dad_baseline)
     rows = [
-        ("MICA identity clay", run / "fusion/mica-clay.glb", verification / "mica.png"),
-        ("DECA coarse clay", run / "fusion/deca-clay.glb", verification / "deca.png"),
-        ("MICA + DECA clay", run / "fusion/mica-deca-clay.glb", verification / "fusion.png"),
+        ("MICA identity clay", fusion_meshes["mica"], verification / "mica.png"),
+        ("DECA coarse clay", fusion_meshes["deca"], verification / "deca.png"),
+        ("MICA + DECA clay", fusion_meshes["fusion"], verification / "fusion.png"),
         (
             "Corrected DAD clay",
-            arguments.dad_baseline.resolve(strict=True),
+            dad_baseline,
             verification / "dad.png",
         ),
     ]
     for _label, mesh, output in rows:
         preview_runner(mesh, output, blender)
+    _verify_file_digest(blender, blender_sha256, "Blender executable")
+    _verify_file_digest(dad_baseline, dad_baseline_sha256, "DAD baseline")
+    for label, mesh in fusion_meshes.items():
+        _verify_file_digest(
+            mesh,
+            fusion["artifacts"][label]["mesh_sha256"],
+            "fusion artifact",
+        )
     comparison = verification / "comparison.png"
     _comparison([(label, output) for label, _mesh, output in rows], comparison)
-    report = {
+    preimage = {
         "schema_id": "asset-mania/private-face-geometry-verification",
         "schema_version": "0.1",
         "profile": PROFILE,
         "fusion_record_sha256": fusion["record_sha256"],
+        "blender_sha256": blender_sha256,
+        "dad_baseline_sha256": dad_baseline_sha256,
         "comparison_sha256": sha256_file(comparison),
         "visual_quality": "unreviewed",
         "status": "passed",
     }
+    report = {**preimage, "report_sha256": canonical_digest(preimage)}
     report_path.write_text(canonical_json(report), encoding="utf-8")
     return 0
 
@@ -401,6 +449,12 @@ def _run_review(arguments: argparse.Namespace) -> int:
     run = arguments.run.resolve(strict=True)
     report_path = run / "verification/report.json"
     report = _load(report_path, "verification report")
+    _verify_seal(report, "report_sha256", "verification report")
+    _verify_file_digest(
+        run / "verification/comparison.png",
+        report["comparison_sha256"],
+        "comparison",
+    )
     if report.get("status") != "passed" or report.get("visual_quality") != "unreviewed":
         raise ValueError("verification is not awaiting manual review")
     reason = arguments.reason.strip()
@@ -413,7 +467,7 @@ def _run_review(arguments: argparse.Namespace) -> int:
         "schema_id": "asset-mania/private-face-geometry-manual-review",
         "schema_version": "0.1",
         "profile": PROFILE,
-        "verification_sha256": sha256_file(report_path),
+        "verification_sha256": report["report_sha256"],
         "comparison_sha256": report["comparison_sha256"],
         "visual_quality": arguments.verdict,
         "reason": reason,
