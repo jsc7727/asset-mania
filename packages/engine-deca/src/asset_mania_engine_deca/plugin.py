@@ -136,15 +136,40 @@ def sample_position_uv_displacement(
     uv_coordinates: np.ndarray,
     uv_faces: np.ndarray,
 ) -> np.ndarray:
-    triangles = np.asarray(faces, dtype=np.int64)
-    texture_triangles = np.asarray(uv_faces, dtype=np.int64)
+    raw_triangles = np.asarray(faces)
+    raw_texture_triangles = np.asarray(uv_faces)
     coordinates = np.asarray(uv_coordinates, dtype=np.float64)
     if vertex_count <= 0:
         raise ValueError("DECA vertex count is invalid")
-    if triangles.shape != texture_triangles.shape or triangles.ndim != 2 or triangles.shape[1] != 3:
+    if (
+        raw_triangles.shape != raw_texture_triangles.shape
+        or raw_triangles.ndim != 2
+        or raw_triangles.shape[1] != 3
+    ):
         raise ValueError("DECA position and UV topology differ")
-    if not len(triangles):
+    if not len(raw_triangles):
         raise ValueError("DECA position and UV topology is empty")
+    for values, label in (
+        (raw_triangles, "position"),
+        (raw_texture_triangles, "UV"),
+    ):
+        has_real_numeric_dtype = np.issubdtype(values.dtype, np.integer) or np.issubdtype(
+            values.dtype, np.floating
+        )
+        if (
+            not has_real_numeric_dtype
+            or not np.isfinite(values).all()
+            or not np.equal(values, np.floor(values)).all()
+        ):
+            raise ValueError(f"DECA {label} topology indices must be integers")
+    if coordinates.ndim != 2 or coordinates.shape[1] != 2:
+        raise ValueError("DECA UV coordinates are invalid")
+    if not np.isfinite(coordinates).all():
+        raise ValueError("DECA UV coordinates contain non-finite values")
+    if np.any(coordinates < 0) or np.any(coordinates > 1):
+        raise ValueError("DECA UV coordinates are out of range")
+    triangles = raw_triangles.astype(np.int64)
+    texture_triangles = raw_texture_triangles.astype(np.int64)
     if triangles.min() < 0 or triangles.max() >= vertex_count:
         raise ValueError("DECA position topology is out of range")
     if texture_triangles.min() < 0 or texture_triangles.max() >= len(coordinates):

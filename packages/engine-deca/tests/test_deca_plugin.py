@@ -76,6 +76,40 @@ def test_position_uv_sampling_rejects_unmapped_and_out_of_range_topology() -> No
         sample_position_uv_displacement(displacement, 3, faces, uv, [[0, 1, 3]])
 
 
+@pytest.mark.parametrize(
+    ("faces", "uv_faces", "message"),
+    [
+        ([[0.5, 1, 2]], [[0, 1, 2]], "position topology indices must be integers"),
+        ([[0, 1, 2]], [[0, 1.5, 2]], "UV topology indices must be integers"),
+    ],
+)
+def test_position_uv_sampling_rejects_fractional_topology_indices(
+    faces: list[list[float]], uv_faces: list[list[float]], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        sample_position_uv_displacement(
+            np.zeros((2, 2), dtype=np.float64),
+            3,
+            faces,
+            np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]),
+            uv_faces,
+        )
+
+
+@pytest.mark.parametrize("unused_uv", [[np.nan, 0.0], [1.1, 0.0]])
+def test_position_uv_sampling_validates_unused_uv_coordinates(unused_uv: list[float]) -> None:
+    uv = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], unused_uv])
+
+    with pytest.raises(ValueError, match="UV"):
+        sample_position_uv_displacement(
+            np.zeros((2, 2), dtype=np.float64),
+            3,
+            [[0, 1, 2]],
+            uv,
+            [[0, 1, 2]],
+        )
+
+
 def settings(tmp_path: Path) -> DecaPluginSettings:
     source_root = tmp_path / "deca-source"
     source_root.mkdir()
@@ -137,12 +171,13 @@ def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction
 
 
 def test_uv_displacement_sampling_has_fixed_orientation() -> None:
-    displacement = np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float64)
+    rows, columns = np.mgrid[0:4, 0:4]
+    displacement = rows * 10.0 + columns
     uv = np.array([[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]], dtype=np.float64)
 
     sampled = sample_uv_displacement(displacement, uv)
 
-    assert np.allclose(sampled, [2.0, 1.0, 1.5])
+    assert np.allclose(sampled, [30.0, 3.0, 16.5])
 
 
 def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
