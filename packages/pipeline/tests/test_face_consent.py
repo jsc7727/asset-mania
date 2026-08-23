@@ -99,6 +99,20 @@ def test_validate_accepts_rfc3339_fractional_seconds_and_explicit_utc_offset(iss
     assert validate_local_face_standing_consent(record, source_sha256=SOURCE_SHA256) == record
 
 
+@pytest.mark.parametrize(
+    "issued_at",
+    ["2026-08-23T12:34:56-00:00", "2026-08-23T12:34:56.123-00:00"],
+)
+def test_validate_rejects_rfc3339_unknown_local_offset(issued_at):
+    record = _record()
+    record["issued_at"] = issued_at
+    preimage = {key: item for key, item in record.items() if key != "consent_sha256"}
+    record["consent_sha256"] = canonical_digest(preimage)
+
+    with pytest.raises(ValueError, match="issued_at"):
+        validate_local_face_standing_consent(record, source_sha256=SOURCE_SHA256)
+
+
 def test_validate_rejects_a_different_source_before_accepting_consent():
     with pytest.raises(ValueError, match="different source"):
         validate_local_face_standing_consent(_record(), source_sha256="c3" * 32)

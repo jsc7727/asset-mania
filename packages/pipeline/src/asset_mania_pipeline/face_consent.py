@@ -51,6 +51,8 @@ def _require_sha256(value: object, field: str) -> str:
 def _require_issued_at(value: object) -> str:
     if not isinstance(value, str) or _RFC3339.fullmatch(value) is None:
         raise ValueError("issued_at must be an RFC 3339 timestamp with an explicit UTC offset")
+    if value.endswith("-00:00"):
+        raise ValueError("issued_at must not use the RFC 3339 unknown local offset -00:00")
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as error:
