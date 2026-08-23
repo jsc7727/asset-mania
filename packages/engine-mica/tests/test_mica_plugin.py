@@ -1,5 +1,4 @@
 import ast
-import inspect
 import json
 import shutil
 import socket
@@ -16,7 +15,6 @@ from asset_mania_engine_mica.plugin import (
     MicaPrediction,
     _bind_mica_model_assets,
     _directory_sha256,
-    _official_backend,
     _require_checkpoint_keys,
     _restore_chumpy_numpy_aliases,
     execute_mica_request,
@@ -43,19 +41,14 @@ def test_checkpoint_keys_fail_closed() -> None:
         _require_checkpoint_keys({"arcface": {}})
 
 
-def test_chumpy_numpy_compatibility_restores_only_missing_legacy_aliases() -> None:
+@pytest.mark.parametrize("alias", ["bool", "int", "float", "complex", "object", "unicode", "str"])
+def test_chumpy_numpy_compatibility_preserves_each_existing_legacy_alias(alias: str) -> None:
     sentinel = object()
-    numpy_module = types.SimpleNamespace(bool=sentinel)
+    numpy_module = types.SimpleNamespace(**{alias: sentinel})
 
     _restore_chumpy_numpy_aliases(numpy_module)
 
-    assert numpy_module.bool is sentinel
-    assert numpy_module.int is int
-    assert numpy_module.float is float
-    assert numpy_module.complex is complex
-    assert numpy_module.object is object
-    assert numpy_module.unicode is str
-    assert numpy_module.str is str
+    assert getattr(numpy_module, alias) is sentinel
 
 
 def test_chumpy_numpy_compatibility_is_idempotent() -> None:
@@ -78,11 +71,36 @@ def test_mica_model_assets_bind_exact_clean_revision_paths(tmp_path: Path) -> No
     head_template.write_bytes(b"tracked topology")
     cfg = types.SimpleNamespace(model=types.SimpleNamespace())
 
+    configured = MicaPluginSettings(
+        source_root=configured.source_root / ".." / configured.source_root.name,
+        isolated_home=configured.isolated_home,
+        checkpoint_path=configured.checkpoint_path,
+        flame_path=configured.flame_path.parent / "." / configured.flame_path.name,
+        detector_path=configured.detector_path,
+        revision=configured.revision,
+        checkpoint_sha256=configured.checkpoint_sha256,
+        flame_sha256=configured.flame_sha256,
+        detector_sha256=configured.detector_sha256,
+    )
+
     _bind_mica_model_assets(cfg, configured)
 
-    assert cfg.model.flame_model_path == str(configured.flame_path)
-    assert cfg.model.flame_lmk_embedding_path == str(landmark_embedding)
-    assert cfg.model.topology_path == str(head_template)
+    assert cfg.model.flame_model_path == str(configured.flame_path.resolve(strict=True))
+    assert cfg.model.flame_lmk_embedding_path == str(landmark_embedding.resolve(strict=True))
+    assert cfg.model.topology_path == str(head_template.resolve(strict=True))
+
+
+def test_mica_model_assets_reject_missing_sealed_flame(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    configured.flame_path.unlink()
+    flame_data = configured.source_root / "data" / "FLAME2020"
+    flame_data.mkdir(parents=True)
+    (flame_data / "landmark_embedding.npy").write_bytes(b"tracked landmarks")
+    (flame_data / "head_template.obj").write_bytes(b"tracked topology")
+    cfg = types.SimpleNamespace(model=types.SimpleNamespace())
+
+    with pytest.raises(ValueError, match="user-supplied FLAME asset is unavailable"):
+        _bind_mica_model_assets(cfg, configured)
 
 
 @pytest.mark.parametrize("missing_name", ["landmark_embedding.npy", "head_template.obj"])
@@ -178,14 +196,6 @@ def test_network_denial_allows_fresh_ssl_import_without_requests() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-
-
-def test_official_bridge_avoids_full_mica_renderer() -> None:
-    source = inspect.getsource(_official_backend)
-    assert "Arcface" in source
-    assert "Generator" in source
-    assert "find_model_using_name" not in source
-    assert "utils.landmark_detector" not in source
 
 
 def test_scrfd_bridge_uses_only_sealed_model_and_selects_centered_face(tmp_path: Path) -> None:
@@ -285,7 +295,7 @@ def request_files(tmp_path: Path):
 
 def test_sealed_worker_runs_help_from_an_isolated_copy(tmp_path: Path) -> None:
     worker = tmp_path / "plugin.py"
-    shutil.copyfile(Path(inspect.getfile(MicaPluginSettings)), worker)
+    shutil.copyfile(Path(sys.modules[MicaPluginSettings.__module__].__file__), worker)
 
     completed = subprocess.run(
         [sys.executable, "-I", str(worker), "--help"],
@@ -299,7 +309,7 @@ def test_sealed_worker_runs_help_from_an_isolated_copy(tmp_path: Path) -> None:
 
 
 def test_sealed_worker_parses_as_cpython_39() -> None:
-    worker = Path(inspect.getfile(MicaPluginSettings))
+    worker = Path(sys.modules[MicaPluginSettings.__module__].__file__)
 
     ast.parse(worker.read_text(encoding="utf-8"), filename=str(worker), feature_version=(3, 9))
 

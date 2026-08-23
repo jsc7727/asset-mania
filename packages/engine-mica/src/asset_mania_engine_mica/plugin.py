@@ -276,11 +276,13 @@ def _bind_mica_model_assets(cfg: object, settings: MicaPluginSettings) -> None:
     flame_data = settings.source_root / "data" / "FLAME2020"
     landmark_embedding = flame_data / "landmark_embedding.npy"
     head_template = flame_data / "head_template.obj"
+    if not settings.flame_path.is_file():
+        raise ValueError("user-supplied FLAME asset is unavailable")
     if not landmark_embedding.is_file() or not head_template.is_file():
         raise ValueError("tracked MICA FLAME asset is unavailable")
-    cfg.model.flame_model_path = str(settings.flame_path)
-    cfg.model.flame_lmk_embedding_path = str(landmark_embedding)
-    cfg.model.topology_path = str(head_template)
+    cfg.model.flame_model_path = str(settings.flame_path.resolve(strict=True))
+    cfg.model.flame_lmk_embedding_path = str(landmark_embedding.resolve(strict=True))
+    cfg.model.topology_path = str(head_template.resolve(strict=True))
 
 
 def _weak_projection(
