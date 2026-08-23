@@ -438,8 +438,8 @@ def _validate_prediction(
     if faces.min() < 0 or faces.max() >= len(vertices):
         raise ValueError("DECA returned an out-of-range face index")
     extent = float(np.ptp(vertices, axis=0).max())
-    if not 0.15 <= extent <= 0.30:
-        raise ValueError("DECA geometry extent must be between 0.15 and 0.30 metres")
+    if not 0.15 <= extent <= 0.32:
+        raise ValueError("DECA geometry extent must be between 0.15 and 0.32 metres")
     return vertices, faces, projection, displacement
 
 

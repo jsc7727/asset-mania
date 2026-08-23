@@ -27,9 +27,12 @@ def write_geometry(
     *,
     faces: np.ndarray | None = None,
     extra: dict[str, np.ndarray] | None = None,
+    longest_extent_metres: float | None = None,
 ) -> Path:
     x = np.linspace(-0.08, 0.08, 5023)
     vertices = np.stack([x, np.sin(x * 20) * 0.1, np.cos(x * 20) * 0.08], axis=1)
+    if longest_extent_metres is not None:
+        vertices *= longest_extent_metres / float(np.ptp(vertices, axis=0).max())
     arrays = {
         "vertices": vertices.astype(np.float32),
         "faces": flame_topology() if faces is None else faces,
@@ -50,6 +53,31 @@ def test_numeric_geometry_requires_exact_flame_topology(tmp_path: Path) -> None:
     assert data.vertices.shape == (5023, 3)
     assert data.faces.shape == (9976, 3)
     assert data.source_projection.shape == (5023, 2)
+
+
+@pytest.mark.parametrize("longest_extent_metres", [0.309499189, 0.32])
+def test_geometry_archive_accepts_full_head_extent_boundaries(
+    tmp_path: Path, longest_extent_metres: float
+) -> None:
+    path = write_geometry(
+        tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres
+    )
+
+    data = load_face_geometry(path, expected_topology=flame_topology())
+
+    assert np.isclose(np.ptp(data.vertices, axis=0).max(), longest_extent_metres)
+
+
+@pytest.mark.parametrize("longest_extent_metres", [0.149999, 0.320001])
+def test_geometry_archive_rejects_extent_outside_full_head_boundaries(
+    tmp_path: Path, longest_extent_metres: float
+) -> None:
+    path = write_geometry(
+        tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres
+    )
+
+    with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
+        load_face_geometry(path, expected_topology=flame_topology())
 
 
 @pytest.mark.parametrize("bad_key", ["embedding", "landmarks", "crop", "shape_parameters"])

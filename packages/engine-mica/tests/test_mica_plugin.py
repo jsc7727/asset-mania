@@ -368,6 +368,25 @@ def fake_backend(_source: Path, _settings: MicaPluginSettings) -> MicaPrediction
     )
 
 
+@pytest.mark.parametrize("extent", [0.309499189, 0.32])
+def test_prediction_validator_accepts_full_head_extent_boundaries(extent: float) -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+
+    vertices, _faces, _projection = mica_plugin._validate_prediction(prediction)
+
+    assert np.isclose(np.ptp(vertices, axis=0).max(), extent)
+
+
+@pytest.mark.parametrize("extent", [0.149999, 0.320001])
+def test_prediction_validator_rejects_extent_outside_full_head_boundaries(extent: float) -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+
+    with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
+        mica_plugin._validate_prediction(prediction)
+
+
 def file_digest_reader(configured: MicaPluginSettings):
     return {
         configured.checkpoint_path: CHECKPOINT,

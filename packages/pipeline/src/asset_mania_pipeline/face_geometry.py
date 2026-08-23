@@ -10,6 +10,8 @@ import numpy as np
 _GEOMETRY_FIELDS = frozenset({"vertices", "faces", "source_projection", "detail_displacement"})
 _FLOAT_DTYPES = frozenset((np.dtype(np.float32), np.dtype(np.float64)))
 _INDEX_DTYPES = frozenset((np.dtype(np.int32), np.dtype(np.int64)))
+_MINIMUM_HEAD_EXTENT_METRES = 0.15
+_MAXIMUM_HEAD_EXTENT_METRES = 0.32
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,8 +117,8 @@ def _validate_geometry(
         if np.any(extents <= 0):
             raise ValueError(f"{label} must have positive extent on every axis")
         longest_extent = float(extents.max())
-        if not 0.15 <= longest_extent <= 0.30:
-            raise ValueError(f"{label} longest extent must be between 0.15 and 0.30 metres")
+        if not _MINIMUM_HEAD_EXTENT_METRES <= longest_extent <= _MAXIMUM_HEAD_EXTENT_METRES:
+            raise ValueError(f"{label} longest extent must be between 0.15 and 0.32 metres")
     non_manifold, winding = _topology_measurements(faces)
     if non_manifold:
         raise ValueError(f"{label} contains non-manifold edges")

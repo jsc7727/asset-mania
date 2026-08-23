@@ -323,6 +323,25 @@ def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction
     )
 
 
+@pytest.mark.parametrize("extent", [0.309499189, 0.32])
+def test_prediction_validator_accepts_full_head_extent_boundaries(extent: float) -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+
+    vertices, _faces, _projection, _displacement = deca_plugin._validate_prediction(prediction)
+
+    assert np.isclose(np.ptp(vertices, axis=0).max(), extent)
+
+
+@pytest.mark.parametrize("extent", [0.149999, 0.320001])
+def test_prediction_validator_rejects_extent_outside_full_head_boundaries(extent: float) -> None:
+    prediction = fake_backend(Path(), object())
+    prediction.vertices[:, 0] = np.linspace(0.0, extent, 5023)
+
+    with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
+        deca_plugin._validate_prediction(prediction)
+
+
 def test_uv_displacement_sampling_has_fixed_orientation() -> None:
     rows, columns = np.mgrid[0:4, 0:4]
     displacement = rows * 10.0 + columns

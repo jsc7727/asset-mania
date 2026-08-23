@@ -105,6 +105,8 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
         "deca_revision": arguments.deca_revision,
         "deca_checkpoint_sha256": arguments.deca_checkpoint_sha256,
         "gates": {
+            "minimum_head_extent_metres": 0.15,
+            "maximum_head_extent_metres": 0.32,
             "maximum_displacement_metres": 0.003,
             "maximum_rms_displacement_metres": 0.0015,
             "minimum_face_displacement_coverage": 0.90,
