@@ -50,6 +50,11 @@ from .containers import (
     validate_glb_alpha_profile,
     validate_glb_has_no_absolute_resource,
 )
+from .face_consent import (
+    build_local_face_standing_consent,
+    validate_local_face_standing_consent,
+    write_local_face_standing_consent,
+)
 from .face_geometry import (
     FaceGeometryData,
     FaceGeometryMeasurements,
@@ -268,6 +273,7 @@ __all__ = [
     "build_face_geometry_plugin_request",
     "build_face_plugin_request",
     "build_face_taper",
+    "build_local_face_standing_consent",
     "build_selection_map",
     "clearance_summary",
     "clip_to_pixel",
@@ -338,6 +344,7 @@ __all__ = [
     "validate_glb",
     "validate_glb_alpha_profile",
     "validate_glb_has_no_absolute_resource",
+    "validate_local_face_standing_consent",
     "validate_receipt",
     "verify_artifacts_on_disk",
     "verify_bundle_seal",
@@ -355,5 +362,6 @@ __all__ = [
     "write_contact_sheet",
     "write_face_geometry_plugin_request",
     "write_face_plugin_request",
+    "write_local_face_standing_consent",
     "write_normalized_png",
 ]
