@@ -66,6 +66,12 @@ def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeyp
 
     deca_plugin._deny_network()
     denied_socket = socket.socket
+    socket.create_connection = lambda *_args, **_kwargs: pytest.fail(
+        "create_connection denial must be reasserted"
+    )
+    requests.sessions.Session.request = lambda *_args, **_kwargs: pytest.fail(
+        "requests denial must be reasserted"
+    )
     deca_plugin._deny_network()
 
     class ImportStyleSocket(socket.socket):
@@ -90,9 +96,23 @@ def test_network_denial_allows_fresh_ssl_import_without_requests() -> None:
             sys.executable,
             "-c",
             (
+                "import builtins; "
                 "from asset_mania_engine_deca.plugin import _deny_network; "
+                "real_import = builtins.__import__; "
+                "builtins.__import__ = lambda name, *args, **kwargs: "
+                "(_ for _ in ()).throw(ImportError('requests unavailable')) "
+                "if name == 'requests' else real_import(name, *args, **kwargs); "
                 "_deny_network(); import socket, ssl; "
-                "assert issubclass(ssl.SSLSocket, socket.socket)"
+                "assert issubclass(ssl.SSLSocket, socket.socket); "
+                "connection = socket.socket(); "
+                'exec("def _raises_runtime_error(check):\\n'
+                "    try:\\n        check()\\n"
+                "    except RuntimeError:\\n        return True\\n"
+                '    return False"); '
+                "checks = (lambda: connection.connect(('127.0.0.1', 9)), "
+                "lambda: connection.connect_ex(('127.0.0.1', 9)), "
+                "lambda: socket.create_connection(('127.0.0.1', 9))); "
+                "assert all(_raises_runtime_error(check) for check in checks)"
             ),
         ],
         check=False,

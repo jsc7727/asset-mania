@@ -312,7 +312,7 @@ def _deny_network() -> None:
                 refuse()
 
         socket.socket = DeniedSocket
-        socket.create_connection = refuse
+    socket.create_connection = refuse
     if requests is not None:
         requests.sessions.Session.request = refuse
 
