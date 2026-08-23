@@ -254,6 +254,35 @@ def _require_checkpoint_keys(checkpoint: object) -> dict:
     return checkpoint
 
 
+def _restore_chumpy_numpy_aliases(np_module=None) -> None:
+    if np_module is None:
+        import numpy as np_module
+
+    legacy_aliases = {
+        "bool": bool,
+        "int": int,
+        "float": float,
+        "complex": complex,
+        "object": object,
+        "unicode": str,
+        "str": str,
+    }
+    for name, value in legacy_aliases.items():
+        if name not in np_module.__dict__:
+            setattr(np_module, name, value)
+
+
+def _bind_mica_model_assets(cfg: object, settings: MicaPluginSettings) -> None:
+    flame_data = settings.source_root / "data" / "FLAME2020"
+    landmark_embedding = flame_data / "landmark_embedding.npy"
+    head_template = flame_data / "head_template.obj"
+    if not landmark_embedding.is_file() or not head_template.is_file():
+        raise ValueError("tracked MICA FLAME asset is unavailable")
+    cfg.model.flame_model_path = str(settings.flame_path)
+    cfg.model.flame_lmk_embedding_path = str(landmark_embedding)
+    cfg.model.topology_path = str(head_template)
+
+
 def _weak_projection(
     vertices: np.ndarray, bbox: np.ndarray, image_shape: tuple[int, int]
 ) -> np.ndarray:
@@ -300,6 +329,8 @@ def _official_backend(source_image: Path, settings: MicaPluginSettings) -> MicaP
     import cv2
     import numpy as np
     import torch
+
+    _restore_chumpy_numpy_aliases(np)
     from configs.config import get_cfg_defaults
     from datasets.creation.util import get_arcface_input, get_center
     from insightface.app.common import Face
@@ -319,7 +350,7 @@ def _official_backend(source_image: Path, settings: MicaPluginSettings) -> MicaP
     if arcface_tensor.ndim == 3:
         arcface_tensor = arcface_tensor[None]
     cfg = get_cfg_defaults()
-    cfg.model.flame_model_path = str(settings.flame_path)
+    _bind_mica_model_assets(cfg, settings)
     arcface = Arcface().to("cuda:0")
     generator = Generator(
         512,

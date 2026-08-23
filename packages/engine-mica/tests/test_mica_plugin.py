@@ -14,9 +14,11 @@ import pytest
 from asset_mania_engine_mica.plugin import (
     MicaPluginSettings,
     MicaPrediction,
+    _bind_mica_model_assets,
     _directory_sha256,
     _official_backend,
     _require_checkpoint_keys,
+    _restore_chumpy_numpy_aliases,
     execute_mica_request,
     validate_mica_runtime,
 )
@@ -39,6 +41,62 @@ def topology() -> np.ndarray:
 def test_checkpoint_keys_fail_closed() -> None:
     with pytest.raises(ValueError, match="missing required model keys"):
         _require_checkpoint_keys({"arcface": {}})
+
+
+def test_chumpy_numpy_compatibility_restores_only_missing_legacy_aliases() -> None:
+    sentinel = object()
+    numpy_module = types.SimpleNamespace(bool=sentinel)
+
+    _restore_chumpy_numpy_aliases(numpy_module)
+
+    assert numpy_module.bool is sentinel
+    assert numpy_module.int is int
+    assert numpy_module.float is float
+    assert numpy_module.complex is complex
+    assert numpy_module.object is object
+    assert numpy_module.unicode is str
+    assert numpy_module.str is str
+
+
+def test_chumpy_numpy_compatibility_is_idempotent() -> None:
+    numpy_module = types.SimpleNamespace()
+    _restore_chumpy_numpy_aliases(numpy_module)
+    restored = dict(vars(numpy_module))
+
+    _restore_chumpy_numpy_aliases(numpy_module)
+
+    assert vars(numpy_module) == restored
+
+
+def test_mica_model_assets_bind_exact_clean_revision_paths(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    flame_data = configured.source_root / "data" / "FLAME2020"
+    flame_data.mkdir(parents=True)
+    landmark_embedding = flame_data / "landmark_embedding.npy"
+    head_template = flame_data / "head_template.obj"
+    landmark_embedding.write_bytes(b"tracked landmarks")
+    head_template.write_bytes(b"tracked topology")
+    cfg = types.SimpleNamespace(model=types.SimpleNamespace())
+
+    _bind_mica_model_assets(cfg, configured)
+
+    assert cfg.model.flame_model_path == str(configured.flame_path)
+    assert cfg.model.flame_lmk_embedding_path == str(landmark_embedding)
+    assert cfg.model.topology_path == str(head_template)
+
+
+@pytest.mark.parametrize("missing_name", ["landmark_embedding.npy", "head_template.obj"])
+def test_mica_model_assets_reject_missing_tracked_assets(tmp_path: Path, missing_name: str) -> None:
+    configured = settings(tmp_path)
+    flame_data = configured.source_root / "data" / "FLAME2020"
+    flame_data.mkdir(parents=True)
+    for name in ("landmark_embedding.npy", "head_template.obj"):
+        if name != missing_name:
+            (flame_data / name).write_bytes(b"tracked asset")
+    cfg = types.SimpleNamespace(model=types.SimpleNamespace())
+
+    with pytest.raises(ValueError, match="tracked MICA FLAME asset is unavailable"):
+        _bind_mica_model_assets(cfg, configured)
 
 
 def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeypatch) -> None:
@@ -122,9 +180,8 @@ def test_network_denial_allows_fresh_ssl_import_without_requests() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
-def test_official_bridge_binds_sealed_flame_without_full_mica_renderer() -> None:
+def test_official_bridge_avoids_full_mica_renderer() -> None:
     source = inspect.getsource(_official_backend)
-    assert "cfg.model.flame_model_path = str(settings.flame_path)" in source
     assert "Arcface" in source
     assert "Generator" in source
     assert "find_model_using_name" not in source
