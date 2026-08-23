@@ -259,6 +259,29 @@ def _weak_projection(
     return projected
 
 
+def _detect_face_with_scrfd(
+    image_bgr: np.ndarray,
+    detector_directory: Path,
+    *,
+    center_selector: Callable[[np.ndarray, np.ndarray], int],
+    detector_factory=None,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    detector_model = detector_directory / "scrfd_10g_bnkps.onnx"
+    if not detector_model.is_file():
+        raise ValueError("preplaced sealed SCRFD detector is unavailable")
+    if detector_factory is None:
+        from insightface import model_zoo
+
+        detector_factory = model_zoo.get_model
+    detector = detector_factory(str(detector_model), providers=["CUDAExecutionProvider"])
+    detector.prepare(ctx_id=0, input_size=(224, 224))
+    bboxes, keypoints = detector.detect(image_bgr, max_num=0, metric="default")
+    if bboxes.shape[0] == 0:
+        raise ValueError("MICA found no face in the declared face image")
+    selected = center_selector(bboxes, image_bgr)
+    return bboxes[selected, :4], keypoints[selected], float(bboxes[selected, 4])
+
+
 def _official_backend(source_image: Path, settings: MicaPluginSettings) -> MicaPrediction:
     import cv2
     import numpy as np
@@ -269,18 +292,14 @@ def _official_backend(source_image: Path, settings: MicaPluginSettings) -> MicaP
     from models.arcface import Arcface
     from models.generator import Generator
     from torch.nn import functional
-    from utils.landmark_detector import LandmarksDetector, detectors
 
     image_bgr = cv2.imread(str(source_image), cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise ValueError("MICA source image is unreadable")
-    detector = LandmarksDetector(model=detectors.RETINAFACE)
-    bboxes, keypoints = detector.detect(image_bgr)
-    if bboxes.shape[0] == 0:
-        raise ValueError("MICA found no face in the declared face image")
-    selected = get_center(bboxes, image_bgr)
-    bbox = bboxes[selected, :4]
-    face = Face(bbox=bbox, kps=keypoints[selected], det_score=bboxes[selected, 4])
+    bbox, keypoints, det_score = _detect_face_with_scrfd(
+        image_bgr, settings.detector_path, center_selector=get_center
+    )
+    face = Face(bbox=bbox, kps=keypoints, det_score=det_score)
     arcface_blob, _aligned = get_arcface_input(face, image_bgr)
     arcface_tensor = torch.as_tensor(arcface_blob).float().cuda()
     if arcface_tensor.ndim == 3:

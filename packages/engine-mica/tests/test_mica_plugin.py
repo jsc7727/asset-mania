@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import asset_mania_engine_mica.plugin as mica_plugin
 import numpy as np
 import pytest
 from asset_mania_engine_mica.plugin import (
@@ -44,6 +45,56 @@ def test_official_bridge_binds_sealed_flame_without_full_mica_renderer() -> None
     assert "Arcface" in source
     assert "Generator" in source
     assert "find_model_using_name" not in source
+    assert "utils.landmark_detector" not in source
+
+
+def test_scrfd_bridge_uses_only_sealed_model_and_selects_centered_face(tmp_path: Path) -> None:
+    detector_directory = tmp_path / "antelopev2"
+    detector_directory.mkdir()
+    sealed_model = detector_directory / "scrfd_10g_bnkps.onnx"
+    sealed_model.write_bytes(b"sealed")
+    image = np.zeros((224, 224, 3), dtype=np.uint8)
+    bboxes = np.array([[1, 2, 30, 40, 0.8], [50, 60, 150, 180, 0.95]])
+    keypoints = np.arange(20, dtype=np.float32).reshape(2, 5, 2)
+    calls: list[tuple[object, ...]] = []
+
+    class FakeDetector:
+        def prepare(self, *, ctx_id: int, input_size: tuple[int, int]) -> None:
+            calls.append(("prepare", ctx_id, input_size))
+
+        def detect(self, value: np.ndarray, *, max_num: int, metric: str):
+            calls.append(("detect", value, max_num, metric))
+            return bboxes, keypoints
+
+    def detector_factory(path: str, *, providers: list[str]) -> FakeDetector:
+        calls.append(("factory", path, providers))
+        return FakeDetector()
+
+    bbox, kps, score = mica_plugin._detect_face_with_scrfd(
+        image,
+        detector_directory,
+        detector_factory=detector_factory,
+        center_selector=lambda values, source: 1,
+    )
+
+    assert calls[0] == ("factory", str(sealed_model), ["CUDAExecutionProvider"])
+    assert calls[1] == ("prepare", 0, (224, 224))
+    assert calls[2][0] == "detect"
+    assert calls[2][1] is image
+    assert calls[2][2:] == (0, "default")
+    np.testing.assert_array_equal(bbox, bboxes[1, :4])
+    np.testing.assert_array_equal(kps, keypoints[1])
+    assert score == pytest.approx(0.95)
+
+
+def test_scrfd_bridge_rejects_missing_sealed_model(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="sealed SCRFD detector is unavailable"):
+        mica_plugin._detect_face_with_scrfd(
+            np.zeros((224, 224, 3), dtype=np.uint8),
+            tmp_path,
+            detector_factory=lambda *_args, **_kwargs: pytest.fail("factory must not run"),
+            center_selector=lambda _values, _source: 0,
+        )
 
 
 def settings(tmp_path: Path) -> MicaPluginSettings:
