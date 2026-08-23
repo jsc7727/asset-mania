@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -141,6 +142,23 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
         or PurePosixPath(name).suffix in _FORBIDDEN_WEIGHT_SUFFIXES
         or name in _FORBIDDEN_FACE_ARTIFACT_NAMES
         or lowered_path.startswith("model_training/model/static/flame")
+    )
+
+
+def _is_standing_consent(relative: PurePosixPath, text: str | None) -> bool:
+    lowered_name = relative.name.lower()
+    if relative.suffix.lower() == ".json" and (
+        "standing-consent" in lowered_name or "standing_consent" in lowered_name
+    ):
+        return True
+    if text is None:
+        return False
+    try:
+        value = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(value, dict) and value.get("schema_id") == (
+        "asset-mania/local-face-standing-consent"
     )
 
 
@@ -305,6 +323,17 @@ def check_release(root: Path) -> list[Finding]:
         if path is None:
             continue
 
+        text = _read_text(path)
+        if _is_standing_consent(relative, text):
+            findings.append(
+                Finding(
+                    code="STANDING_CONSENT_TRACKED",
+                    path=relative.as_posix(),
+                    message="tracked local face standing consent is forbidden",
+                )
+            )
+            continue
+
         if (
             relative.parts[:2] == ("tests", "fixtures")
             and _is_binary_or_opaque_fixture(path, relative)
@@ -330,7 +359,6 @@ def check_release(root: Path) -> list[Finding]:
                 )
             )
 
-        text = _read_text(path)
         if text is None:
             continue
         if _contains_absolute_home(text):

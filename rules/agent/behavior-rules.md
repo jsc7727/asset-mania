@@ -18,7 +18,10 @@
   identity, so keep `identity_consistency` equal to `unmeasured`.
 - The approved local face-geometry v1 workflow may use a detector, landmarks, and MICA identity
   features only transiently inside a network-denied process after a plan-bound `face_rights`
-  receipt is consumed. The subject remains user-declared; no detector may infer or change it.
+  receipt is consumed or a private standing consent is validated for the exact source digest.
+  Standing consent permits automatic reuse only for source-specific, local, network-denied face
+  geometry. It does not relax remote, paid-compute, download, identity, or publication gates. The
+  subject remains user-declared; no detector may infer or change it.
 - Require `persisted_identity_feature_count` to equal `0`. Never write an identity embedding,
   aligned face crop, landmark array, FLAME parameter vector, face-recognition score, or source
   pixel into output, logs, telemetry, manifests, or fixtures.

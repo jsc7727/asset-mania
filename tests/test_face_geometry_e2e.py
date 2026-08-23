@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from asset_mania_contracts import canonical_digest, canonical_json
 from asset_mania_pipeline import (
+    build_local_face_standing_consent,
     export_clay_glb,
     issue_receipt,
     load_face_geometry_plugin_result,
@@ -49,7 +50,20 @@ def geometry_points() -> np.ndarray:
     return np.concatenate([boundary, interior], axis=0)
 
 
-def planned_run(tmp_path: Path) -> tuple[Path, Path, Path]:
+def standing_consent(path: Path, source: Path) -> dict:
+    consent = build_local_face_standing_consent(
+        source_sha256=sha256_file(source),
+        issued_at="2026-08-22T23:00:00+00:00",
+        authorization_evidence_sha256="f" * 64,
+    )
+    path.write_text(canonical_json(consent), encoding="utf-8")
+    return consent
+
+
+def planned_run(
+    tmp_path: Path, *, consent: Path | None = None, run_id: str = "fixedrun"
+) -> tuple[Path, Path, Path]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     source = tmp_path / "private-person.png"
     source.write_bytes(b"authorized portrait")
     topology = tmp_path / "flame-topology.npz"
@@ -78,13 +92,14 @@ def planned_run(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "d" * 64,
                 "--flame-sha256",
                 "e" * 64,
-            ],
+            ]
+            + (["--standing-consent", str(consent)] if consent is not None else []),
             now="2026-08-23T00:00:00+00:00",
-            id_factory=lambda: "fixedrun",
+            id_factory=lambda: run_id,
         )
         == 0
     )
-    return output / "20260823T000000Z-fixedrun", source, topology
+    return output / f"20260823T000000Z-{run_id}", source, topology
 
 
 def test_geometry_plan_seals_plugins_gates_and_no_source_path(tmp_path: Path) -> None:
@@ -106,6 +121,89 @@ def test_geometry_plan_seals_plugins_gates_and_no_source_path(tmp_path: Path) ->
     assert str(source) not in plan_text
     assert source.name not in plan_text
     assert "yaw" not in plan_text.lower()
+
+
+def test_standing_consent_changes_plan_digest_and_binds_only_mode_and_digest(
+    tmp_path: Path,
+) -> None:
+    ordinary_run, source, _topology = planned_run(tmp_path / "ordinary")
+    consent_path = tmp_path / "private" / "standing-consent.json"
+    consent_path.parent.mkdir()
+    consent = standing_consent(consent_path, source)
+    consent_run, _source, _topology = planned_run(tmp_path / "consented", consent=consent_path)
+
+    ordinary = json.loads((ordinary_run / "plan.json").read_text(encoding="utf-8"))
+    plan_text = (consent_run / "plan.json").read_text(encoding="utf-8")
+    plan = json.loads(plan_text)
+
+    assert plan["authorization_mode"] == "standing_local_source_consent_v1"
+    assert plan["standing_consent_sha256"] == consent["consent_sha256"]
+    assert plan["plan_sha256"] != ordinary["plan_sha256"]
+    assert str(consent_path) not in plan_text
+    assert consent_path.name not in plan_text
+
+
+def test_standing_consent_mismatch_and_edit_fail_before_source_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(b"synthetic source")
+    consent_path = tmp_path / "standing-consent.json"
+    consent = standing_consent(consent_path, source)
+    monkeypatch.setattr(
+        "scripts.run_face_geometry_e2e.fingerprint_source",
+        lambda _path: pytest.fail("source fingerprinted before consent validation"),
+    )
+
+    with pytest.raises(ValueError, match="different source digest"):
+        planned_run(tmp_path / "mismatch", consent=consent_path)
+
+    consent["issued_at"] = "2026-08-23T00:00:00+00:00"
+    consent_path.write_text(canonical_json(consent), encoding="utf-8")
+    with pytest.raises(ValueError, match="consent_sha256"):
+        planned_run(tmp_path / "edited", consent=consent_path)
+
+
+def test_two_create_only_plans_reuse_standing_consent_without_consumption(
+    tmp_path: Path,
+) -> None:
+    seed_run, source, _topology = planned_run(tmp_path / "seed")
+    assert seed_run.is_dir()
+    consent_path = tmp_path / "private-consent.json"
+    consent = standing_consent(consent_path, source)
+    executable = tmp_path / "tool.exe"
+    executable.write_bytes(b"exe")
+
+    for index in (1, 2):
+        run, planned_source, _ = planned_run(
+            tmp_path / f"run-{index}", consent=consent_path, run_id=f"run{index}"
+        )
+        assert (
+            main(
+                [
+                    "mica-run",
+                    "--run",
+                    str(run),
+                    "--source",
+                    str(planned_source),
+                    "--standing-consent",
+                    str(consent_path),
+                    "--python",
+                    str(executable),
+                    "--plugin",
+                    str(executable),
+                ],
+                plugin_runner=fake_plugin_runner,
+                now="2026-08-23T00:00:00+00:00",
+            )
+            == 0
+        )
+        authorization_text = (run / "mica/authorization.json").read_text(encoding="utf-8")
+        authorization = json.loads(authorization_text)
+        assert authorization["authorization_mode"] == "standing_local_source_consent_v1"
+        assert authorization["receipt_sha256"] == consent["consent_sha256"]
+        assert str(consent_path) not in authorization_text
+        assert consent_path.name not in authorization_text
 
 
 def fake_plugin_runner(command, request, request_path, result_path, **_kwargs):

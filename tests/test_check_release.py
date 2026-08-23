@@ -118,6 +118,33 @@ def test_absolute_home_string_is_reported_without_echoing_it(tmp_path: Path) -> 
     assert private_path not in findings[0].message
 
 
+@pytest.mark.parametrize(
+    ("relative", "content"),
+    [
+        ("standing-consent.json", "{}\n"),
+        (
+            "records/authorization.json",
+            '{"schema_id":"asset-mania/local-face-standing-consent",'
+            '"source_sha256":"' + "a" * 64 + '","private_path":"PRIVATE"}\n',
+        ),
+    ],
+)
+def test_tracked_standing_consent_is_rejected_without_private_details(
+    tmp_path: Path, relative: str, content: str
+) -> None:
+    root = _clean_tree(tmp_path)
+    private_path = str(Path.home() / "face" / "standing-consent.json")
+    source_digest = "a" * 64
+    _track(root, relative, content.replace("PRIVATE", private_path.replace("\\", "\\\\")))
+
+    findings = _findings_with_code(root, "STANDING_CONSENT_TRACKED")
+
+    assert len(findings) == 1
+    assert findings[0].message == "tracked local face standing consent is forbidden"
+    assert private_path not in findings[0].message
+    assert source_digest not in findings[0].message
+
+
 @pytest.mark.parametrize("name", ["api_" + "token", "session_" + "cookie"])
 def test_secret_like_assignments_are_reported_without_echoing_values(
     tmp_path: Path, name: str

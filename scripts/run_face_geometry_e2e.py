@@ -30,6 +30,7 @@ from asset_mania_pipeline import (
     load_face_geometry,
     run_face_geometry_plugin,
     sha256_file,
+    validate_local_face_standing_consent,
     verify_source_unchanged,
     write_face_geometry_plugin_request,
 )
@@ -80,6 +81,12 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
     source_digest = arguments.source_sha256.lower()
     if len(source_digest) != 64 or any(char not in "0123456789abcdef" for char in source_digest):
         raise ValueError("source SHA-256 is invalid")
+    consent = None
+    if arguments.standing_consent is not None:
+        consent = validate_local_face_standing_consent(
+            _load(arguments.standing_consent, "standing consent"),
+            source_sha256=source_digest,
+        )
     topology = arguments.topology.resolve(strict=True)
     if sha256_file(topology) != arguments.topology_sha256:
         raise ValueError("topology digest mismatch")
@@ -115,6 +122,13 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
         "geometry_sources": ["authorized_observed_front"],
         "overwrite_policy": "create_only",
     }
+    if consent is not None:
+        preimage.update(
+            {
+                "authorization_mode": "standing_local_source_consent_v1",
+                "standing_consent_sha256": consent["consent_sha256"],
+            }
+        )
     plan = {**preimage, "plan_sha256": canonical_digest(preimage)}
     (run / "plan.json").write_text(canonical_json(plan), encoding="utf-8")
     print(canonical_json({"run_directory": str(run), "plan_sha256": plan["plan_sha256"]}))
@@ -158,25 +172,45 @@ def _plugin_stage(
     record_path = stage / "record.json"
     if record_path.exists():
         raise FileExistsError(f"refusing to overwrite {record_path}")
-    source = arguments.source.resolve(strict=True)
     if plugin_name == "mica-local":
-        rights_store = arguments.rights_store.resolve(strict=True)
-        receipt = _matching_receipt(rights_store, plan["plan_sha256"])
-        consumption = authorize_conditioning(
-            subject="real_person",
-            plan_sha256=plan["plan_sha256"],
-            receipt=receipt,
-            journal=ConsumptionJournal(rights_store / "consumed"),
-            consumption_id=f"{run.name}:mica-run",
-            consumed_at=now.isoformat(),
-            now=now,
-        )
-        (stage / "authorization.json").write_text(canonical_json(consumption), encoding="utf-8")
+        if arguments.standing_consent is not None:
+            if plan.get("authorization_mode") != "standing_local_source_consent_v1":
+                raise ValueError("sealed plan does not select standing consent")
+            consent = validate_local_face_standing_consent(
+                _load(arguments.standing_consent, "standing consent"),
+                source_sha256=plan["source_image_sha256"],
+            )
+            if consent["consent_sha256"] != plan.get("standing_consent_sha256"):
+                raise ValueError("standing consent differs from the sealed plan")
+            receipt = None
+            authorization = {
+                "schema_id": "asset-mania/private-face-geometry-authorization",
+                "schema_version": "0.1",
+                "plan_sha256": plan["plan_sha256"],
+                "authorization_mode": "standing_local_source_consent_v1",
+                "receipt_sha256": consent["consent_sha256"],
+            }
+        else:
+            if "standing_consent_sha256" in plan:
+                raise ValueError("sealed plan requires standing consent")
+            rights_store = arguments.rights_store.resolve(strict=True)
+            receipt = _matching_receipt(rights_store, plan["plan_sha256"])
+            authorization = authorize_conditioning(
+                subject="real_person",
+                plan_sha256=plan["plan_sha256"],
+                receipt=receipt,
+                journal=ConsumptionJournal(rights_store / "consumed"),
+                consumption_id=f"{run.name}:mica-run",
+                consumed_at=now.isoformat(),
+                now=now,
+            )
+        (stage / "authorization.json").write_text(canonical_json(authorization), encoding="utf-8")
     else:
         authorization = run / "mica/authorization.json"
         if not authorization.is_file():
             raise ValueError("DECA requires the consumed MICA authorization record")
         receipt = None
+    source = arguments.source.resolve(strict=True)
     before = fingerprint_source(source)
     if before.sha256 != plan["source_image_sha256"]:
         raise ValueError("private source differs from the sealed plan")
@@ -196,9 +230,7 @@ def _plugin_stage(
         checkpoint_sha256=checkpoint,
         topology="flame-2020-5023",
         face_rights_receipt_sha256=(
-            receipt["receipt_sha256"]
-            if receipt is not None
-            else _load(run / "mica/authorization.json", "authorization")["receipt_sha256"]
+            _load(run / "mica/authorization.json", "authorization")["receipt_sha256"]
         ),
     )
     request_path = stage / "request.json"
@@ -493,6 +525,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--deca-revision", required=True)
     plan.add_argument("--deca-checkpoint-sha256", required=True)
     plan.add_argument("--flame-sha256", required=True)
+    plan.add_argument("--standing-consent", type=Path)
     for name in ("mica-run", "deca-run"):
         command = commands.add_parser(name)
         command.add_argument("--run", type=Path, required=True)
@@ -500,7 +533,9 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--python", type=Path, required=True)
         command.add_argument("--plugin", type=Path, required=True)
         if name == "mica-run":
-            command.add_argument("--rights-store", type=Path, required=True)
+            authorization = command.add_mutually_exclusive_group(required=True)
+            authorization.add_argument("--rights-store", type=Path)
+            authorization.add_argument("--standing-consent", type=Path)
     fuse = commands.add_parser("geometry-fuse")
     fuse.add_argument("--run", type=Path, required=True)
     verify = commands.add_parser("geometry-verify")
