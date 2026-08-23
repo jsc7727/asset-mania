@@ -239,6 +239,14 @@ def run_face_geometry_plugin(
         raise ValueError("face geometry plugin command must be an explicit argument sequence")
     if result_path.exists():
         raise FileExistsError(f"refusing to overwrite {result_path}")
+    source_environment = dict(environment) if environment is not None else dict(os.environ)
+    allowed = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}
+    plugin_prefix = "ASSET_MANIA_MICA_" if request.plugin == MICA_PLUGIN else "ASSET_MANIA_DECA_"
+    sanitized_environment = {
+        key: value
+        for key, value in source_environment.items()
+        if key.upper() in allowed or key.startswith(plugin_prefix)
+    }
     completed = subprocess.run(
         [*command, "--request", str(request_path), "--result", str(result_path)],
         check=False,
@@ -246,7 +254,7 @@ def run_face_geometry_plugin(
         capture_output=True,
         text=True,
         timeout=timeout_seconds,
-        env=dict(environment) if environment is not None else dict(os.environ),
+        env=sanitized_environment,
     )
     combined = completed.stdout + completed.stderr
     if str(request.source_image) in combined or request.source_image.name in combined:

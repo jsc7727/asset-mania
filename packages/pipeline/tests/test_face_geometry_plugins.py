@@ -1,13 +1,17 @@
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
+import asset_mania_pipeline.face_geometry_plugins as protocol
 import pytest
 from asset_mania_pipeline.face_geometry_plugins import (
     DECA_PLUGIN,
     MICA_PLUGIN,
     build_face_geometry_plugin_request,
     load_face_geometry_plugin_result,
+    run_face_geometry_plugin,
     write_face_geometry_plugin_request,
 )
 
@@ -182,3 +186,33 @@ def test_success_requires_exact_topology_counts_and_identity_feature_flag(tmp_pa
     result_path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ValueError, match="identity feature flag"):
         load_face_geometry_plugin_result(result_path, request)
+
+
+def test_launcher_uses_fixed_environment_allowlist_by_default(tmp_path: Path, monkeypatch) -> None:
+    request = geometry_request(tmp_path)
+    result_path = tmp_path / "result.json"
+    seen = {}
+
+    def recording_run(_arguments, **kwargs):
+        seen.update(kwargs["env"])
+        successful_result(request, result_path)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(protocol.subprocess, "run", recording_run)
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-reach-plugin")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "must-not-reach-plugin")
+    monkeypatch.setenv("ASSET_MANIA_MICA_SOURCE_ROOT", "private-runtime")
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
+
+    run_face_geometry_plugin(
+        ["tool"],
+        request,
+        tmp_path / "request.json",
+        result_path,
+        timeout_seconds=10,
+    )
+
+    assert "OPENAI_API_KEY" not in seen
+    assert "AWS_SECRET_ACCESS_KEY" not in seen
+    assert seen["ASSET_MANIA_MICA_SOURCE_ROOT"] == "private-runtime"
+    assert "PATH" in seen
