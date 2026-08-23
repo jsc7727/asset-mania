@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 CHECKER = ROOT / "scripts" / "check_release.py"
 
+import scripts.check_release as release_checker
 from scripts.check_release import Finding, check_release, main
 
 
@@ -143,6 +144,49 @@ def test_tracked_standing_consent_is_rejected_without_private_details(
     assert findings[0].message == "tracked local face standing consent is forbidden"
     assert private_path not in findings[0].message
     assert source_digest not in findings[0].message
+
+
+def test_suspicious_consent_filename_is_rejected_even_when_entry_is_not_regular(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relative = release_checker.PurePosixPath("private/standing-consent.json")
+    monkeypatch.setattr(release_checker, "_tracked_paths", lambda _root: ([relative], None))
+    monkeypatch.setattr(release_checker, "_safe_regular_file", lambda _root, _path: None)
+
+    findings = _findings_with_code(tmp_path, "STANDING_CONSENT_TRACKED")
+
+    assert findings == [
+        Finding(
+            code="STANDING_CONSENT_TRACKED",
+            path="private-standing-consent-record",
+            message="tracked local face standing consent is forbidden",
+        )
+    ]
+
+
+def test_standing_consent_cli_diagnostic_is_fully_sanitized(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _clean_tree(tmp_path)
+    private_basename = "subject-standing-consent.json"
+    private_path = str(Path.home() / "face" / private_basename)
+    source_digest = "a" * 64
+    raw_content = "explicit-private-consent-content"
+    _track(
+        root,
+        f"records/{private_basename}",
+        private_path + source_digest + raw_content,
+    )
+
+    assert main([str(root)]) == 1
+
+    rendered = capsys.readouterr().out
+    assert rendered == (
+        "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+        "tracked local face standing consent is forbidden\n"
+    )
+    for private_value in (private_path, private_basename, source_digest, raw_content):
+        assert private_value not in rendered
 
 
 @pytest.mark.parametrize("name", ["api_" + "token", "session_" + "cookie"])

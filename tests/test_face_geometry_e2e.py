@@ -164,6 +164,55 @@ def test_standing_consent_mismatch_and_edit_fail_before_source_fingerprint(
         planned_run(tmp_path / "edited", consent=consent_path)
 
 
+@pytest.mark.parametrize("failure", ["mismatch", "tamper"])
+def test_mica_revalidates_standing_consent_before_source_or_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    seed_run, source, _ = planned_run(tmp_path / "seed")
+    assert seed_run.is_dir()
+    consent_path = tmp_path / "standing-consent.json"
+    consent = standing_consent(consent_path, source)
+    run, _planned_source, _ = planned_run(tmp_path / "planned", consent=consent_path)
+    if failure == "mismatch":
+        invalid = build_local_face_standing_consent(
+            source_sha256="0" * 64,
+            issued_at="2026-08-22T23:00:00+00:00",
+            authorization_evidence_sha256="f" * 64,
+        )
+        expected = "different source digest"
+    else:
+        invalid = {**consent, "issued_at": "2026-08-23T00:00:00+00:00"}
+        expected = "consent_sha256"
+    consent_path.write_text(canonical_json(invalid), encoding="utf-8")
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "scripts.run_face_geometry_e2e.fingerprint_source",
+        lambda _path: calls.append("fingerprint"),
+    )
+
+    with pytest.raises(ValueError, match=expected):
+        main(
+            [
+                "mica-run",
+                "--run",
+                str(run),
+                "--source",
+                str(tmp_path / "must-not-resolve.png"),
+                "--standing-consent",
+                str(consent_path),
+                "--python",
+                str(tmp_path / "must-not-resolve-python.exe"),
+                "--plugin",
+                str(tmp_path / "must-not-resolve-plugin.exe"),
+            ],
+            plugin_runner=lambda *_args, **_kwargs: calls.append("plugin"),
+        )
+
+    assert calls == []
+    assert not (run / "mica/authorization.json").exists()
+    assert not (run / "mica/plugin-output").exists()
+
+
 def test_two_create_only_plans_reuse_standing_consent_without_consumption(
     tmp_path: Path,
 ) -> None:

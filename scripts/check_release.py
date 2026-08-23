@@ -145,12 +145,14 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
     )
 
 
-def _is_standing_consent(relative: PurePosixPath, text: str | None) -> bool:
+def _has_standing_consent_filename(relative: PurePosixPath) -> bool:
     lowered_name = relative.name.lower()
-    if relative.suffix.lower() == ".json" and (
+    return relative.suffix.lower() == ".json" and (
         "standing-consent" in lowered_name or "standing_consent" in lowered_name
-    ):
-        return True
+    )
+
+
+def _is_standing_consent_content(text: str | None) -> bool:
     if text is None:
         return False
     try:
@@ -319,16 +321,26 @@ def check_release(root: Path) -> list[Finding]:
             )
             continue
 
+        if _has_standing_consent_filename(relative):
+            findings.append(
+                Finding(
+                    code="STANDING_CONSENT_TRACKED",
+                    path="private-standing-consent-record",
+                    message="tracked local face standing consent is forbidden",
+                )
+            )
+            continue
+
         path = _safe_regular_file(root, relative)
         if path is None:
             continue
 
         text = _read_text(path)
-        if _is_standing_consent(relative, text):
+        if _is_standing_consent_content(text):
             findings.append(
                 Finding(
                     code="STANDING_CONSENT_TRACKED",
-                    path=relative.as_posix(),
+                    path="private-standing-consent-record",
                     message="tracked local face standing consent is forbidden",
                 )
             )
