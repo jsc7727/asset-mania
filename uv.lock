@@ -12,6 +12,7 @@ members = [
     "asset-mania-cli",
     "asset-mania-contracts",
     "asset-mania-engine-dad3dheads",
+    "asset-mania-engine-deca",
     "asset-mania-engine-mica",
     "asset-mania-engine-triposr",
     "asset-mania-pipeline",
@@ -74,6 +75,22 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "pillow", specifier = ">=11.3,<13" },
     { name = "trimesh", specifier = "==4.0.5" },
+]
+
+[[package]]
+name = "asset-mania-engine-deca"
+version = "0.2.0"
+source = { editable = "packages/engine-deca" }
+dependencies = [
+    { name = "asset-mania-pipeline" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asset-mania-pipeline", editable = "packages/pipeline" },
+    { name = "numpy", specifier = ">=1.26" },
 ]
 
 [[package]]
