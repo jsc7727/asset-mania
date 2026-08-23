@@ -12,8 +12,14 @@ from asset_mania_pipeline.face_geometry import (
 
 
 def flame_topology() -> np.ndarray:
-    indices = np.arange(9976, dtype=np.int64)
-    return np.stack([indices % 5023, (indices + 1) % 5023, (indices + 2) % 5023], axis=1)
+    # A consistently wound triangulated 68-gon with 4,955 interior insertions.
+    # Inserting a vertex into one triangle replaces it with three triangles,
+    # preserving a manifold disk while adding exactly two faces each time.
+    faces = [[0, index, index + 1] for index in range(1, 67)]
+    for vertex in range(68, 5023):
+        a, b, c = faces.pop()
+        faces.extend(((a, b, vertex), (b, c, vertex), (c, a, vertex)))
+    return np.asarray(faces, dtype=np.int64)
 
 
 def write_geometry(
@@ -59,6 +65,33 @@ def test_geometry_archive_rejects_changed_topology_and_nonfinite_values(tmp_path
     changed[0] = [2, 1, 0]
     path = write_geometry(tmp_path / "changed.npz", faces=changed)
     with pytest.raises(ValueError, match="topology differs"):
+        load_face_geometry(path, expected_topology=flame_topology())
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("faces", flame_topology().astype(np.float64)),
+        ("vertices", np.zeros((5023, 3), dtype=np.int16)),
+        ("source_projection", np.zeros((5023, 2), dtype=np.complex64)),
+        ("detail_displacement", np.zeros(5023, dtype=np.uint8)),
+    ],
+)
+def test_geometry_archive_rejects_unsupported_raw_dtypes(
+    tmp_path: Path, field: str, value: np.ndarray
+) -> None:
+    path = write_geometry(tmp_path / f"bad-{field}.npz", extra={field: value})
+
+    with pytest.raises(ValueError, match="dtype is unsupported"):
+        load_face_geometry(path, expected_topology=flame_topology())
+
+
+def test_geometry_archive_rejects_zero_area_triangle(tmp_path: Path) -> None:
+    vertices = np.zeros((5023, 3), dtype=np.float32)
+    vertices[:, 0] = np.linspace(-0.08, 0.08, 5023)
+    path = write_geometry(tmp_path / "collinear.npz", extra={"vertices": vertices})
+
+    with pytest.raises(ValueError, match="zero-area triangle"):
         load_face_geometry(path, expected_topology=flame_topology())
 
     path = write_geometry(
@@ -138,15 +171,18 @@ def test_fusion_keeps_mica_positions_outside_taper_and_bounds_detail() -> None:
     ],
 )
 def test_fusion_rejects_out_of_bounds_detail(displacement: np.ndarray, message: str) -> None:
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [0.1, 0.0, 0.0],
-            [0.0, 0.1, 0.0],
-            [0.0, 0.0, 0.1],
-            [0.1, 0.1, 0.0],
-            [0.1, 0.0, 0.1],
-        ]
+    vertices = (
+        np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.0, 0.1, 0.0],
+                [0.0, 0.0, 0.1],
+                [0.1, 0.1, 0.0],
+                [0.1, 0.0, 0.1],
+            ]
+        )
+        * 1.6
     )
     mica = geometry_fixture(vertices, np.zeros(6))
     deca = geometry_fixture(vertices, displacement)

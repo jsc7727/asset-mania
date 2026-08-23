@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 
 _GEOMETRY_FIELDS = frozenset({"vertices", "faces", "source_projection", "detail_displacement"})
+_FLOAT_DTYPES = frozenset((np.dtype(np.float32), np.dtype(np.float64)))
+_INDEX_DTYPES = frozenset((np.dtype(np.int32), np.dtype(np.int64)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,15 +50,32 @@ def load_face_geometry(path: Path, *, expected_topology: np.ndarray) -> FaceGeom
         with np.load(path, allow_pickle=False) as archive:
             if set(archive.files) != _GEOMETRY_FIELDS:
                 raise ValueError("face geometry archive inventory is invalid")
-            vertices = np.asarray(archive["vertices"], dtype=np.float64).copy()
-            faces = np.asarray(archive["faces"], dtype=np.int64).copy()
-            projection = np.asarray(archive["source_projection"], dtype=np.float64).copy()
-            displacement = np.asarray(archive["detail_displacement"], dtype=np.float64).copy()
+            raw_vertices = archive["vertices"]
+            raw_faces = archive["faces"]
+            raw_projection = archive["source_projection"]
+            raw_displacement = archive["detail_displacement"]
+            if raw_vertices.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry vertices dtype is unsupported")
+            if raw_faces.dtype not in _INDEX_DTYPES:
+                raise ValueError("face geometry faces dtype is unsupported")
+            if raw_projection.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry source projection dtype is unsupported")
+            if raw_displacement.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry displacement dtype is unsupported")
+            vertices = raw_vertices.astype(np.float64, copy=True)
+            faces = raw_faces.astype(np.int64, copy=True)
+            projection = raw_projection.astype(np.float64, copy=True)
+            displacement = raw_displacement.astype(np.float64, copy=True)
     except (OSError, KeyError, ValueError) as error:
-        if isinstance(error, ValueError) and "inventory" in str(error):
+        if isinstance(error, ValueError) and (
+            "inventory" in str(error) or "dtype is unsupported" in str(error)
+        ):
             raise
         raise ValueError("face geometry archive is unreadable") from error
-    topology = np.asarray(expected_topology, dtype=np.int64)
+    raw_topology = np.asarray(expected_topology)
+    if raw_topology.dtype not in _INDEX_DTYPES:
+        raise ValueError("sealed face geometry topology dtype is unsupported")
+    topology = raw_topology.astype(np.int64, copy=False)
     if vertices.shape != (5023, 3):
         raise ValueError("face geometry vertices must have shape (5023, 3)")
     if faces.shape != (9976, 3) or topology.shape != (9976, 3):
@@ -77,7 +96,32 @@ def load_face_geometry(path: Path, *, expected_topology: np.ndarray) -> FaceGeom
         or np.any(faces[:, 2] == faces[:, 0])
     ):
         raise ValueError("face geometry contains a degenerate triangle")
+    _validate_geometry(vertices, faces, label="face geometry")
     return FaceGeometryData(vertices, faces, projection, displacement)
+
+
+def _validate_geometry(
+    vertices: np.ndarray, faces: np.ndarray, *, label: str, validate_extent: bool = True
+) -> None:
+    triangles = vertices[faces]
+    doubled_areas = np.linalg.norm(
+        np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
+        axis=1,
+    )
+    if np.any(doubled_areas <= 1e-15):
+        raise ValueError(f"{label} contains a zero-area triangle")
+    if validate_extent:
+        extents = np.ptp(vertices, axis=0)
+        if np.any(extents <= 0):
+            raise ValueError(f"{label} must have positive extent on every axis")
+        longest_extent = float(extents.max())
+        if not 0.15 <= longest_extent <= 0.30:
+            raise ValueError(f"{label} longest extent must be between 0.15 and 0.30 metres")
+    non_manifold, winding = _topology_measurements(faces)
+    if non_manifold:
+        raise ValueError(f"{label} contains non-manifold edges")
+    if not winding:
+        raise ValueError(f"{label} has inconsistent winding")
 
 
 def fit_similarity_transform(source: np.ndarray, target: np.ndarray) -> SimilarityTransform:
@@ -168,6 +212,10 @@ def fuse_mica_deca_geometry(
 ) -> tuple[FaceGeometryData, FaceGeometryMeasurements]:
     if not np.array_equal(mica.faces, deca.faces):
         raise ValueError("MICA and DECA topology differs")
+    _validate_geometry(mica.vertices, mica.faces, label="MICA geometry")
+    # DECA is in its plugin's arbitrary pre-alignment coordinate system. Its
+    # topology and triangle area are meaningful here, but its metric extent is not.
+    _validate_geometry(deca.vertices, deca.faces, label="DECA geometry", validate_extent=False)
     inner = np.asarray(inner_face_indices, dtype=np.int64)
     if inner.ndim != 1 or len(inner) < 3 or inner.min() < 0 or inner.max() >= len(mica.vertices):
         raise ValueError("inner face indices are invalid")
@@ -195,6 +243,7 @@ def fuse_mica_deca_geometry(
         raise ValueError("detail displacement escaped the tapered face region")
     normals = _vertex_normals(mica.vertices, mica.faces)
     vertices = mica.vertices + normals * applied[:, None]
+    _validate_geometry(vertices, mica.faces, label="fused face geometry")
     result = FaceGeometryData(
         vertices=vertices,
         faces=mica.faces.copy(),
