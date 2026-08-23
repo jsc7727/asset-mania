@@ -123,9 +123,7 @@ class FaceGeometryPluginResult:
     schema: Literal["asset-mania.face-geometry-plugin-result.v1"]
     plugin: Literal["mica-local", "deca-local"]
     profile: Literal["identity-neutral-v1", "detail-displacement-v1"]
-    status: Literal[
-        "succeeded", "incompatible_runtime", "invalid_output", "execution_failed"
-    ]
+    status: Literal["succeeded", "incompatible_runtime", "invalid_output", "execution_failed"]
     geometry: Path | None
     vertex_count: int
     triangle_count: int

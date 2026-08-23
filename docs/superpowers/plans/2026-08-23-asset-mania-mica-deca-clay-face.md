@@ -132,9 +132,7 @@ class FaceGeometryPluginResult:
     schema: str
     plugin: Literal["mica-local", "deca-local"]
     profile: Literal["identity-neutral-v1", "detail-displacement-v1"]
-    status: Literal[
-        "succeeded", "incompatible_runtime", "invalid_output", "execution_failed"
-    ]
+    status: Literal["succeeded", "incompatible_runtime", "invalid_output", "execution_failed"]
     geometry: Path | None
     vertex_count: int
     triangle_count: int
@@ -317,7 +315,10 @@ def test_mica_worker_persists_geometry_but_no_identity_feature(tmp_path: Path) -
     assert result == 0
     with np.load(OUTPUT / "geometry.npz", allow_pickle=False) as archive:
         assert set(archive.files) == {
-            "vertices", "faces", "source_projection", "detail_displacement"
+            "vertices",
+            "faces",
+            "source_projection",
+            "detail_displacement",
         }
         assert np.count_nonzero(archive["detail_displacement"]) == 0
     assert not any(OUTPUT.parent.rglob("identity*.npy"))
