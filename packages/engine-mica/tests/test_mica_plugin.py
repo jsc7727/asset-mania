@@ -1,3 +1,4 @@
+import inspect
 import json
 from pathlib import Path
 
@@ -6,6 +7,9 @@ import pytest
 from asset_mania_engine_mica.plugin import (
     MicaPluginSettings,
     MicaPrediction,
+    _directory_sha256,
+    _official_backend,
+    _require_checkpoint_keys,
     execute_mica_request,
     validate_mica_runtime,
 )
@@ -25,6 +29,19 @@ def topology() -> np.ndarray:
     return np.stack([indices % 5023, (indices + 1) % 5023, (indices + 2) % 5023], axis=1)
 
 
+def test_checkpoint_keys_fail_closed() -> None:
+    with pytest.raises(ValueError, match="missing required model keys"):
+        _require_checkpoint_keys({"arcface": {}})
+
+
+def test_official_bridge_binds_sealed_flame_without_full_mica_renderer() -> None:
+    source = inspect.getsource(_official_backend)
+    assert "cfg.model.flame_model_path = str(settings.flame_path)" in source
+    assert "Arcface" in source
+    assert "Generator" in source
+    assert "find_model_using_name" not in source
+
+
 def settings(tmp_path: Path) -> MicaPluginSettings:
     source_root = tmp_path / "mica-source"
     source_root.mkdir()
@@ -35,14 +52,20 @@ def settings(tmp_path: Path) -> MicaPluginSettings:
     flame.write_bytes(b"flame")
     isolated = tmp_path / "isolated"
     isolated.mkdir()
+    detector = isolated / ".insightface" / "models" / "antelopev2"
+    detector.mkdir(parents=True)
+    for name in ("scrfd_10g_bnkps.onnx", "2d106det.onnx"):
+        (detector / name).write_bytes(name.encode("utf-8"))
     return MicaPluginSettings(
         source_root=source_root,
         isolated_home=isolated,
         checkpoint_path=checkpoint,
         flame_path=flame,
+        detector_path=detector,
         revision=REVISION,
         checkpoint_sha256=CHECKPOINT,
         flame_sha256=FLAME,
+        detector_sha256=_directory_sha256(detector),
     )
 
 
@@ -72,7 +95,15 @@ def fake_backend(_source: Path, _settings: MicaPluginSettings) -> MicaPrediction
         vertices=vertices,
         faces=topology(),
         source_projection=np.zeros((5023, 2), dtype=np.float32),
+        coordinate_unit="metres",
     )
+
+
+def file_digest_reader(configured: MicaPluginSettings):
+    return {
+        configured.checkpoint_path: CHECKPOINT,
+        configured.flame_path: FLAME,
+    }.__getitem__
 
 
 def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
@@ -81,7 +112,9 @@ def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
     checkpoint = validate_mica_runtime(
         configured,
         revision_reader=lambda _path: REVISION,
-        digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+        digest_reader=file_digest_reader(configured),
+        detector_digest_reader=_directory_sha256,
+        clean_reader=lambda _path: True,
     )
 
     assert checkpoint == configured.checkpoint_path
@@ -89,8 +122,83 @@ def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
         validate_mica_runtime(
             configured,
             revision_reader=lambda _path: "e" * 40,
-            digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+            digest_reader=file_digest_reader(configured),
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: True,
         )
+
+
+def test_runtime_rejects_dirty_source_and_unsealed_detector(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    digests = {
+        configured.checkpoint_path: CHECKPOINT,
+        configured.flame_path: FLAME,
+    }
+    with pytest.raises(ValueError, match="source tree is not clean"):
+        validate_mica_runtime(
+            configured,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=digests.__getitem__,
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: False,
+        )
+    configured.detector_path.joinpath("2d106det.onnx").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="detector asset digest mismatch"):
+        validate_mica_runtime(
+            configured,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=digests.__getitem__,
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: True,
+        )
+
+
+def test_worker_rejects_non_metre_or_implausible_geometry(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    _request, request_path, result_path = request_files(tmp_path)
+    prediction = fake_backend(Path(), configured)
+    prediction = MicaPrediction(
+        prediction.vertices * 10,
+        prediction.faces,
+        prediction.source_projection,
+        "millimetres",
+    )
+    with pytest.raises(ValueError, match="explicitly use metres"):
+        execute_mica_request(
+            request_path,
+            result_path,
+            configured,
+            backend=lambda *_args: prediction,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=file_digest_reader(configured),
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: True,
+        )
+
+
+def test_worker_sanitizes_credentials_before_external_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configured = settings(tmp_path)
+    _request, request_path, result_path = request_files(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-cross-boundary")
+    monkeypatch.setenv("ASSET_MANIA_SAFE_FLAG", "present")
+
+    def inspecting_backend(source: Path, runtime: MicaPluginSettings) -> MicaPrediction:
+        assert "OPENAI_API_KEY" not in __import__("os").environ
+        assert __import__("os").environ["ASSET_MANIA_SAFE_FLAG"] == "present"
+        return fake_backend(source, runtime)
+
+    execute_mica_request(
+        request_path,
+        result_path,
+        configured,
+        backend=inspecting_backend,
+        revision_reader=lambda _path: REVISION,
+        digest_reader=file_digest_reader(configured),
+        detector_digest_reader=_directory_sha256,
+        clean_reader=lambda _path: True,
+    )
 
 
 def test_worker_persists_geometry_but_no_identity_feature(tmp_path: Path) -> None:
@@ -103,7 +211,9 @@ def test_worker_persists_geometry_but_no_identity_feature(tmp_path: Path) -> Non
         configured,
         backend=fake_backend,
         revision_reader=lambda _path: REVISION,
-        digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+        digest_reader=file_digest_reader(configured),
+        detector_digest_reader=_directory_sha256,
+        clean_reader=lambda _path: True,
     )
 
     assert exit_code == 0
@@ -137,7 +247,9 @@ def test_worker_rejects_wrong_plugin_and_existing_output(tmp_path: Path) -> None
             configured,
             backend=fake_backend,
             revision_reader=lambda _path: REVISION,
-            digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+            digest_reader=file_digest_reader(configured),
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: True,
         )
 
 
@@ -150,6 +262,7 @@ def test_worker_rejects_invalid_prediction_without_writing_output(tmp_path: Path
             vertices=np.zeros((2, 3)),
             faces=np.array([[0, 1, 1]]),
             source_projection=np.zeros((2, 2)),
+            coordinate_unit="metres",
         )
 
     with pytest.raises(ValueError, match="5,023 vertices"):
@@ -159,7 +272,9 @@ def test_worker_rejects_invalid_prediction_without_writing_output(tmp_path: Path
             configured,
             backend=invalid_backend,
             revision_reader=lambda _path: REVISION,
-            digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+            digest_reader=file_digest_reader(configured),
+            detector_digest_reader=_directory_sha256,
+            clean_reader=lambda _path: True,
         )
 
     assert not request.output_directory.exists()

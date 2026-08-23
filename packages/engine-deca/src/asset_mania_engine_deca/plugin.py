@@ -51,6 +51,7 @@ class DecaPrediction:
     faces: np.ndarray
     source_projection: np.ndarray
     detail_displacement: np.ndarray
+    coordinate_unit: str
 
 
 def _git_revision(source_root: Path) -> str:
@@ -65,17 +66,30 @@ def _git_revision(source_root: Path) -> str:
     return completed.stdout.strip()
 
 
+def _git_is_clean(source_root: Path) -> bool:
+    completed = subprocess.run(
+        ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=all"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.returncode == 0 and not completed.stdout.strip()
+
+
 def validate_deca_runtime(
     settings: DecaPluginSettings,
     *,
     revision_reader: Callable[[Path], str] = _git_revision,
     digest_reader: Callable[[Path], str] = sha256_file,
+    clean_reader: Callable[[Path], bool] = _git_is_clean,
 ) -> Path:
     marker = settings.source_root / "decalib" / "deca.py"
     if not settings.source_root.is_dir() or not marker.is_file():
         raise ValueError("pinned DECA source revision is unavailable")
     if revision_reader(settings.source_root) != settings.revision:
         raise ValueError("DECA source revision mismatch")
+    if not clean_reader(settings.source_root):
+        raise ValueError("DECA source tree is not clean")
     if not settings.checkpoint_path.is_file():
         raise ValueError("preplaced DECA checkpoint is unavailable")
     if digest_reader(settings.checkpoint_path) != settings.checkpoint_sha256:
@@ -149,10 +163,23 @@ def _deny_network() -> None:
     requests.sessions.Session.request = refuse
 
 
+def _sanitize_credentials() -> None:
+    sensitive_fragments = ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY", "ACCESS_KEY")
+    for name in tuple(os.environ):
+        if any(fragment in name.upper() for fragment in sensitive_fragments):
+            os.environ.pop(name, None)
+
+
+def _require_checkpoint_keys(checkpoint: object) -> dict:
+    required_keys = {"E_flame", "E_detail", "D_detail"}
+    if not isinstance(checkpoint, dict) or not required_keys.issubset(checkpoint):
+        raise ValueError("DECA checkpoint is missing required model keys")
+    return checkpoint
+
+
 def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaPrediction:
     import cv2
     import torch
-    from decalib.datasets import datasets
     from decalib.deca import DECA
     from decalib.utils.config import cfg as deca_cfg
 
@@ -160,17 +187,20 @@ def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaP
     if image_bgr is None:
         raise ValueError("DECA source image is unreadable")
     deca_cfg.model.use_tex = False
-    deca_cfg.model.extract_tex = False
     deca_cfg.pretrained_modelpath = str(settings.checkpoint_path)
     deca_cfg.model.flame_model_path = str(settings.flame_path)
-    testdata = datasets.TestData(str(source_image), iscrop=True, face_detector="fan")
-    if len(testdata) != 1:
-        raise ValueError("DECA requires exactly one declared face input")
-    image = testdata[0]["image"].to("cuda")[None, ...]
+    _require_checkpoint_keys(
+        torch.load(settings.checkpoint_path, map_location="cuda", weights_only=True)
+    )
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    image_rgb = cv2.resize(image_rgb, (224, 224))
+    image = torch.from_numpy(image_rgb).permute(2, 0, 1).float().div(255.0).cuda()[None]
     deca = DECA(config=deca_cfg, device="cuda")
     with torch.no_grad():
         codedict = deca.encode(image, use_detail=True)
-        opdict = deca.decode(codedict, return_vis=False, use_detail=True)
+        opdict = deca.decode(codedict, rendering=True, return_vis=False, use_detail=True)
+        if "displacement_map" not in opdict:
+            raise ValueError("DECA did not return the required displacement_map")
         vertices = opdict["verts"][0].detach().cpu().numpy()
         transformed = opdict["trans_verts"][0].detach().cpu().numpy()
         displacement_map = opdict["displacement_map"][0, 0].detach().cpu().numpy()
@@ -189,7 +219,7 @@ def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaP
     canonical_faces = faces[:, [0, 2, 1]]
     del codedict, opdict, image, deca
     torch.cuda.empty_cache()
-    return DecaPrediction(canonical, canonical_faces, projection, detail)
+    return DecaPrediction(canonical, canonical_faces, projection, detail, "metres")
 
 
 def _validate_prediction(
@@ -199,6 +229,8 @@ def _validate_prediction(
     faces = np.asarray(prediction.faces, dtype=np.int64)
     projection = np.asarray(prediction.source_projection, dtype=np.float32)
     displacement = np.asarray(prediction.detail_displacement, dtype=np.float32)
+    if prediction.coordinate_unit != "metres":
+        raise ValueError("DECA prediction must explicitly use metres")
     if vertices.shape != (5023, 3):
         raise ValueError("DECA must return exactly 5,023 vertices")
     if faces.shape != (9976, 3):
@@ -211,6 +243,9 @@ def _validate_prediction(
         raise ValueError("DECA returned non-finite geometry")
     if faces.min() < 0 or faces.max() >= len(vertices):
         raise ValueError("DECA returned an out-of-range face index")
+    extent = float(np.ptp(vertices, axis=0).max())
+    if not 0.15 <= extent <= 0.30:
+        raise ValueError("DECA geometry extent must be between 0.15 and 0.30 metres")
     return vertices, faces, projection, displacement
 
 
@@ -222,6 +257,7 @@ def execute_deca_request(
     backend: Callable[[Path, DecaPluginSettings], DecaPrediction] = _official_backend,
     revision_reader: Callable[[Path], str] = _git_revision,
     digest_reader: Callable[[Path], str] = sha256_file,
+    clean_reader: Callable[[Path], bool] = _git_is_clean,
 ) -> int:
     request = _load_request(request_path)
     if request.plugin != "deca-local" or request.profile != "detail-displacement-v1":
@@ -233,7 +269,12 @@ def execute_deca_request(
         raise ValueError("DECA request differs from pinned runtime")
     if request.output_directory.exists() or result_path.exists():
         raise FileExistsError("refusing to overwrite DECA plugin output")
-    validate_deca_runtime(settings, revision_reader=revision_reader, digest_reader=digest_reader)
+    validate_deca_runtime(
+        settings,
+        revision_reader=revision_reader,
+        digest_reader=digest_reader,
+        clean_reader=clean_reader,
+    )
     os.environ.update(
         {
             "HOME": str(settings.isolated_home),
@@ -244,6 +285,7 @@ def execute_deca_request(
         }
     )
     _deny_network()
+    _sanitize_credentials()
     sys.path.insert(0, str(settings.source_root))
     started = time.perf_counter()
     prediction = backend(request.source_image, settings)

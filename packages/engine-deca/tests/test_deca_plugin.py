@@ -1,3 +1,4 @@
+import inspect
 import json
 from pathlib import Path
 
@@ -6,6 +7,8 @@ import pytest
 from asset_mania_engine_deca.plugin import (
     DecaPluginSettings,
     DecaPrediction,
+    _official_backend,
+    _require_checkpoint_keys,
     execute_deca_request,
     sample_uv_displacement,
     validate_deca_runtime,
@@ -24,6 +27,18 @@ RIGHTS = "d" * 64
 def topology() -> np.ndarray:
     indices = np.arange(9976, dtype=np.int64)
     return np.stack([indices % 5023, (indices + 1) % 5023, (indices + 2) % 5023], axis=1)
+
+
+def test_checkpoint_keys_fail_closed() -> None:
+    with pytest.raises(ValueError, match="missing required model keys"):
+        _require_checkpoint_keys({"E_flame": {}, "E_detail": {}})
+
+
+def test_official_bridge_preprocesses_memory_without_fan_testdata() -> None:
+    source = inspect.getsource(_official_backend)
+    assert "datasets.TestData" not in source
+    assert "cv2.resize(image_rgb, (224, 224))" in source
+    assert "face_detector" not in source
 
 
 def settings(tmp_path: Path) -> DecaPluginSettings:
@@ -46,6 +61,13 @@ def settings(tmp_path: Path) -> DecaPluginSettings:
         checkpoint_sha256=CHECKPOINT,
         flame_sha256=FLAME,
     )
+
+
+def digest_reader(configured: DecaPluginSettings):
+    return {
+        configured.checkpoint_path: CHECKPOINT,
+        configured.flame_path: FLAME,
+    }.__getitem__
 
 
 def request_files(tmp_path: Path):
@@ -75,6 +97,7 @@ def fake_backend(_source: Path, _settings: DecaPluginSettings) -> DecaPrediction
         faces=topology(),
         source_projection=np.zeros((5023, 2), dtype=np.float32),
         detail_displacement=np.full(5023, 0.0005, dtype=np.float32),
+        coordinate_unit="metres",
     )
 
 
@@ -92,7 +115,8 @@ def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
     checkpoint = validate_deca_runtime(
         configured,
         revision_reader=lambda _path: REVISION,
-        digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+        digest_reader=digest_reader(configured),
+        clean_reader=lambda _path: True,
     )
     assert checkpoint == configured.checkpoint_path
     with pytest.raises(ValueError, match="checkpoint digest mismatch"):
@@ -100,6 +124,45 @@ def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
             configured,
             revision_reader=lambda _path: REVISION,
             digest_reader=lambda _path: "e" * 64,
+            clean_reader=lambda _path: True,
+        )
+
+
+def test_runtime_rejects_dirty_source(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    digests = {
+        configured.checkpoint_path: CHECKPOINT,
+        configured.flame_path: FLAME,
+    }
+    with pytest.raises(ValueError, match="source tree is not clean"):
+        validate_deca_runtime(
+            configured,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=digests.__getitem__,
+            clean_reader=lambda _path: False,
+        )
+
+
+def test_worker_rejects_non_metre_or_implausible_geometry(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    _request, request_path, result_path = request_files(tmp_path)
+    prediction = fake_backend(Path(), configured)
+    prediction = DecaPrediction(
+        prediction.vertices * 10,
+        prediction.faces,
+        prediction.source_projection,
+        prediction.detail_displacement,
+        "millimetres",
+    )
+    with pytest.raises(ValueError, match="explicitly use metres"):
+        execute_deca_request(
+            request_path,
+            result_path,
+            configured,
+            backend=lambda *_args: prediction,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=digest_reader(configured),
+            clean_reader=lambda _path: True,
         )
 
 
@@ -113,7 +176,8 @@ def test_worker_writes_only_numeric_detail_geometry(tmp_path: Path) -> None:
         configured,
         backend=fake_backend,
         revision_reader=lambda _path: REVISION,
-        digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+        digest_reader=digest_reader(configured),
+        clean_reader=lambda _path: True,
     )
 
     assert exit_code == 0
@@ -148,6 +212,7 @@ def test_worker_rejects_nonfinite_displacement_before_output(tmp_path: Path) -> 
             configured,
             backend=invalid_backend,
             revision_reader=lambda _path: REVISION,
-            digest_reader=lambda path: CHECKPOINT if path == configured.checkpoint_path else FLAME,
+            digest_reader=digest_reader(configured),
+            clean_reader=lambda _path: True,
         )
     assert not request.output_directory.exists()
