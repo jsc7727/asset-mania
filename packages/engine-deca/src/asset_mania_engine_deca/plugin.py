@@ -114,7 +114,7 @@ def sample_uv_displacement(displacement: np.ndarray, uv_coordinates: np.ndarray)
         raise ValueError("DECA UV coordinates are out of range")
     height, width = image.shape
     x = uv[:, 0] * (width - 1)
-    y = uv[:, 1] * (height - 1)
+    y = (1.0 - uv[:, 1]) * (height - 1)
     x0 = np.floor(x).astype(np.int64)
     y0 = np.floor(y).astype(np.int64)
     x1 = np.minimum(x0 + 1, width - 1)
@@ -127,6 +127,51 @@ def sample_uv_displacement(displacement: np.ndarray, uv_coordinates: np.ndarray)
         + image[y1, x0] * (1 - wx) * wy
         + image[y1, x1] * wx * wy
     )
+
+
+def sample_position_uv_displacement(
+    displacement: np.ndarray,
+    vertex_count: int,
+    faces: np.ndarray,
+    uv_coordinates: np.ndarray,
+    uv_faces: np.ndarray,
+) -> np.ndarray:
+    triangles = np.asarray(faces, dtype=np.int64)
+    texture_triangles = np.asarray(uv_faces, dtype=np.int64)
+    coordinates = np.asarray(uv_coordinates, dtype=np.float64)
+    if vertex_count <= 0:
+        raise ValueError("DECA vertex count is invalid")
+    if triangles.shape != texture_triangles.shape or triangles.ndim != 2 or triangles.shape[1] != 3:
+        raise ValueError("DECA position and UV topology differ")
+    if not len(triangles):
+        raise ValueError("DECA position and UV topology is empty")
+    if triangles.min() < 0 or triangles.max() >= vertex_count:
+        raise ValueError("DECA position topology is out of range")
+    if texture_triangles.min() < 0 or texture_triangles.max() >= len(coordinates):
+        raise ValueError("DECA UV topology is out of range")
+    corner_displacement = sample_uv_displacement(
+        displacement, coordinates[texture_triangles.reshape(-1)]
+    )
+    accumulated = np.zeros(vertex_count, dtype=np.float64)
+    counts = np.zeros(vertex_count, dtype=np.int64)
+    np.add.at(accumulated, triangles.reshape(-1), corner_displacement)
+    np.add.at(counts, triangles.reshape(-1), 1)
+    if np.any(counts == 0):
+        raise ValueError("DECA UV topology leaves a position unmapped")
+    return accumulated / counts
+
+
+def _decompose_code(parameters, model_cfg):
+    code = {}
+    start = 0
+    for key in model_cfg.param_list:
+        count = int(getattr(model_cfg, f"n_{key}"))
+        code[key] = parameters[:, start : start + count]
+        start += count
+    if start != parameters.shape[1]:
+        raise ValueError("DECA parameter dimensions differ from the sealed profile")
+    code["light"] = code["light"].reshape(code["light"].shape[0], 9, 3)
+    return code
 
 
 def _load_request(path: Path) -> FaceGeometryPluginRequest:
@@ -180,33 +225,70 @@ def _require_checkpoint_keys(checkpoint: object) -> dict:
 def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaPrediction:
     import cv2
     import torch
-    from decalib.deca import DECA
+    from decalib.models.decoders import Generator as DetailGenerator
+    from decalib.models.encoders import ResnetEncoder
+    from decalib.models.FLAME import FLAME
+    from decalib.utils import util
     from decalib.utils.config import cfg as deca_cfg
 
     image_bgr = cv2.imread(str(source_image), cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise ValueError("DECA source image is unreadable")
-    deca_cfg.model.use_tex = False
-    deca_cfg.pretrained_modelpath = str(settings.checkpoint_path)
-    deca_cfg.model.flame_model_path = str(settings.flame_path)
-    _require_checkpoint_keys(
+    model_cfg = deca_cfg.model
+    model_cfg.use_tex = False
+    model_cfg.extract_tex = False
+    model_cfg.flame_model_path = str(settings.flame_path)
+    checkpoint = _require_checkpoint_keys(
         torch.load(settings.checkpoint_path, map_location="cuda", weights_only=True)
     )
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     image_rgb = cv2.resize(image_rgb, (224, 224))
     image = torch.from_numpy(image_rgb).permute(2, 0, 1).float().div(255.0).cuda()[None]
-    deca = DECA(config=deca_cfg, device="cuda")
+    n_parameters = sum(int(getattr(model_cfg, f"n_{key}")) for key in model_cfg.param_list)
+    encoder = ResnetEncoder(outsize=n_parameters).cuda().eval()
+    detail_encoder = ResnetEncoder(outsize=model_cfg.n_detail).cuda().eval()
+    detail_decoder = (
+        DetailGenerator(
+            latent_dim=model_cfg.n_detail + model_cfg.n_exp + 3,
+            out_channels=1,
+            out_scale=model_cfg.max_z,
+            sample_mode="bilinear",
+        )
+        .cuda()
+        .eval()
+    )
+    flame = FLAME(model_cfg).cuda().eval()
+    util.copy_state_dict(encoder.state_dict(), checkpoint["E_flame"])
+    util.copy_state_dict(detail_encoder.state_dict(), checkpoint["E_detail"])
+    util.copy_state_dict(detail_decoder.state_dict(), checkpoint["D_detail"])
+    if model_cfg.jaw_type != "aa":
+        raise ValueError("DECA adapter requires the sealed axis-angle jaw profile")
     with torch.no_grad():
-        codedict = deca.encode(image, use_detail=True)
-        opdict = deca.decode(codedict, rendering=True, return_vis=False, use_detail=True)
-        if "displacement_map" not in opdict:
-            raise ValueError("DECA did not return the required displacement_map")
-        vertices = opdict["verts"][0].detach().cpu().numpy()
-        transformed = opdict["trans_verts"][0].detach().cpu().numpy()
-        displacement_map = opdict["displacement_map"][0, 0].detach().cpu().numpy()
-        faces = deca.render.faces[0].detach().cpu().numpy()
-        raw_uv = deca.render.raw_uvcoords[0].detach().cpu().numpy()
-    detail = sample_uv_displacement(displacement_map, raw_uv)
+        codedict = _decompose_code(encoder(image), model_cfg)
+        detail_code = detail_encoder(image)
+        vertices_tensor, _landmarks2d, _landmarks3d = flame(
+            shape_params=codedict["shape"],
+            expression_params=codedict["exp"],
+            pose_params=codedict["pose"],
+        )
+        transformed_tensor = util.batch_orth_proj(vertices_tensor, codedict["cam"])
+        transformed_tensor[:, :, 1:] = -transformed_tensor[:, :, 1:]
+        detail_input = torch.cat([codedict["pose"][:, 3:], codedict["exp"], detail_code], dim=1)
+        displacement_tensor = detail_decoder(detail_input)
+        fixed = torch.from_numpy(np.load(model_cfg.fixed_displacement_path)).float().cuda()
+        displacement_tensor = displacement_tensor + fixed[None, None]
+        vertices = vertices_tensor[0].detach().cpu().numpy()
+        transformed = transformed_tensor[0].detach().cpu().numpy()
+        displacement_map = displacement_tensor[0, 0].detach().cpu().numpy()
+    _template_vertices, raw_uv, faces, uv_faces = util.load_obj(model_cfg.topology_path)
+    faces = faces.cpu().numpy()
+    detail = sample_position_uv_displacement(
+        displacement_map,
+        len(vertices),
+        faces,
+        raw_uv.cpu().numpy(),
+        uv_faces.cpu().numpy(),
+    )
     height, width = image_bgr.shape[:2]
     projection = np.stack(
         [
@@ -217,7 +299,7 @@ def _official_backend(source_image: Path, settings: DecaPluginSettings) -> DecaP
     )
     canonical = vertices.astype(np.float64) * np.array([1.0, 1.0, -1.0])
     canonical_faces = faces[:, [0, 2, 1]]
-    del codedict, opdict, image, deca
+    del codedict, image, encoder, detail_encoder, detail_decoder, flame
     torch.cuda.empty_cache()
     return DecaPrediction(canonical, canonical_faces, projection, detail, "metres")
 

@@ -1,4 +1,3 @@
-import inspect
 import json
 from pathlib import Path
 
@@ -7,9 +6,10 @@ import pytest
 from asset_mania_engine_deca.plugin import (
     DecaPluginSettings,
     DecaPrediction,
-    _official_backend,
+    _decompose_code,
     _require_checkpoint_keys,
     execute_deca_request,
+    sample_position_uv_displacement,
     sample_uv_displacement,
     validate_deca_runtime,
 )
@@ -34,11 +34,46 @@ def test_checkpoint_keys_fail_closed() -> None:
         _require_checkpoint_keys({"E_flame": {}, "E_detail": {}})
 
 
-def test_official_bridge_preprocesses_memory_without_fan_testdata() -> None:
-    source = inspect.getsource(_official_backend)
-    assert "datasets.TestData" not in source
-    assert "cv2.resize(image_rgb, (224, 224))" in source
-    assert "face_detector" not in source
+def test_decompose_code_preserves_sealed_numeric_parameter_slices() -> None:
+    class ModelConfig:
+        param_list = ("shape", "exp", "pose", "cam", "light")
+        n_shape = 2
+        n_exp = 1
+        n_pose = 3
+        n_cam = 3
+        n_light = 27
+
+    parameters = np.arange(36, dtype=np.float32)[None, :]
+
+    result = _decompose_code(parameters, ModelConfig())
+
+    assert np.array_equal(result["shape"], [[0.0, 1.0]])
+    assert np.array_equal(result["pose"], [[3.0, 4.0, 5.0]])
+    assert result["light"].shape == (1, 9, 3)
+    assert np.array_equal(result["light"][0, 0], [9.0, 10.0, 11.0])
+
+
+def test_position_uv_sampling_flips_v_and_samples_seam_corners_before_mean() -> None:
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+    uv_faces = np.array([[0, 1, 2], [4, 2, 3]], dtype=np.int64)
+    uv = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5]])
+    displacement = np.array([[0.0, 0.0], [0.0, 4.0]], dtype=np.float64)
+
+    result = sample_position_uv_displacement(displacement, 4, faces, uv, uv_faces)
+
+    assert np.allclose(result, [0.5, 4.0, 0.0, 0.0])
+
+
+def test_position_uv_sampling_rejects_unmapped_and_out_of_range_topology() -> None:
+    displacement = np.zeros((2, 2), dtype=np.float64)
+    uv = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    faces = np.array([[0, 1, 2]], dtype=np.int64)
+    uv_faces = np.array([[0, 1, 2]], dtype=np.int64)
+
+    with pytest.raises(ValueError, match="leaves a position unmapped"):
+        sample_position_uv_displacement(displacement, 4, faces, uv, uv_faces)
+    with pytest.raises(ValueError, match="UV topology is out of range"):
+        sample_position_uv_displacement(displacement, 3, faces, uv, [[0, 1, 3]])
 
 
 def settings(tmp_path: Path) -> DecaPluginSettings:
@@ -107,7 +142,7 @@ def test_uv_displacement_sampling_has_fixed_orientation() -> None:
 
     sampled = sample_uv_displacement(displacement, uv)
 
-    assert np.allclose(sampled, [0.0, 3.0, 1.5])
+    assert np.allclose(sampled, [2.0, 1.0, 1.5])
 
 
 def test_runtime_requires_exact_revision_and_digests(tmp_path: Path) -> None:
