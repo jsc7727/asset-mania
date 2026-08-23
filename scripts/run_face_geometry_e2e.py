@@ -256,6 +256,8 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
     deca_record = _load(run / "deca/record.json", "DECA record")
     _verify_seal(mica_record, "record_sha256", "MICA record")
     _verify_seal(deca_record, "record_sha256", "DECA record")
+    if sha256_file(run / "topology.npz") != plan["topology_sha256"]:
+        raise ValueError("topology digest mismatch")
     faces, face_indices, inner = _topology(run)
     mica = load_face_geometry(run / "mica/plugin-output/geometry.npz", expected_topology=faces)
     deca = load_face_geometry(run / "deca/plugin-output/geometry.npz", expected_topology=faces)

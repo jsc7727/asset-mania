@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 from asset_mania_contracts import canonical_json
 from asset_mania_pipeline import (
     export_clay_glb,
@@ -294,3 +295,11 @@ def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
     review = json.loads((run / "verification/manual-review.json").read_text(encoding="utf-8"))
     assert review["visual_quality"] == "passed"
     assert len(review["review_sha256"]) == 64
+
+
+def test_fusion_rejects_topology_changed_after_plan(tmp_path: Path) -> None:
+    run, _source = completed_plugin_run(tmp_path)
+    (run / "topology.npz").write_bytes(b"tampered")
+
+    with pytest.raises(ValueError, match="topology digest mismatch"):
+        main(["geometry-fuse", "--run", str(run)])

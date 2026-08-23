@@ -165,3 +165,20 @@ def test_failed_result_exposes_no_geometry(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="failed result must not expose geometry"):
         load_face_geometry_plugin_result(result_path, request)
+
+
+def test_success_requires_exact_topology_counts_and_identity_feature_flag(tmp_path: Path) -> None:
+    request = geometry_request(tmp_path)
+    result_path = tmp_path / "result.json"
+    successful_result(request, result_path)
+    document = json.loads(result_path.read_text(encoding="utf-8"))
+    document["vertex_count"] = 5022
+    result_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError, match="exact FLAME topology counts"):
+        load_face_geometry_plugin_result(result_path, request)
+
+    document["vertex_count"] = 5023
+    document["ephemeral_identity_feature_used"] = False
+    result_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError, match="identity feature flag"):
+        load_face_geometry_plugin_result(result_path, request)

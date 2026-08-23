@@ -197,6 +197,11 @@ def load_face_geometry_plugin_result(
     if type(persisted) is not int or persisted != 0:
         raise ValueError("persisted identity feature count must be zero")
     if status == "succeeded":
+        if vertex_count != 5023 or triangle_count != 9976:
+            raise ValueError("successful geometry must use exact FLAME topology counts")
+        expected_ephemeral = request.plugin == MICA_PLUGIN
+        if ephemeral is not expected_ephemeral:
+            raise ValueError("identity feature flag does not match the plugin profile")
         expected = request.output_directory / "geometry.npz"
         if geometry != expected or not expected.is_file():
             raise ValueError("face geometry plugin success output is missing")
