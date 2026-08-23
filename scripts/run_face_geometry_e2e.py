@@ -318,7 +318,11 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
         raise ValueError("topology digest mismatch")
     faces, face_indices, inner = _topology(run)
     mica = load_face_geometry(run / "mica/plugin-output/geometry.npz", expected_topology=faces)
-    deca = load_face_geometry(run / "deca/plugin-output/geometry.npz", expected_topology=faces)
+    deca = load_face_geometry(
+        run / "deca/plugin-output/geometry.npz",
+        expected_topology=faces,
+        validate_extent=False,
+    )
     fused, measurements = fuse_mica_deca_geometry(
         mica=mica, deca=deca, face_indices=face_indices, inner_face_indices=inner
     )

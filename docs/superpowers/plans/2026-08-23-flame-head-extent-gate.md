@@ -84,11 +84,13 @@ git commit -m "fix(face-geometry): accept full FLAME head extent"
 **Files:**
 - Modify: `packages/engine-deca/src/asset_mania_engine_deca/plugin.py`
 - Modify: `packages/engine-deca/tests/test_deca_plugin.py`
+- Modify: `packages/pipeline/src/asset_mania_pipeline/face_geometry.py`
+- Modify: `packages/pipeline/tests/test_face_geometry.py`
 - Modify: `scripts/run_face_geometry_e2e.py`
 - Modify: `tests/test_face_geometry_e2e.py`
 
 **Interfaces:**
-- Consumes: raw DECA pre-alignment coarse geometry.
+- Consumes: raw DECA pre-alignment coarse geometry through an explicit loader extent opt-out.
 - Produces: finite, positive-axis, exact-topology DECA numeric output whose absolute interval is
   evaluated only after the existing MICA similarity fit; plans bind the exact validation mode.
 

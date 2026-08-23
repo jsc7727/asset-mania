@@ -47,7 +47,9 @@ class FaceGeometryMeasurements:
     outside_face_displacement_count: int
 
 
-def load_face_geometry(path: Path, *, expected_topology: np.ndarray) -> FaceGeometryData:
+def load_face_geometry(
+    path: Path, *, expected_topology: np.ndarray, validate_extent: bool = True
+) -> FaceGeometryData:
     try:
         with np.load(path, allow_pickle=False) as archive:
             if set(archive.files) != _GEOMETRY_FIELDS:
@@ -98,13 +100,18 @@ def load_face_geometry(path: Path, *, expected_topology: np.ndarray) -> FaceGeom
         or np.any(faces[:, 2] == faces[:, 0])
     ):
         raise ValueError("face geometry contains a degenerate triangle")
-    _validate_geometry(vertices, faces, label="face geometry")
+    _validate_geometry(vertices, faces, label="face geometry", validate_extent=validate_extent)
     return FaceGeometryData(vertices, faces, projection, displacement)
 
 
 def _validate_geometry(
     vertices: np.ndarray, faces: np.ndarray, *, label: str, validate_extent: bool = True
 ) -> None:
+    if not np.isfinite(vertices).all():
+        raise ValueError(f"{label} contains non-finite values")
+    extents = np.ptp(vertices, axis=0)
+    if not np.isfinite(extents).all() or np.any(extents <= 0):
+        raise ValueError(f"{label} must have positive extent on every axis")
     triangles = vertices[faces]
     doubled_areas = np.linalg.norm(
         np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
@@ -113,9 +120,6 @@ def _validate_geometry(
     if np.any(doubled_areas <= 1e-15):
         raise ValueError(f"{label} contains a zero-area triangle")
     if validate_extent:
-        extents = np.ptp(vertices, axis=0)
-        if np.any(extents <= 0):
-            raise ValueError(f"{label} must have positive extent on every axis")
         longest_extent = float(extents.max())
         if not _MINIMUM_HEAD_EXTENT_METRES <= longest_extent <= _MAXIMUM_HEAD_EXTENT_METRES:
             raise ValueError(f"{label} longest extent must be between 0.15 and 0.32 metres")

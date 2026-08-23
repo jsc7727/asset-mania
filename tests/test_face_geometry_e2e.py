@@ -268,9 +268,12 @@ def fake_plugin_runner(command, request, request_path, result_path, **_kwargs):
         else np.full(5023, 0.0005, dtype=np.float32)
     )
     faces, _face_indices, _inner = topology_arrays()
+    vertices = geometry_vertices().astype(np.float32)
+    if request.plugin == "deca-local":
+        vertices *= 0.324885711 / float(np.ptp(vertices, axis=0).max())
     np.savez_compressed(
         request.output_directory / "geometry.npz",
-        vertices=geometry_vertices().astype(np.float32),
+        vertices=vertices,
         faces=faces,
         source_projection=np.zeros((5023, 2), dtype=np.float32),
         detail_displacement=displacement,
@@ -439,6 +442,9 @@ def verified_run(tmp_path: Path) -> Path:
 
 def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
     run, _source = completed_plugin_run(tmp_path)
+
+    with np.load(run / "deca/plugin-output/geometry.npz", allow_pickle=False) as archive:
+        assert np.isclose(np.ptp(archive["vertices"], axis=0).max(), 0.324885711)
 
     assert main(["geometry-fuse", "--run", str(run)]) == 0
     assert (run / "fusion/mica-clay.glb").is_file()

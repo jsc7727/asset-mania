@@ -59,25 +59,64 @@ def test_numeric_geometry_requires_exact_flame_topology(tmp_path: Path) -> None:
 def test_geometry_archive_accepts_full_head_extent_boundaries(
     tmp_path: Path, longest_extent_metres: float
 ) -> None:
-    path = write_geometry(
-        tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres
-    )
+    path = write_geometry(tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres)
 
     data = load_face_geometry(path, expected_topology=flame_topology())
 
     assert np.isclose(np.ptp(data.vertices, axis=0).max(), longest_extent_metres)
 
 
-@pytest.mark.parametrize("longest_extent_metres", [0.149999, 0.320001])
+@pytest.mark.parametrize("longest_extent_metres", [0.149999, 0.320001, 0.324885711])
 def test_geometry_archive_rejects_extent_outside_full_head_boundaries(
     tmp_path: Path, longest_extent_metres: float
 ) -> None:
-    path = write_geometry(
-        tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres
-    )
+    path = write_geometry(tmp_path / "geometry.npz", longest_extent_metres=longest_extent_metres)
 
     with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
         load_face_geometry(path, expected_topology=flame_topology())
+
+
+def test_geometry_archive_explicit_extent_opt_out_accepts_raw_deca_unchanged(
+    tmp_path: Path,
+) -> None:
+    path = write_geometry(tmp_path / "deca.npz", longest_extent_metres=0.324885711)
+
+    data = load_face_geometry(
+        path,
+        expected_topology=flame_topology(),
+        validate_extent=False,
+    )
+
+    with np.load(path, allow_pickle=False) as archive:
+        assert np.array_equal(data.vertices, archive["vertices"])
+
+
+@pytest.mark.parametrize("axis", [0, 1, 2])
+def test_geometry_archive_extent_opt_out_still_rejects_zero_axis(tmp_path: Path, axis: int) -> None:
+    path = write_geometry(tmp_path / f"zero-{axis}.npz")
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {field: archive[field].copy() for field in archive.files}
+    arrays["vertices"][:, axis] = 0.0
+    np.savez_compressed(path, **arrays)
+
+    with pytest.raises(ValueError, match="positive extent on every axis"):
+        load_face_geometry(
+            path,
+            expected_topology=flame_topology(),
+            validate_extent=False,
+        )
+
+
+def test_geometry_archive_extent_opt_out_still_rejects_nonfinite_vertices(tmp_path: Path) -> None:
+    vertices = np.full((5023, 3), np.nan, dtype=np.float32)
+    path = write_geometry(tmp_path / "nonfinite-deca.npz", extra={"vertices": vertices})
+
+    with pytest.raises(ValueError, match="non-finite"):
+        load_face_geometry(
+            path,
+            expected_topology=flame_topology(),
+            validate_extent=False,
+        )
 
 
 @pytest.mark.parametrize("bad_key", ["embedding", "landmarks", "crop", "shape_parameters"])
@@ -115,9 +154,12 @@ def test_geometry_archive_rejects_unsupported_raw_dtypes(
 
 
 def test_geometry_archive_rejects_zero_area_triangle(tmp_path: Path) -> None:
-    vertices = np.zeros((5023, 3), dtype=np.float32)
-    vertices[:, 0] = np.linspace(-0.08, 0.08, 5023)
-    path = write_geometry(tmp_path / "collinear.npz", extra={"vertices": vertices})
+    source = write_geometry(tmp_path / "source.npz")
+    with np.load(source, allow_pickle=False) as archive:
+        invalid_vertices = archive["vertices"].copy()
+    first_triangle = flame_topology()[0]
+    invalid_vertices[first_triangle[0]] = invalid_vertices[first_triangle[1]]
+    path = write_geometry(tmp_path / "collinear.npz", extra={"vertices": invalid_vertices})
 
     with pytest.raises(ValueError, match="zero-area triangle"):
         load_face_geometry(path, expected_topology=flame_topology())
