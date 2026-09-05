@@ -215,6 +215,8 @@ def _load_request(path: Path) -> _FaceGeometryPluginRequest:
 
 
 def _deny_network() -> None:
+    """Install an in-process Python guard; this is not an operating-system sandbox."""
+
     def refuse(*_args, **_kwargs):
         raise RuntimeError("network denied during MICA inference")
 
@@ -234,17 +236,54 @@ def _deny_network() -> None:
             def connect_ex(self, _address) -> int:
                 refuse()
 
+            def send(self, *_args, **_kwargs):
+                refuse()
+
+            def sendall(self, *_args, **_kwargs) -> None:
+                refuse()
+
+            def sendto(self, *_args, **_kwargs):
+                refuse()
+
+        if hasattr(socket.socket, "sendmsg"):
+            DeniedSocket.sendmsg = refuse
+
         socket.socket = DeniedSocket
     socket.create_connection = refuse
     if requests is not None:
         requests.sessions.Session.request = refuse
 
 
-def _sanitize_credentials() -> None:
-    sensitive_fragments = ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY", "ACCESS_KEY")
-    for name in tuple(os.environ):
-        if any(fragment in name.upper() for fragment in sensitive_fragments):
-            os.environ.pop(name, None)
+def _sanitize_environment(settings: MicaPluginSettings) -> None:
+    inherited = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}
+    plugin_settings = {
+        "ASSET_MANIA_MICA_SOURCE_ROOT",
+        "ASSET_MANIA_MICA_ISOLATED_HOME",
+        "ASSET_MANIA_MICA_CHECKPOINT_PATH",
+        "ASSET_MANIA_MICA_FLAME_PATH",
+        "ASSET_MANIA_MICA_FLAME_SHA256",
+        "ASSET_MANIA_MICA_DETECTOR_PATH",
+        "ASSET_MANIA_MICA_DETECTOR_SHA256",
+    }
+    preserved = {
+        name: value for name, value in os.environ.items() if name in inherited | plugin_settings
+    }
+    preserved.update(
+        {
+            "HOME": str(settings.isolated_home),
+            "USERPROFILE": str(settings.isolated_home),
+            "XDG_CACHE_HOME": str(settings.isolated_home / "xdg-cache"),
+            "TORCH_HOME": str(settings.isolated_home / "torch-cache"),
+            "HF_HOME": str(settings.isolated_home / "hf-cache"),
+        }
+    )
+    os.environ.clear()
+    os.environ.update(preserved)
+
+
+def _require_cuda(torch_module) -> None:
+    if not torch_module.cuda.is_available() or torch_module.cuda.device_count() < 1:
+        raise ValueError("MICA requires an available CUDA device")
 
 
 def _require_checkpoint_keys(checkpoint: object) -> dict:
@@ -327,10 +366,17 @@ def _detect_face_with_scrfd(
     return bboxes[selected, :4], keypoints[selected], float(bboxes[selected, 4])
 
 
-def _official_backend(source_image: Path, settings: MicaPluginSettings) -> MicaPrediction:
+def _official_backend(
+    source_image: Path,
+    settings: MicaPluginSettings,
+    *,
+    cuda_validator: Callable[[object], None] = _require_cuda,
+) -> MicaPrediction:
     import cv2
     import numpy as np
     import torch
+
+    cuda_validator(torch)
 
     _restore_chumpy_numpy_aliases(np)
     from configs.config import get_cfg_defaults
@@ -416,8 +462,6 @@ def execute_mica_request(
     detector_digest_reader: Callable[[Path], str] = _directory_sha256,
     clean_reader: Callable[[Path], bool] = _git_is_clean,
 ) -> int:
-    import numpy as np
-
     request = _load_request(request_path)
     if request.plugin != "mica-local" or request.profile != "identity-neutral-v1":
         raise ValueError("request differs from MICA identity profile")
@@ -435,20 +479,13 @@ def execute_mica_request(
         detector_digest_reader=detector_digest_reader,
         clean_reader=clean_reader,
     )
-    os.environ.update(
-        {
-            "HOME": str(settings.isolated_home),
-            "USERPROFILE": str(settings.isolated_home),
-            "XDG_CACHE_HOME": str(settings.isolated_home / "xdg-cache"),
-            "TORCH_HOME": str(settings.isolated_home / "torch-cache"),
-            "HF_HOME": str(settings.isolated_home / "hf-cache"),
-        }
-    )
+    _sanitize_environment(settings)
     _deny_network()
-    _sanitize_credentials()
     sys.path.insert(0, str(settings.source_root))
     started = time.perf_counter()
     prediction = backend(request.source_image, settings)
+    import numpy as np
+
     vertices, faces, projection = _validate_prediction(prediction)
     elapsed = time.perf_counter() - started
     request.output_directory.mkdir()

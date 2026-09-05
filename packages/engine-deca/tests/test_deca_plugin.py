@@ -15,6 +15,7 @@ from asset_mania_engine_deca.plugin import (
     DecaPluginSettings,
     DecaPrediction,
     _decompose_code,
+    _directory_sha256,
     _require_checkpoint_keys,
     execute_deca_request,
     sample_position_uv_displacement,
@@ -29,6 +30,7 @@ from asset_mania_pipeline import (
 REVISION = "a" * 40
 CHECKPOINT = "b" * 64
 FLAME = "c" * 64
+DETECTOR = "e" * 64
 RIGHTS = "d" * 64
 
 
@@ -40,6 +42,21 @@ def topology() -> np.ndarray:
 def test_checkpoint_keys_fail_closed() -> None:
     with pytest.raises(ValueError, match="missing required model keys"):
         _require_checkpoint_keys({"E_flame": {}, "E_detail": {}})
+
+
+def test_official_backend_rejects_cpu_before_reading_source(monkeypatch, tmp_path: Path) -> None:
+    cv2 = types.SimpleNamespace(
+        IMREAD_COLOR=1,
+        imread=lambda *_args: pytest.fail("source must not be read before CUDA validation"),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", cv2)
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
+    with pytest.raises(ValueError, match="CUDA unavailable"):
+        deca_plugin._official_backend(
+            tmp_path / "source.png",
+            settings(tmp_path),
+            cuda_validator=lambda _torch: (_ for _ in ()).throw(ValueError("CUDA unavailable")),
+        )
 
 
 def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeypatch) -> None:
@@ -84,6 +101,10 @@ def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeyp
             connection.connect(("127.0.0.1", 9))
         with pytest.raises(RuntimeError, match="network denied during DECA inference"):
             connection.connect_ex(("127.0.0.1", 9))
+        for method in ("send", "sendall", "sendto", "sendmsg"):
+            if hasattr(connection, method):
+                with pytest.raises(RuntimeError, match="network denied during DECA inference"):
+                    getattr(connection, method)(b"blocked")
     with pytest.raises(RuntimeError, match="network denied during DECA inference"):
         socket.create_connection(("127.0.0.1", 9))
     with pytest.raises(RuntimeError, match="network denied during DECA inference"):
@@ -204,21 +225,112 @@ def settings(tmp_path: Path) -> DecaPluginSettings:
     source_root.mkdir()
     (source_root / "decalib").mkdir()
     (source_root / "decalib" / "deca.py").write_text("official source marker", encoding="utf-8")
+    data = source_root / "data"
+    data.mkdir()
+    (data / "head_template.obj").write_text("tracked topology", encoding="utf-8")
+    (data / "fixed_displacement_256.npy").write_bytes(b"tracked displacement")
     checkpoint = tmp_path / "deca_model.tar"
     checkpoint.write_bytes(b"checkpoint")
     flame = tmp_path / "generic_model.pkl"
     flame.write_bytes(b"flame")
     isolated = tmp_path / "isolated"
     isolated.mkdir()
+    detector = isolated / ".insightface" / "models" / "antelopev2"
+    detector.mkdir(parents=True)
+    (detector / "scrfd_10g_bnkps.onnx").write_bytes(b"detector")
     return DecaPluginSettings(
         source_root=source_root,
         isolated_home=isolated,
         checkpoint_path=checkpoint,
         flame_path=flame,
+        detector_path=detector,
         revision=REVISION,
         checkpoint_sha256=CHECKPOINT,
         flame_sha256=FLAME,
+        detector_sha256=_directory_sha256(detector),
     )
+
+
+def test_center_face_selection_uses_bbox_center_nearest_image_center() -> None:
+    boxes = np.array([[0, 0, 20, 20, 0.9], [40, 40, 70, 70, 0.8], [80, 80, 99, 99, 0.99]])
+    assert deca_plugin._select_center_face(boxes, (100, 100)) == 1
+
+
+def test_deca_similarity_crop_and_inverse_projection_are_numerically_sealed() -> None:
+    image = np.zeros((100, 200, 3), dtype=np.uint8)
+    image[20:80, 60:140] = 255
+    cv2 = types.SimpleNamespace(
+        warpAffine=lambda _image, _transform, size: np.zeros((size[1], size[0], 3), dtype=np.uint8)
+    )
+    crop, inverse = deca_plugin._deca_face_crop(
+        image, np.array([60.0, 20.0, 140.0, 80.0]), output_size=224, cv2_module=cv2
+    )
+    original = deca_plugin._project_crop_to_source(
+        np.array([[0.0, 0.0], [223.0, 223.0], [111.5, 111.5]]), inverse
+    )
+    assert crop.shape == (224, 224, 3)
+    np.testing.assert_allclose(original[2], [100.0, 50.0], atol=0.6)
+    np.testing.assert_allclose(original[0], [56.25, 6.25], atol=0.6)
+
+
+def test_chumpy_compatibility_and_deca_assets_are_bound_to_tracked_paths(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    numpy_module = types.SimpleNamespace()
+    deca_plugin._restore_chumpy_numpy_aliases(numpy_module)
+    assert numpy_module.bool is bool
+    cfg = types.SimpleNamespace()
+    deca_plugin._bind_deca_model_assets(cfg, configured)
+    assert cfg.flame_model_path == str(configured.flame_path.resolve(strict=True))
+    assert cfg.topology_path == str(
+        (configured.source_root / "data/head_template.obj").resolve(strict=True)
+    )
+
+
+def test_scrfd_detector_requires_cuda_provider_and_returns_center_bbox(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    calls = []
+
+    class Detector:
+        def get_providers(self):
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+        def prepare(self, **_kwargs):
+            pass
+
+        def detect(self, _image, **_kwargs):
+            return np.array([[0, 0, 10, 10, 0.9], [40, 40, 60, 60, 0.8]]), np.zeros((2, 5, 2))
+
+    def factory(path, *, providers):
+        calls.append((path, providers))
+        return Detector()
+
+    bbox = deca_plugin._detect_face_with_scrfd(
+        np.zeros((100, 100, 3), dtype=np.uint8),
+        configured.detector_path,
+        detector_factory=factory,
+    )
+    assert calls == [
+        (
+            str(configured.detector_path / "scrfd_10g_bnkps.onnx"),
+            ["CUDAExecutionProvider"],
+        )
+    ]
+    np.testing.assert_array_equal(bbox, [40, 40, 60, 60])
+
+
+def test_scrfd_detector_fails_closed_without_cuda_provider(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+
+    class Detector:
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+
+    with pytest.raises(ValueError, match="CUDA execution provider"):
+        deca_plugin._detect_face_with_scrfd(
+            np.zeros((10, 10, 3), dtype=np.uint8),
+            configured.detector_path,
+            detector_factory=lambda *_args, **_kwargs: Detector(),
+        )
 
 
 def digest_reader(configured: DecaPluginSettings):
@@ -401,6 +513,14 @@ def test_runtime_rejects_dirty_source(tmp_path: Path) -> None:
             digest_reader=digests.__getitem__,
             clean_reader=lambda _path: False,
         )
+    configured.detector_path.joinpath("scrfd_10g_bnkps.onnx").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="detector asset digest mismatch"):
+        validate_deca_runtime(
+            configured,
+            revision_reader=lambda _path: REVISION,
+            digest_reader=digests.__getitem__,
+            clean_reader=lambda _path: True,
+        )
 
 
 def test_worker_rejects_non_metre_or_implausible_geometry(tmp_path: Path) -> None:
@@ -424,6 +544,36 @@ def test_worker_rejects_non_metre_or_implausible_geometry(tmp_path: Path) -> Non
             digest_reader=digest_reader(configured),
             clean_reader=lambda _path: True,
         )
+
+
+def test_worker_uses_exact_environment_allowlist_before_external_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configured = settings(tmp_path)
+    _request, request_path, result_path = request_files(tmp_path)
+    monkeypatch.setenv("ASSET_MANIA_SAFE_FLAG", "drop")
+    monkeypatch.setenv("PRIVATE_KEY", "drop")
+    monkeypatch.setenv("SESSION_COOKIE", "drop")
+    monkeypatch.setenv("ASSET_MANIA_DECA_DETECTOR_PATH", str(configured.detector_path))
+
+    def inspecting_backend(source: Path, runtime: DecaPluginSettings) -> DecaPrediction:
+        environment = __import__("os").environ
+        assert "ASSET_MANIA_SAFE_FLAG" not in environment
+        assert "PRIVATE_KEY" not in environment
+        assert "SESSION_COOKIE" not in environment
+        assert environment["ASSET_MANIA_DECA_DETECTOR_PATH"] == str(configured.detector_path)
+        assert environment["HOME"] == str(configured.isolated_home)
+        return fake_backend(source, runtime)
+
+    execute_deca_request(
+        request_path,
+        result_path,
+        configured,
+        backend=inspecting_backend,
+        revision_reader=lambda _path: REVISION,
+        digest_reader=digest_reader(configured),
+        clean_reader=lambda _path: True,
+    )
 
 
 def test_worker_writes_only_numeric_detail_geometry(tmp_path: Path) -> None:
@@ -453,7 +603,7 @@ def test_worker_writes_only_numeric_detail_geometry(tmp_path: Path) -> None:
     assert result["ephemeral_identity_feature_used"] is False
     assert result["persisted_identity_feature_count"] == 0
     forbidden = ("*albedo*", "*texture*", "*landmark*", "*vis*", "*.obj", "*.mat")
-    assert not [path for pattern in forbidden for path in tmp_path.rglob(pattern)]
+    assert not [path for pattern in forbidden for path in request.output_directory.rglob(pattern)]
 
 
 def test_worker_rejects_nonfinite_displacement_before_output(tmp_path: Path) -> None:

@@ -41,6 +41,21 @@ def test_checkpoint_keys_fail_closed() -> None:
         _require_checkpoint_keys({"arcface": {}})
 
 
+def test_official_backend_rejects_cpu_before_reading_source(monkeypatch, tmp_path: Path) -> None:
+    cv2 = types.SimpleNamespace(
+        IMREAD_COLOR=1,
+        imread=lambda *_args: pytest.fail("source must not be read before CUDA validation"),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", cv2)
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
+    with pytest.raises(ValueError, match="CUDA unavailable"):
+        mica_plugin._official_backend(
+            tmp_path / "source.png",
+            settings(tmp_path),
+            cuda_validator=lambda _torch: (_ for _ in ()).throw(ValueError("CUDA unavailable")),
+        )
+
+
 @pytest.mark.parametrize("alias", ["bool", "int", "float", "complex", "object", "unicode", "str"])
 def test_chumpy_numpy_compatibility_preserves_each_existing_legacy_alias(alias: str) -> None:
     sentinel = object()
@@ -159,6 +174,10 @@ def test_network_denial_preserves_socket_imports_and_refuses_connections(monkeyp
             connection.connect(("127.0.0.1", 9))
         with pytest.raises(RuntimeError, match="network denied during MICA inference"):
             connection.connect_ex(("127.0.0.1", 9))
+        for method in ("send", "sendall", "sendto", "sendmsg"):
+            if hasattr(connection, method):
+                with pytest.raises(RuntimeError, match="network denied during MICA inference"):
+                    getattr(connection, method)(b"blocked")
     with pytest.raises(RuntimeError, match="network denied during MICA inference"):
         socket.create_connection(("127.0.0.1", 9))
     with pytest.raises(RuntimeError, match="network denied during MICA inference"):
@@ -470,11 +489,16 @@ def test_worker_sanitizes_credentials_before_external_backend(
     configured = settings(tmp_path)
     _request, request_path, result_path = request_files(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-cross-boundary")
-    monkeypatch.setenv("ASSET_MANIA_SAFE_FLAG", "present")
+    monkeypatch.setenv("ASSET_MANIA_SAFE_FLAG", "must-not-cross-boundary")
+    monkeypatch.setenv("PRIVATE_KEY", "must-not-cross-boundary")
+    monkeypatch.setenv("SESSION_COOKIE", "must-not-cross-boundary")
 
     def inspecting_backend(source: Path, runtime: MicaPluginSettings) -> MicaPrediction:
         assert "OPENAI_API_KEY" not in __import__("os").environ
-        assert __import__("os").environ["ASSET_MANIA_SAFE_FLAG"] == "present"
+        assert "ASSET_MANIA_SAFE_FLAG" not in __import__("os").environ
+        assert "PRIVATE_KEY" not in __import__("os").environ
+        assert "SESSION_COOKIE" not in __import__("os").environ
+        assert __import__("os").environ["HOME"] == str(configured.isolated_home)
         return fake_backend(source, runtime)
 
     execute_mica_request(
