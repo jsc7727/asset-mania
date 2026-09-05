@@ -185,12 +185,50 @@ def test_similarity_fit_recovers_known_metric_transform() -> None:
     assert np.max(np.abs(transform.apply(source) - target)) < 1e-9
 
 
-def test_face_taper_uses_two_adjacency_rings() -> None:
-    faces = np.array([[0, 1, 2], [2, 1, 3], [3, 1, 4], [4, 1, 5]], dtype=np.int64)
+def grid_faces(size: int) -> np.ndarray:
+    faces: list[tuple[int, int, int]] = []
+    for row in range(size - 1):
+        for column in range(size - 1):
+            top_left = row * size + column
+            top_right = top_left + 1
+            bottom_left = top_left + size
+            bottom_right = bottom_left + 1
+            faces.extend(
+                ((top_left, bottom_left, top_right), (top_right, bottom_left, bottom_right))
+            )
+    return np.asarray(faces, dtype=np.int64)
 
-    taper = build_face_taper(vertex_count=7, faces=faces, face_indices=np.array([0, 2]))
 
-    assert taper.tolist() == [1.0, 0.75, 1.0, 0.75, 0.25, 0.25, 0.0]
+def test_face_taper_feathers_two_rings_inward_without_expanding_sealed_mask() -> None:
+    size = 7
+    faces = grid_faces(size)
+    face_indices = np.array(
+        [row * size + column for row in range(1, 6) for column in range(1, 6)],
+        dtype=np.int64,
+    )
+
+    taper = build_face_taper(
+        vertex_count=size * size,
+        faces=faces,
+        face_indices=face_indices,
+    )
+
+    expected = np.zeros((size, size), dtype=np.float64)
+    expected[1:6, 1:6] = 0.25
+    expected[2:5, 2:5] = 0.75
+    expected[3, 3] = 1.0
+    assert np.array_equal(taper.reshape(size, size), expected)
+
+
+@pytest.mark.parametrize(
+    "face_indices",
+    [np.array([0.0, 1.0, 2.0]), np.array([0, 1, 1], dtype=np.int64)],
+)
+def test_face_taper_rejects_noninteger_or_duplicate_face_indices(
+    face_indices: np.ndarray,
+) -> None:
+    with pytest.raises(ValueError, match="face indices are invalid"):
+        build_face_taper(vertex_count=4, faces=np.array([[0, 1, 2]]), face_indices=face_indices)
 
 
 def geometry_fixture(vertices: np.ndarray, displacement: np.ndarray) -> FaceGeometryData:
@@ -222,7 +260,7 @@ def test_fusion_keeps_mica_positions_outside_taper_and_bounds_detail() -> None:
     result, measured = fuse_mica_deca_geometry(
         mica=mica,
         deca=deca,
-        face_indices=np.array([0, 2]),
+        face_indices=np.arange(6),
         inner_face_indices=np.array([0, 1, 2, 3]),
     )
 
@@ -231,6 +269,79 @@ def test_fusion_keeps_mica_positions_outside_taper_and_bounds_detail() -> None:
     assert measured.maximum_displacement_metres <= 0.003
     assert measured.rms_displacement_metres <= 0.0015
     assert measured.outside_face_displacement_count == 0
+
+
+def test_fusion_ignores_malicious_detail_outside_original_face_mask() -> None:
+    mica_vertices = np.array(
+        [
+            [-0.08, 0.02, -0.01],
+            [-0.03, 0.08, -0.02],
+            [0.02, 0.09, -0.03],
+            [0.07, 0.03, -0.02],
+            [0.08, -0.04, 0.00],
+            [0.02, -0.11, 0.01],
+            [0.00, -0.14, 0.02],
+        ]
+    )
+    deca_vertices = mica_vertices * 2.0 + np.array([0.5, -0.2, 0.1])
+    mica = geometry_fixture(mica_vertices, np.zeros(7))
+    deca = geometry_fixture(
+        deca_vertices,
+        np.array([0.002, 0.002, 0.002, 0.002, 0.002, 1000.0, np.nan]),
+    )
+
+    result, measured = fuse_mica_deca_geometry(
+        mica=mica,
+        deca=deca,
+        face_indices=np.arange(5),
+        inner_face_indices=np.array([0, 1, 2, 3]),
+    )
+
+    assert np.array_equal(result.vertices[5:], mica.vertices[5:])
+    assert np.array_equal(result.detail_displacement[5:], np.zeros(2))
+    assert measured.maximum_displacement_metres == pytest.approx(0.001)
+    assert measured.rms_displacement_metres == pytest.approx(0.001)
+    assert measured.face_displacement_coverage == 1.0
+    assert measured.outside_face_displacement_count == 0
+
+
+@pytest.mark.parametrize(
+    ("face_indices", "inner_face_indices"),
+    [
+        (np.arange(6, dtype=np.float64), np.array([0, 1, 2])),
+        (np.array([0, 1, 2, 3, 4, 5]), np.array([0.0, 1.0, 2.0])),
+        (np.array([0, 1, 2, 3, 4, 5]), np.array([0, 1, 1])),
+        (np.array([0, 1, 2, 3, 4, 5]), np.array([0, 1, 6])),
+        (np.array([0, 1, 2]), np.array([0, 1, 2])),
+    ],
+)
+def test_fusion_rejects_invalid_or_nonproper_face_fit_masks(
+    face_indices: np.ndarray,
+    inner_face_indices: np.ndarray,
+) -> None:
+    vertices = (
+        np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.0, 0.1, 0.0],
+                [0.0, 0.0, 0.1],
+                [0.1, 0.1, 0.0],
+                [0.1, 0.0, 0.1],
+            ]
+        )
+        * 1.6
+    )
+    mica = geometry_fixture(vertices, np.zeros(6))
+    deca = geometry_fixture(vertices, np.zeros(6))
+
+    with pytest.raises(ValueError, match="indices are invalid"):
+        fuse_mica_deca_geometry(
+            mica=mica,
+            deca=deca,
+            face_indices=face_indices,
+            inner_face_indices=inner_face_indices,
+        )
 
 
 @pytest.mark.parametrize(

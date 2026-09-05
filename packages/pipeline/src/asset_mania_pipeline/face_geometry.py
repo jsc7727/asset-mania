@@ -167,19 +167,36 @@ def _adjacency(vertex_count: int, faces: np.ndarray) -> list[set[int]]:
     return result
 
 
+def _validated_indices(
+    values: np.ndarray, *, vertex_count: int, label: str, minimum_count: int = 1
+) -> np.ndarray:
+    raw = np.asarray(values)
+    if (
+        raw.dtype not in _INDEX_DTYPES
+        or raw.ndim != 1
+        or len(raw) < minimum_count
+        or len(np.unique(raw)) != len(raw)
+        or raw.min() < 0
+        or raw.max() >= vertex_count
+    ):
+        raise ValueError(f"{label} are invalid")
+    return raw.astype(np.int64, copy=False)
+
+
 def build_face_taper(
     *, vertex_count: int, faces: np.ndarray, face_indices: np.ndarray
 ) -> np.ndarray:
-    indices = {int(value) for value in np.asarray(face_indices, dtype=np.int64)}
-    if not indices or min(indices) < 0 or max(indices) >= vertex_count:
-        raise ValueError("face indices are invalid")
+    validated = _validated_indices(face_indices, vertex_count=vertex_count, label="face indices")
+    indices = {int(value) for value in validated}
     adjacency = _adjacency(vertex_count, faces)
     taper = np.zeros(vertex_count, dtype=np.float64)
     taper[list(indices)] = 1.0
-    first = {neighbor for index in indices for neighbor in adjacency[index]} - indices
-    taper[list(first)] = 0.75
-    second = {neighbor for index in first for neighbor in adjacency[index]} - indices - first
-    taper[list(second)] = 0.25
+    boundary = {index for index in indices if adjacency[index] - indices}
+    taper[list(boundary)] = 0.25
+    next_ring = {
+        neighbor for index in boundary for neighbor in adjacency[index] if neighbor in indices
+    } - boundary
+    taper[list(next_ring)] = 0.75
     return taper
 
 
@@ -222,29 +239,35 @@ def fuse_mica_deca_geometry(
     # DECA is in its plugin's arbitrary pre-alignment coordinate system. Its
     # topology and triangle area are meaningful here, but its metric extent is not.
     _validate_geometry(deca.vertices, deca.faces, label="DECA geometry", validate_extent=False)
-    inner = np.asarray(inner_face_indices, dtype=np.int64)
-    if inner.ndim != 1 or len(inner) < 3 or inner.min() < 0 or inner.max() >= len(mica.vertices):
+    face = _validated_indices(face_indices, vertex_count=len(mica.vertices), label="face indices")
+    inner = _validated_indices(
+        inner_face_indices,
+        vertex_count=len(mica.vertices),
+        label="inner face indices",
+        minimum_count=3,
+    )
+    face_set = set(map(int, face))
+    if not set(map(int, inner)) < face_set:
         raise ValueError("inner face indices are invalid")
     transform = fit_similarity_transform(deca.vertices[inner], mica.vertices[inner])
     aligned_displacement = np.asarray(deca.detail_displacement, dtype=np.float64) * transform.scale
-    maximum = float(np.max(np.abs(aligned_displacement)))
-    rms = float(np.sqrt(np.mean(aligned_displacement**2)))
+    face_region = np.zeros(len(mica.vertices), dtype=bool)
+    face_region[face] = True
+    finite_face_region = np.isfinite(aligned_displacement[face_region])
+    coverage = float(np.count_nonzero(finite_face_region) / len(face))
+    if coverage < 0.90:
+        raise ValueError("face displacement coverage is below 0.90")
+    allowed_displacement = aligned_displacement[face_region][finite_face_region]
+    maximum = float(np.max(np.abs(allowed_displacement)))
+    rms = float(np.sqrt(np.mean(allowed_displacement**2)))
     if maximum > 0.003:
         raise ValueError("maximum displacement exceeds 0.003 metres")
     if rms > 0.0015:
         raise ValueError("RMS displacement exceeds 0.0015 metres")
-    taper = build_face_taper(
-        vertex_count=len(mica.vertices), faces=mica.faces, face_indices=face_indices
-    )
-    tapered_region = taper > 0
-    coverage = float(
-        np.count_nonzero(np.isfinite(aligned_displacement[tapered_region]))
-        / np.count_nonzero(tapered_region)
-    )
-    if coverage < 0.90:
-        raise ValueError("face displacement coverage is below 0.90")
-    applied = aligned_displacement * taper
-    outside_count = int(np.count_nonzero(applied[~tapered_region]))
+    taper = build_face_taper(vertex_count=len(mica.vertices), faces=mica.faces, face_indices=face)
+    applied = np.zeros(len(mica.vertices), dtype=np.float64)
+    applied[face_region] = aligned_displacement[face_region] * taper[face_region]
+    outside_count = int(np.count_nonzero(applied[~face_region]))
     if outside_count:
         raise ValueError("detail displacement escaped the tapered face region")
     normals = _vertex_normals(mica.vertices, mica.faces)
