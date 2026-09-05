@@ -469,7 +469,10 @@ def _deca_face_crop(
     if not np.isfinite([left, top, right, bottom]).all() or right <= left or bottom <= top:
         raise ValueError("DECA detector bbox must have finite positive extents")
     old_size = ((right - left) + (bottom - top)) * 0.5
-    center = np.array([(left + right) * 0.5, (top + bottom) * 0.5], dtype=np.float64)
+    center = np.array(
+        [(left + right) * 0.5, (top + bottom) * 0.5 + old_size * 0.12],
+        dtype=np.float64,
+    )
     size = int(old_size * 1.25)
     half = size * 0.5
     scale = (output_size - 1) / size

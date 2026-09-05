@@ -270,8 +270,8 @@ def test_deca_similarity_crop_and_inverse_projection_are_numerically_sealed() ->
         np.array([[0.0, 0.0], [223.0, 223.0], [111.5, 111.5]]), inverse
     )
     assert crop.shape == (224, 224, 3)
-    np.testing.assert_allclose(original[2], [100.0, 50.0], atol=0.6)
-    np.testing.assert_allclose(original[0], [56.25, 6.25], atol=0.6)
+    np.testing.assert_allclose(original[2], [100.0, 58.4], atol=1e-9)
+    np.testing.assert_allclose(original[0], [56.5, 14.9], atol=1e-9)
 
 
 def test_chumpy_compatibility_and_deca_assets_are_bound_to_tracked_paths(tmp_path: Path) -> None:
