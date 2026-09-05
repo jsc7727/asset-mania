@@ -9,6 +9,8 @@ below document the working offline inspection contract and the boundaries for la
 - [Run manifest](concepts/run-manifest.md) — portable output and stream rules.
 - [Security and privacy](security-and-privacy.md) — local-first guarantees and approval gates.
 - [Research](research.md) — evidence and product landscape.
+- [Local face geometry status](face-geometry-status.md) — current implementation, corrected
+  comparison, experimental limitations, and required runtime inputs.
 - [Roadmap](roadmap.md) — staged delivery from inspection to cloud.
 
 For repository-wide agent rules, begin with [../rules/README.md](../rules/README.md).

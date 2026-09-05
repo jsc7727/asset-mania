@@ -147,6 +147,8 @@ unmeasured.
 
 ## Project guide
 
+- [Local face geometry status](docs/face-geometry-status.md) — corrected comparison, current
+  failed fusion experiment, and the source-specific local consent workflow.
 - [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security-and-privacy.md)
