@@ -121,9 +121,7 @@ def test_convert_writes_plain_and_front_colored_glbs(tmp_path: Path) -> None:
     np.savez_compressed(
         projection,
         projected_vertices=np.array([[0, 0], [3, 0], [1, 3], [2, 2]], dtype=float),
-        camera_vertices=np.array(
-            [[-1, 0, -1], [1, 0, -1], [0, 0, 1], [0, -1, 0]], dtype=float
-        ),
+        camera_vertices=np.array([[-1, 0, -1], [1, 0, -1], [0, 0, 1], [0, -1, 0]], dtype=float),
         image_shape=np.array([4, 4], dtype=np.int64),
     )
     pixels = np.zeros((4, 4, 3), dtype=np.uint8)

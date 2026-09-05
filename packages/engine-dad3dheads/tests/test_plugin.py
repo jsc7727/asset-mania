@@ -25,9 +25,7 @@ DIGEST = "a" * 64
 
 
 def test_neutral_mesh_vertices_remove_nonzero_global_pose() -> None:
-    neutral = np.array(
-        [[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64
-    )
+    neutral = np.array([[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64)
     angle = np.deg2rad(35.0)
     rotation = np.array(
         [[np.cos(angle), -np.sin(angle), 0.0], [np.sin(angle), np.cos(angle), 0.0], [0, 0, 1]]
@@ -53,9 +51,7 @@ def test_neutral_mesh_vertices_remove_nonzero_global_pose() -> None:
 
 
 def test_prediction_geometry_keeps_posed_camera_vertices_and_projection() -> None:
-    neutral = np.array(
-        [[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64
-    )
+    neutral = np.array([[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64)
     posed = np.array(
         [[-0.08, -0.06, 0.0], [0.08, 0.06, 0.0], [-0.12, 0.16, 0.05]], dtype=np.float64
     )
