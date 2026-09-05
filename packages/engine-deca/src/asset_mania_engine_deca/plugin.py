@@ -437,9 +437,7 @@ def _select_center_face(bboxes: np.ndarray, image_shape: tuple[int, int]) -> int
     return int(np.argmin(np.sum((centers - image_center) ** 2, axis=1)))
 
 
-def _detect_face_with_scrfd(
-    image_bgr: np.ndarray, detector_directory: Path, *, detector_factory=None
-) -> np.ndarray:
+def _load_scrfd_detector(detector_directory: Path, *, detector_factory=None):
     detector_model = detector_directory / "scrfd_10g_bnkps.onnx"
     if not detector_model.is_file():
         raise ValueError("preplaced sealed SCRFD detector is unavailable")
@@ -452,6 +450,18 @@ def _detect_face_with_scrfd(
     if session is None or "CUDAExecutionProvider" not in session.get_providers():
         raise ValueError("DECA detector requires the CUDA execution provider")
     detector.prepare(ctx_id=0, input_size=(224, 224))
+    return detector
+
+
+def _detect_face_with_scrfd(
+    image_bgr: np.ndarray,
+    detector_directory: Path,
+    *,
+    detector_factory=None,
+    detector=None,
+) -> np.ndarray:
+    if detector is None:
+        detector = _load_scrfd_detector(detector_directory, detector_factory=detector_factory)
     bboxes, _keypoints = detector.detect(image_bgr, max_num=0, metric="default")
     if bboxes.shape[0] == 0:
         raise ValueError("DECA found no face in the declared face image")
@@ -507,6 +517,7 @@ def _official_backend(
     import torch
 
     cuda_validator(torch)
+    detector = _load_scrfd_detector(settings.detector_path)
     _restore_chumpy_numpy_aliases(np)
     from decalib.models.decoders import Generator as DetailGenerator
     from decalib.models.encoders import ResnetEncoder
@@ -517,7 +528,7 @@ def _official_backend(
     image_bgr = cv2.imread(str(source_image), cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise ValueError("DECA source image is unreadable")
-    bbox = _detect_face_with_scrfd(image_bgr, settings.detector_path)
+    bbox = _detect_face_with_scrfd(image_bgr, settings.detector_path, detector=detector)
     cropped_bgr, inverse_transform = _deca_face_crop(image_bgr, bbox)
     model_cfg = deca_cfg.model
     model_cfg.use_tex = False

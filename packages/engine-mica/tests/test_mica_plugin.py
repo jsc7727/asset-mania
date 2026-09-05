@@ -56,6 +56,30 @@ def test_official_backend_rejects_cpu_before_reading_source(monkeypatch, tmp_pat
         )
 
 
+def test_official_backend_rejects_cpu_detector_before_reading_source(
+    monkeypatch, tmp_path: Path
+) -> None:
+    configured = settings(tmp_path)
+
+    class RetinaFace:
+        session = types.SimpleNamespace(get_providers=lambda: ["CPUExecutionProvider"])
+
+    cv2 = types.SimpleNamespace(
+        IMREAD_COLOR=1,
+        imread=lambda *_args: pytest.fail("source must not be read before detector validation"),
+    )
+    insightface = types.ModuleType("insightface")
+    insightface.model_zoo = types.SimpleNamespace(get_model=lambda *_args, **_kwargs: RetinaFace())
+    monkeypatch.setitem(sys.modules, "cv2", cv2)
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "insightface", insightface)
+
+    with pytest.raises(ValueError, match="CUDA execution provider"):
+        mica_plugin._official_backend(
+            tmp_path / "source.png", configured, cuda_validator=lambda _torch: None
+        )
+
+
 @pytest.mark.parametrize("alias", ["bool", "int", "float", "complex", "object", "unicode", "str"])
 def test_chumpy_numpy_compatibility_preserves_each_existing_legacy_alias(alias: str) -> None:
     sentinel = object()
