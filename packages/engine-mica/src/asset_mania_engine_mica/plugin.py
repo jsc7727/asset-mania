@@ -358,6 +358,9 @@ def _detect_face_with_scrfd(
 
         detector_factory = model_zoo.get_model
     detector = detector_factory(str(detector_model), providers=["CUDAExecutionProvider"])
+    session = getattr(detector, "session", None)
+    if session is None or "CUDAExecutionProvider" not in session.get_providers():
+        raise ValueError("MICA detector requires the CUDA execution provider")
     detector.prepare(ctx_id=0, input_size=(224, 224))
     bboxes, keypoints = detector.detect(image_bgr, max_num=0, metric="default")
     if bboxes.shape[0] == 0:

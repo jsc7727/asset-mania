@@ -229,6 +229,7 @@ def settings(tmp_path: Path) -> DecaPluginSettings:
     data.mkdir()
     (data / "head_template.obj").write_text("tracked topology", encoding="utf-8")
     (data / "fixed_displacement_256.npy").write_bytes(b"tracked displacement")
+    (data / "landmark_embedding.npy").write_bytes(b"tracked landmarks")
     checkpoint = tmp_path / "deca_model.tar"
     checkpoint.write_bytes(b"checkpoint")
     flame = tmp_path / "generic_model.pkl"
@@ -284,6 +285,9 @@ def test_chumpy_compatibility_and_deca_assets_are_bound_to_tracked_paths(tmp_pat
     assert cfg.topology_path == str(
         (configured.source_root / "data/head_template.obj").resolve(strict=True)
     )
+    assert cfg.flame_lmk_embedding_path == str(
+        (configured.source_root / "data/landmark_embedding.npy").resolve(strict=True)
+    )
 
 
 def test_scrfd_detector_requires_cuda_provider_and_returns_center_bbox(tmp_path: Path) -> None:
@@ -291,8 +295,9 @@ def test_scrfd_detector_requires_cuda_provider_and_returns_center_bbox(tmp_path:
     calls = []
 
     class Detector:
-        def get_providers(self):
-            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        session = types.SimpleNamespace(
+            get_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
 
         def prepare(self, **_kwargs):
             pass
@@ -322,14 +327,32 @@ def test_scrfd_detector_fails_closed_without_cuda_provider(tmp_path: Path) -> No
     configured = settings(tmp_path)
 
     class Detector:
-        def get_providers(self):
-            return ["CPUExecutionProvider"]
+        session = types.SimpleNamespace(get_providers=lambda: ["CPUExecutionProvider"])
 
     with pytest.raises(ValueError, match="CUDA execution provider"):
         deca_plugin._detect_face_with_scrfd(
             np.zeros((10, 10, 3), dtype=np.uint8),
             configured.detector_path,
             detector_factory=lambda *_args, **_kwargs: Detector(),
+        )
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    [
+        [np.nan, 0.0, 10.0, 10.0],
+        [10.0, 0.0, 10.0, 10.0],
+        [11.0, 0.0, 10.0, 10.0],
+        [0.0, 10.0, 10.0, 9.0],
+    ],
+)
+def test_deca_face_crop_rejects_nonfinite_or_nonpositive_bbox(bbox) -> None:
+    cv2 = types.SimpleNamespace(warpAffine=lambda *_args: pytest.fail("warp must not run"))
+    with pytest.raises(ValueError, match="finite positive extents"):
+        deca_plugin._deca_face_crop(
+            np.zeros((10, 10, 3), dtype=np.uint8),
+            np.asarray(bbox),
+            cv2_module=cv2,
         )
 
 

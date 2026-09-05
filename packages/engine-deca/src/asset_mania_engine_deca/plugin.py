@@ -414,13 +414,19 @@ def _restore_chumpy_numpy_aliases(np_module=None) -> None:
 def _bind_deca_model_assets(model_cfg: object, settings: DecaPluginSettings) -> None:
     topology = settings.source_root / "data" / "head_template.obj"
     fixed_displacement = settings.source_root / "data" / "fixed_displacement_256.npy"
+    landmark_embedding = settings.source_root / "data" / "landmark_embedding.npy"
     if not settings.flame_path.is_file():
         raise ValueError("user-supplied FLAME asset is unavailable")
-    if not topology.is_file() or not fixed_displacement.is_file():
+    if (
+        not topology.is_file()
+        or not fixed_displacement.is_file()
+        or not landmark_embedding.is_file()
+    ):
         raise ValueError("tracked DECA model asset is unavailable")
     model_cfg.flame_model_path = str(settings.flame_path.resolve(strict=True))
     model_cfg.topology_path = str(topology.resolve(strict=True))
     model_cfg.fixed_displacement_path = str(fixed_displacement.resolve(strict=True))
+    model_cfg.flame_lmk_embedding_path = str(landmark_embedding.resolve(strict=True))
 
 
 def _select_center_face(bboxes: np.ndarray, image_shape: tuple[int, int]) -> int:
@@ -442,7 +448,8 @@ def _detect_face_with_scrfd(
 
         detector_factory = model_zoo.get_model
     detector = detector_factory(str(detector_model), providers=["CUDAExecutionProvider"])
-    if "CUDAExecutionProvider" not in detector.get_providers():
+    session = getattr(detector, "session", None)
+    if session is None or "CUDAExecutionProvider" not in session.get_providers():
         raise ValueError("DECA detector requires the CUDA execution provider")
     detector.prepare(ctx_id=0, input_size=(224, 224))
     bboxes, _keypoints = detector.detect(image_bgr, max_num=0, metric="default")
@@ -459,6 +466,8 @@ def _deca_face_crop(
     import numpy as np
 
     left, top, right, bottom = map(float, bbox)
+    if not np.isfinite([left, top, right, bottom]).all() or right <= left or bottom <= top:
+        raise ValueError("DECA detector bbox must have finite positive extents")
     old_size = ((right - left) + (bottom - top)) * 0.5
     center = np.array([(left + right) * 0.5, (top + bottom) * 0.5], dtype=np.float64)
     size = int(old_size * 1.25)

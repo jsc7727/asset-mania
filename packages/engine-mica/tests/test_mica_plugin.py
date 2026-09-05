@@ -228,6 +228,10 @@ def test_scrfd_bridge_uses_only_sealed_model_and_selects_centered_face(tmp_path:
     calls: list[tuple[object, ...]] = []
 
     class FakeDetector:
+        session = types.SimpleNamespace(
+            get_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+
         def prepare(self, *, ctx_id: int, input_size: tuple[int, int]) -> None:
             calls.append(("prepare", ctx_id, input_size))
 
@@ -254,6 +258,21 @@ def test_scrfd_bridge_uses_only_sealed_model_and_selects_centered_face(tmp_path:
     np.testing.assert_array_equal(bbox, bboxes[1, :4])
     np.testing.assert_array_equal(kps, keypoints[1])
     assert score == pytest.approx(0.95)
+
+
+def test_scrfd_bridge_fails_closed_without_cuda_session_provider(tmp_path: Path) -> None:
+    model = tmp_path / "scrfd_10g_bnkps.onnx"
+    model.write_bytes(b"sealed")
+    detector = types.SimpleNamespace(
+        session=types.SimpleNamespace(get_providers=lambda: ["CPUExecutionProvider"])
+    )
+    with pytest.raises(ValueError, match="CUDA execution provider"):
+        mica_plugin._detect_face_with_scrfd(
+            np.zeros((10, 10, 3), dtype=np.uint8),
+            tmp_path,
+            center_selector=lambda *_args: 0,
+            detector_factory=lambda *_args, **_kwargs: detector,
+        )
 
 
 def test_scrfd_bridge_rejects_missing_sealed_model(tmp_path: Path) -> None:
