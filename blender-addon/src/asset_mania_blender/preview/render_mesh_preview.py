@@ -151,7 +151,24 @@ def build_material(
     target.data.materials.append(material)
 
 
-def frame_and_light(target: bpy.types.Object) -> float:
+def rotated_light_setup(
+    location: tuple[float, float, float],
+    rotation_euler: tuple[float, float, float],
+    start_angle_degrees: float,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """Rotate the legacy -90-degree light rig with the selected front camera."""
+    delta = math.radians(start_angle_degrees - (-90.0))
+    if abs(delta) < 1e-12:
+        return location, rotation_euler
+    cosine = math.cos(delta)
+    sine = math.sin(delta)
+    x, y, z = location
+    rotated_location = (x * cosine - y * sine, x * sine + y * cosine, z)
+    rx, ry, rz = rotation_euler
+    return rotated_location, (rx, ry, rz + delta)
+
+
+def frame_and_light(target: bpy.types.Object, start_angle_degrees: float = -90.0) -> float:
     """Centre the subject at the origin and return the orbit radius that fits it."""
     bpy.context.view_layer.update()
     corners = [target.matrix_world @ v.co for v in target.data.vertices]
@@ -165,15 +182,21 @@ def frame_and_light(target: bpy.types.Object) -> float:
     key = bpy.data.objects.new("key", bpy.data.lights.new("key", type="AREA"))
     key.data.energy = 900 * extent**2
     key.data.size = extent * 3
-    key.location = (extent * 2.5, -extent * 2.5, extent * 3)
-    key.rotation_euler = (math.radians(50), 0, math.radians(40))
+    key.location, key.rotation_euler = rotated_light_setup(
+        (extent * 2.5, -extent * 2.5, extent * 3),
+        (math.radians(50), 0, math.radians(40)),
+        start_angle_degrees,
+    )
     bpy.context.scene.collection.objects.link(key)
 
     fill = bpy.data.objects.new("fill", bpy.data.lights.new("fill", type="AREA"))
     fill.data.energy = 250 * extent**2
     fill.data.size = extent * 4
-    fill.location = (-extent * 3, -extent * 1.5, extent * 0.5)
-    fill.rotation_euler = (math.radians(80), 0, math.radians(-60))
+    fill.location, fill.rotation_euler = rotated_light_setup(
+        (-extent * 3, -extent * 1.5, extent * 0.5),
+        (math.radians(80), 0, math.radians(-60)),
+        start_angle_degrees,
+    )
     bpy.context.scene.collection.objects.link(fill)
 
     world = bpy.data.worlds.new("world")
@@ -249,13 +272,18 @@ def orbit_angles(views: int, start_angle_degrees: float) -> list[float]:
     return [start + index * (2 * math.pi / views) for index in range(views)]
 
 
-def main() -> int:
-    args = parse_args()
+def prepare_scene(args: argparse.Namespace) -> float:
     clear_scene()
     target = import_mesh(args.mesh)
     build_material(target, args.vertex_colors, args.use_imported_material)
-    radius = frame_and_light(target)
+    radius = frame_and_light(target, args.start_angle_degrees)
     configure_render(args.samples, args.resolution)
+    return radius
+
+
+def main() -> int:
+    args = parse_args()
+    radius = prepare_scene(args)
 
     tiles: list[str] = []
     for index, angle in enumerate(orbit_angles(args.views, args.start_angle_degrees)):
