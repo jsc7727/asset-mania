@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -22,10 +23,12 @@ from asset_mania_contracts import (
 )
 from asset_mania_pipeline import (
     ConsumptionJournal,
+    FaceGeometryData,
     authorize_conditioning,
     build_face_geometry_plugin_request,
     export_clay_glb,
     fingerprint_source,
+    fit_similarity_transform,
     fuse_mica_deca_geometry,
     load_face_geometry,
     run_face_geometry_plugin,
@@ -323,12 +326,26 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
         expected_topology=faces,
         validate_extent=False,
     )
+    if np.any(mica.detail_displacement != 0.0):
+        raise ValueError("MICA detail displacement must be zero")
     fused, measurements = fuse_mica_deca_geometry(
         mica=mica, deca=deca, face_indices=face_indices, inner_face_indices=inner
     )
+    deca_transform = fit_similarity_transform(deca.vertices[inner], mica.vertices[inner])
+    comparison_deca = FaceGeometryData(
+        vertices=deca_transform.apply(deca.vertices),
+        faces=deca.faces.copy(),
+        source_projection=deca.source_projection.copy(),
+        detail_displacement=deca.detail_displacement * deca_transform.scale,
+    )
     outputs = {
         "mica": (mica, output / "mica-clay.glb", "mica-local", "identity-neutral-v1"),
-        "deca": (deca, output / "deca-clay.glb", "deca-local", "detail-displacement-v1"),
+        "deca": (
+            comparison_deca,
+            output / "deca-clay.glb",
+            "deca-local",
+            "detail-displacement-v1",
+        ),
         "fusion": (
             fused,
             output / "mica-deca-clay.glb",
@@ -375,7 +392,7 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
 
 def _default_preview(mesh: Path, output: Path, blender: Path) -> None:
     command = [
-        os.fspath(Path(__file__).parents[1] / ".venv" / "Scripts" / "python.exe"),
+        sys.executable,
         os.fspath(Path(__file__).with_name("blender_preview.py")),
         "render",
         "--blender",
@@ -395,7 +412,7 @@ def _default_preview(mesh: Path, output: Path, blender: Path) -> None:
         "--orbit-axis",
         "Z",
         "--start-angle-degrees",
-        "-90",
+        "90",
     ]
     completed = subprocess.run(command, check=False, capture_output=True)
     if completed.returncode != 0:

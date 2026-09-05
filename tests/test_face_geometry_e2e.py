@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import trimesh
 from asset_mania_contracts import canonical_digest, canonical_json
 from asset_mania_pipeline import (
     build_local_face_standing_consent,
@@ -18,6 +19,7 @@ from scipy.spatial import Delaunay
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts import run_face_geometry_e2e as face_geometry_script
 from scripts.run_face_geometry_e2e import main
 
 
@@ -444,6 +446,7 @@ def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
     run, _source = completed_plugin_run(tmp_path)
 
     with np.load(run / "deca/plugin-output/geometry.npz", allow_pickle=False) as archive:
+        raw_deca = archive["vertices"].copy()
         assert np.isclose(np.ptp(archive["vertices"], axis=0).max(), 0.324885711)
 
     assert main(["geometry-fuse", "--run", str(run)]) == 0
@@ -451,6 +454,11 @@ def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
     assert (run / "fusion/deca-clay.glb").is_file()
     assert (run / "fusion/mica-deca-clay.glb").is_file()
     assert len(list((run / "fusion").glob("likeness-*.json"))) == 3
+    deca_scene = trimesh.load(run / "fusion/deca-clay.glb", process=False)
+    deca_export = next(iter(deca_scene.geometry.values()))
+    assert np.allclose(deca_export.vertices, geometry_vertices(), atol=1e-6)
+    with np.load(run / "deca/plugin-output/geometry.npz", allow_pickle=False) as archive:
+        assert np.array_equal(archive["vertices"], raw_deca)
 
     dad = tmp_path / "dad.glb"
     faces, _face_indices, _inner = topology_arrays()
@@ -503,6 +511,48 @@ def test_fuse_verify_and_manual_review_are_create_only(tmp_path: Path) -> None:
     review = json.loads((run / "verification/manual-review.json").read_text(encoding="utf-8"))
     assert review["visual_quality"] == "passed"
     assert len(review["review_sha256"]) == 64
+
+
+def test_fusion_rejects_nonzero_mica_detail(tmp_path: Path) -> None:
+    run, _source = completed_plugin_run(tmp_path)
+    geometry_path = run / "mica/plugin-output/geometry.npz"
+    with np.load(geometry_path, allow_pickle=False) as archive:
+        payload = {name: archive[name].copy() for name in archive.files}
+    payload["detail_displacement"][0] = 0.0001
+    np.savez_compressed(geometry_path, **payload)
+    record_path = run / "mica/record.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["geometry_sha256"] = sha256_file(geometry_path)
+    preimage = {key: value for key, value in record.items() if key != "record_sha256"}
+    record["record_sha256"] = canonical_digest(preimage)
+    record_path.write_text(canonical_json(record), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="MICA detail displacement must be zero"):
+        main(["geometry-fuse", "--run", str(run)])
+
+
+def test_default_preview_uses_current_python_and_canonical_front_angle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = []
+
+    class Completed:
+        returncode = 0
+
+    monkeypatch.setattr(
+        face_geometry_script.subprocess,
+        "run",
+        lambda command, **_kwargs: captured.append(command) or Completed(),
+    )
+
+    face_geometry_script._default_preview(
+        tmp_path / "mesh.glb", tmp_path / "preview.png", tmp_path / "blender.exe"
+    )
+
+    command = captured[0]
+    assert command[0] == sys.executable
+    angle_index = command.index("--start-angle-degrees")
+    assert command[angle_index + 1] == "90"
 
 
 def test_fusion_rejects_topology_changed_after_plan(tmp_path: Path) -> None:

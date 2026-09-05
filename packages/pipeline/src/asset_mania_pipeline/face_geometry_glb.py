@@ -11,7 +11,12 @@ from trimesh.visual.material import PBRMaterial
 from trimesh.visual.texture import TextureVisuals
 
 from .containers import validate_glb
-from .face_geometry import FaceGeometryData, FaceGeometryMeasurements, _topology_measurements
+from .face_geometry import (
+    FaceGeometryData,
+    FaceGeometryMeasurements,
+    _topology_measurements,
+    _validate_geometry,
+)
 
 
 @contextmanager
@@ -44,6 +49,7 @@ def export_clay_glb(data: FaceGeometryData, output_path: Path) -> FaceGeometryMe
         raise ValueError("clay displacement must match the vertex count")
     if faces.min() < 0 or faces.max() >= len(vertices):
         raise ValueError("clay face index is out of range")
+    _validate_geometry(vertices, faces, label="clay geometry")
     material = PBRMaterial(
         name="Asset Mania neutral clay",
         baseColorFactor=[0.62, 0.62, 0.64, 1.0],

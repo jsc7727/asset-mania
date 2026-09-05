@@ -10,8 +10,8 @@ from asset_mania_pipeline.face_geometry_glb import export_clay_glb
 def tetrahedron() -> FaceGeometryData:
     vertices = np.array(
         [
-            [-0.05, -0.05, 0.02],
-            [0.05, -0.05, 0.02],
+            [-0.08, -0.05, 0.02],
+            [0.08, -0.05, 0.02],
             [0.00, 0.06, 0.02],
             [0.00, 0.00, -0.08],
         ],
@@ -54,4 +54,12 @@ def test_clay_export_rejects_nonfinite_geometry(tmp_path: Path) -> None:
     data.vertices[0, 0] = np.nan
 
     with pytest.raises(ValueError, match="non-finite"):
+        export_clay_glb(data, tmp_path / "clay.glb")
+
+
+def test_clay_export_rejects_oversized_geometry(tmp_path: Path) -> None:
+    data = tetrahedron()
+    data.vertices[:] *= 3.0
+
+    with pytest.raises(ValueError, match="between 0.15 and 0.32 metres"):
         export_clay_glb(data, tmp_path / "clay.glb")

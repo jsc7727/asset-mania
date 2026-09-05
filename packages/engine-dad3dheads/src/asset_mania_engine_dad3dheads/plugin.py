@@ -162,6 +162,16 @@ def _tensor_numpy(value):
     return value.numpy() if hasattr(value, "numpy") else value
 
 
+def _neutral_mesh_vertices(predictor, predictions):
+    """Re-evaluate FLAME positions without the input image's global head rotation."""
+    return _tensor_numpy(
+        predictor.head_mesh.vertices_3d(
+            predictions["3dmm_params"],
+            zero_rotation=True,
+        )
+    )
+
+
 def _write_obj(path: Path, vertices, faces) -> None:
     with path.open("x", encoding="utf-8", newline="\n") as handle:
         for vertex in vertices:
@@ -236,7 +246,7 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
 
-    vertices = np.asarray(_tensor_numpy(predictions["3d_vertices"]), dtype=np.float64)
+    vertices = np.asarray(_neutral_mesh_vertices(predictor, predictions), dtype=np.float64)
     projected = np.asarray(_tensor_numpy(predictions["projected_vertices"]), dtype=np.float64)
     vertices = np.squeeze(vertices)
     projected = np.squeeze(projected)

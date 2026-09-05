@@ -62,11 +62,12 @@ contained 5,023 vertices and 9,976 triangles across the head and two equal eye s
 boundary edges in two neck/eye-related loops, zero non-manifold edges, and consistent winding.
 Observed-front vertex colour covered 30.6 percent of vertices.
 
-Blender review passed the experiment's bounded geometry criterion: the DAD result preserved a
-coherent head, nose, lips, chin, cheeks, eye sockets, ears, and side profiles and was clearly better
-than both prior voxel surfaces. It did not reconstruct hair or real rear appearance, and the colour
-projection remains incomplete. This result therefore supports only a face-specific geometry
-improvement claim; identity consistency remains unmeasured.
+The earlier DAD Blender visual pass is not valid comparison evidence. Its exported vertices kept
+the source image's estimated global head pose, so the nominal front render was tilted while the
+other clay candidates were evaluated in neutral pose. A matching copy of the original source is
+available for an approved local rerun, but the corrected live clay comparison has not yet been
+run or reviewed. Until that rerun is recorded, this experiment supports no claim that DAD, MICA,
+DECA, or their fusion is visually or identity-superior. Identity consistency remains unmeasured.
 
 Compatibility required two private lazy-import edits that keep Hydra training modules out of the
 inference import path, plus process-local Python 3.12/Chumpy aliases. No architecture, checkpoint,
@@ -78,9 +79,9 @@ See [the roadmap](roadmap.md) for the staged decision sequence and
 ## Planned clay-first face geometry comparison
 
 The textured DAD result is not accepted as evidence that person-specific 3D face geometry was
-recovered. A corrected-axis untextured audit showed a coherent but generalized FLAME face; most
-recognizability came from texture. The next local experiment therefore compares MICA identity
-geometry, DECA coarse/detail geometry, their bounded fusion, and corrected DAD using identical
+recovered. The old tilted DAD clay render is invalidated rather than treated as a corrected-axis
+audit. The next approved local experiment therefore compares MICA identity geometry, DECA
+coarse/detail geometry, their bounded fusion, and zero-global-rotation DAD using identical
 texture-free Blender clay renders.
 
 The new adapters persist only 5,023 FLAME positions, 9,976 triangles, source projection, and

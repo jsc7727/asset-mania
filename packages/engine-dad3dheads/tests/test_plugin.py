@@ -8,6 +8,7 @@ import pytest
 from asset_mania_engine_dad3dheads.plugin import (
     DADPluginSettings,
     _install_python312_compatibility,
+    _neutral_mesh_vertices,
     _write_projection,
     run_face_plugin,
     validate_dad_runtime,
@@ -20,6 +21,34 @@ from asset_mania_pipeline import (
 
 REVISION = "68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7"
 DIGEST = "a" * 64
+
+
+def test_neutral_mesh_vertices_remove_nonzero_global_pose() -> None:
+    neutral = np.array(
+        [[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64
+    )
+    angle = np.deg2rad(35.0)
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle), 0.0], [np.sin(angle), np.cos(angle), 0.0], [0, 0, 1]]
+    )
+    posed = neutral @ rotation.T
+    parameters = object()
+
+    class HeadMesh:
+        def vertices_3d(self, supplied, *, zero_rotation=False):
+            assert supplied is parameters
+            assert zero_rotation is True
+            return neutral[None, ...]
+
+    class Predictor:
+        head_mesh = HeadMesh()
+
+    predictions = {"3d_vertices": posed, "3dmm_params": parameters}
+
+    result = _neutral_mesh_vertices(Predictor(), predictions)
+
+    assert np.allclose(result, neutral)
+    assert not np.allclose(result, predictions["3d_vertices"])
 
 
 def test_python312_compatibility_restores_getargspec(monkeypatch) -> None:
