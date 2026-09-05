@@ -137,9 +137,7 @@ def _engine_sources() -> tuple[list[Path], list[Path]]:
     source_root = ROOT / "packages" / "engine-triposr" / "src"
     everything = sorted(source_root.rglob("*.py"))
     execution = [
-        path
-        for path in everything
-        if path.parent.name == "ports" or path.name == "multiview.py"
+        path for path in everything if path.parent.name == "ports" or path.name == "multiview.py"
     ]
     adapter = [path for path in everything if path not in execution]
     assert adapter, "no adapter-layer sources found"
