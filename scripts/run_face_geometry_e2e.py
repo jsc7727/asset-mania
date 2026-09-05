@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
@@ -40,6 +41,25 @@ from asset_mania_pipeline import (
 from PIL import Image, ImageDraw
 
 PROFILE = "mica-deca-clay-face-v1"
+_PLAN_BINDINGS = frozenset(
+    {
+        "mica_python_sha256",
+        "mica_plugin_sha256",
+        "mica_detector_sha256",
+        "deca_python_sha256",
+        "deca_plugin_sha256",
+        "deca_detector_sha256",
+    }
+)
+_SETTING_SUFFIXES = (
+    "SOURCE_ROOT",
+    "ISOLATED_HOME",
+    "CHECKPOINT_PATH",
+    "FLAME_PATH",
+    "FLAME_SHA256",
+    "DETECTOR_PATH",
+    "DETECTOR_SHA256",
+)
 
 
 def _parse_time(value: str | datetime | None) -> datetime:
@@ -71,6 +91,151 @@ def _verify_file_digest(path: Path, expected: str, label: str) -> None:
         raise ValueError(f"{label} digest mismatch")
 
 
+def _directory_sha256(directory: Path) -> str:
+    if not directory.is_dir():
+        raise ValueError("detector model directory is unavailable")
+    digest = hashlib.sha256()
+    files = sorted(path for path in directory.rglob("*") if path.is_file())
+    if not files or any(path.is_symlink() for path in files):
+        raise ValueError("detector model directory inventory is invalid")
+    for path in files:
+        relative = path.relative_to(directory).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        digest.update(bytes.fromhex(sha256_file(path)))
+    return digest.hexdigest()
+
+
+def _require_current_plan(plan: dict) -> None:
+    missing = sorted(_PLAN_BINDINGS.difference(plan))
+    if missing:
+        raise ValueError(
+            "face geometry plan lacks sealed stage bindings; create a new geometry plan"
+        )
+
+
+def _authorization_record(
+    *, plan_sha256: str, mode: str, receipt_sha256: str, consumption: dict | None = None
+) -> dict:
+    preimage = {
+        "schema_id": "asset-mania/private-face-geometry-authorization",
+        "schema_version": "0.1",
+        "plan_sha256": plan_sha256,
+        "authorization_mode": mode,
+        "receipt_sha256": receipt_sha256,
+    }
+    if consumption is not None:
+        preimage["consumption"] = consumption
+    return {**preimage, "authorization_sha256": canonical_digest(preimage)}
+
+
+def _verify_authorization(document: dict, plan: dict) -> None:
+    common = {
+        "schema_id",
+        "schema_version",
+        "plan_sha256",
+        "authorization_mode",
+        "receipt_sha256",
+        "authorization_sha256",
+    }
+    allowed = common | ({"consumption"} if "consumption" in document else set())
+    if set(document) != allowed:
+        raise ValueError("MICA authorization record contains fields outside the allowlist")
+    _verify_seal(document, "authorization_sha256", "MICA authorization record")
+    if (
+        document.get("schema_id") != "asset-mania/private-face-geometry-authorization"
+        or document.get("schema_version") != "0.1"
+    ):
+        raise ValueError("MICA authorization record schema mismatch")
+    if document.get("plan_sha256") != plan["plan_sha256"]:
+        raise ValueError("MICA authorization record plan mismatch")
+    expected_mode = (
+        "standing_local_source_consent_v1"
+        if plan.get("authorization_mode") == "standing_local_source_consent_v1"
+        else "single_receipt_v1"
+    )
+    if document.get("authorization_mode") != expected_mode:
+        raise ValueError("MICA authorization mode does not match the sealed plan")
+    receipt_sha256 = document.get("receipt_sha256")
+    if (
+        not isinstance(receipt_sha256, str)
+        or len(receipt_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in receipt_sha256)
+    ):
+        raise ValueError("MICA authorization receipt digest is invalid")
+    if expected_mode == "standing_local_source_consent_v1":
+        if "consumption" in document or receipt_sha256 != plan.get("standing_consent_sha256"):
+            raise ValueError("MICA standing authorization does not match the sealed plan")
+    else:
+        consumption = document.get("consumption")
+        if not isinstance(consumption, dict) or set(consumption) != {
+            "gate",
+            "receipt_sha256",
+            "consumption_id",
+            "consumed_at",
+        }:
+            raise ValueError("MICA receipt consumption record is invalid")
+        if (
+            consumption.get("gate") != "face_rights"
+            or consumption.get("receipt_sha256") != receipt_sha256
+        ):
+            raise ValueError("MICA receipt consumption record does not match authorization")
+
+
+def _verify_plugin_record(document: dict, label: str) -> None:
+    expected = {
+        "schema_id",
+        "schema_version",
+        "profile",
+        "plan_sha256",
+        "plugin",
+        "plugin_profile",
+        "checkpoint_sha256",
+        "python_sha256",
+        "plugin_executable_sha256",
+        "authorization_sha256",
+        "source_unchanged",
+        "geometry_sha256",
+        "vertex_count",
+        "triangle_count",
+        "persisted_identity_feature_count",
+        "record_sha256",
+    }
+    if set(document) != expected:
+        raise ValueError(f"{label} contains fields outside the allowlist")
+    _verify_seal(document, "record_sha256", label)
+
+
+def _validated_plugin_environment(plugin: str, plan: dict) -> dict[str, str]:
+    label = "MICA" if plugin == "mica-local" else "DECA"
+    prefix = f"ASSET_MANIA_{label}_"
+    allowed_names = {f"{prefix}{suffix}" for suffix in _SETTING_SUFFIXES}
+    unknown = sorted(
+        name for name in os.environ if name.startswith(prefix) and name not in allowed_names
+    )
+    if unknown:
+        raise ValueError(f"unknown {label} plugin environment variable")
+    missing = sorted(allowed_names.difference(os.environ))
+    if missing:
+        raise ValueError(f"{label} plugin environment is incomplete: {missing[0]}")
+    environment = _plugin_environment(plugin)
+    checkpoint = Path(environment[f"{prefix}CHECKPOINT_PATH"]).resolve(strict=True)
+    flame = Path(environment[f"{prefix}FLAME_PATH"]).resolve(strict=True)
+    detector = Path(environment[f"{prefix}DETECTOR_PATH"]).resolve(strict=True)
+    stage = label.lower()
+    _verify_file_digest(checkpoint, plan[f"{stage}_checkpoint_sha256"], f"{label} checkpoint")
+    if environment[f"{prefix}FLAME_SHA256"] != plan["flame_sha256"]:
+        raise ValueError(f"{label} FLAME environment digest mismatch")
+    _verify_file_digest(flame, plan["flame_sha256"], f"{label} FLAME asset")
+    if environment[f"{prefix}DETECTOR_SHA256"] != plan[f"{stage}_detector_sha256"]:
+        raise ValueError(f"{label} detector environment digest mismatch")
+    if not detector.is_dir():
+        raise ValueError(f"{label} detector path must be a directory")
+    if _directory_sha256(detector) != plan[f"{stage}_detector_sha256"]:
+        raise ValueError(f"{label} detector asset digest mismatch")
+    return environment
+
+
 def _create_run(output: Path, timestamp: datetime, run_id: str) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     run = output / f"{timestamp.strftime('%Y%m%dT%H%M%SZ')}-{run_id}"
@@ -84,6 +249,19 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
     source_digest = arguments.source_sha256.lower()
     if len(source_digest) != 64 or any(char not in "0123456789abcdef" for char in source_digest):
         raise ValueError("source SHA-256 is invalid")
+    for label in (
+        "topology_sha256",
+        "mica_checkpoint_sha256",
+        "mica_detector_sha256",
+        "deca_checkpoint_sha256",
+        "deca_detector_sha256",
+        "flame_sha256",
+    ):
+        digest = getattr(arguments, label)
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise ValueError(f"{label.replace('_', ' ')} is invalid")
+    if arguments.mica_detector_sha256 != arguments.deca_detector_sha256:
+        raise ValueError("MICA and DECA must bind the same sealed detector directory")
     consent = None
     if arguments.standing_consent is not None:
         consent = validate_local_face_standing_consent(
@@ -93,6 +271,11 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
     topology = arguments.topology.resolve(strict=True)
     if sha256_file(topology) != arguments.topology_sha256:
         raise ValueError("topology digest mismatch")
+    executable_digests = {}
+    for stage in ("mica", "deca"):
+        for kind in ("python", "plugin"):
+            path = getattr(arguments, f"{stage}_{kind}").resolve(strict=True)
+            executable_digests[f"{stage}_{kind}_sha256"] = sha256_file(path)
     run = _create_run(arguments.output.resolve(), now, run_id)
     copied_topology = run / "topology.npz"
     shutil.copyfile(topology, copied_topology)
@@ -112,8 +295,11 @@ def _run_plan(arguments: argparse.Namespace, *, now: datetime, run_id: str) -> i
         ],
         "mica_revision": arguments.mica_revision,
         "mica_checkpoint_sha256": arguments.mica_checkpoint_sha256,
+        "mica_detector_sha256": arguments.mica_detector_sha256,
         "deca_revision": arguments.deca_revision,
         "deca_checkpoint_sha256": arguments.deca_checkpoint_sha256,
+        "deca_detector_sha256": arguments.deca_detector_sha256,
+        **executable_digests,
         "gates": {
             "minimum_head_extent_metres": 0.15,
             "maximum_head_extent_metres": 0.32,
@@ -152,11 +338,12 @@ def _matching_receipt(store: Path, plan_sha256: str) -> dict:
 
 def _plugin_environment(plugin: str) -> dict[str, str]:
     prefix = "ASSET_MANIA_MICA_" if plugin == "mica-local" else "ASSET_MANIA_DECA_"
-    allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}
+    allowed = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}
+    plugin_settings = {f"{prefix}{suffix}" for suffix in _SETTING_SUFFIXES}
     return {
         key: value
         for key, value in os.environ.items()
-        if key.upper() in allowed or key.startswith(prefix)
+        if key.upper() in allowed or key in plugin_settings
     }
 
 
@@ -172,6 +359,7 @@ def _plugin_stage(
     run = arguments.run.resolve(strict=True)
     plan = _load(run / "plan.json", "face geometry plan")
     _verify_seal(plan, "plan_sha256", "face geometry plan")
+    _require_current_plan(plan)
     stage = run / stage_name
     record_path = stage / "record.json"
     if record_path.exists():
@@ -187,19 +375,17 @@ def _plugin_stage(
             if consent["consent_sha256"] != plan.get("standing_consent_sha256"):
                 raise ValueError("standing consent differs from the sealed plan")
             receipt = None
-            authorization = {
-                "schema_id": "asset-mania/private-face-geometry-authorization",
-                "schema_version": "0.1",
-                "plan_sha256": plan["plan_sha256"],
-                "authorization_mode": "standing_local_source_consent_v1",
-                "receipt_sha256": consent["consent_sha256"],
-            }
+            authorization = _authorization_record(
+                plan_sha256=plan["plan_sha256"],
+                mode="standing_local_source_consent_v1",
+                receipt_sha256=consent["consent_sha256"],
+            )
         else:
             if "standing_consent_sha256" in plan:
                 raise ValueError("sealed plan requires standing consent")
             rights_store = arguments.rights_store.resolve(strict=True)
             receipt = _matching_receipt(rights_store, plan["plan_sha256"])
-            authorization = authorize_conditioning(
+            consumption = authorize_conditioning(
                 subject="real_person",
                 plan_sha256=plan["plan_sha256"],
                 receipt=receipt,
@@ -208,12 +394,55 @@ def _plugin_stage(
                 consumed_at=now.isoformat(),
                 now=now,
             )
+            authorization = _authorization_record(
+                plan_sha256=plan["plan_sha256"],
+                mode="single_receipt_v1",
+                receipt_sha256=receipt["receipt_sha256"],
+                consumption=consumption,
+            )
         (stage / "authorization.json").write_text(canonical_json(authorization), encoding="utf-8")
     else:
-        authorization = run / "mica/authorization.json"
-        if not authorization.is_file():
+        authorization_path = run / "mica/authorization.json"
+        if not authorization_path.is_file():
             raise ValueError("DECA requires the consumed MICA authorization record")
+        authorization = _load(authorization_path, "MICA authorization record")
+        _verify_authorization(authorization, plan)
+        mica_record = _load(run / "mica/record.json", "MICA record")
+        _verify_plugin_record(mica_record, "MICA record")
+        if (
+            mica_record.get("plan_sha256") != plan["plan_sha256"]
+            or mica_record.get("plugin") != "mica-local"
+            or mica_record.get("checkpoint_sha256") != plan["mica_checkpoint_sha256"]
+            or mica_record.get("python_sha256") != plan["mica_python_sha256"]
+            or mica_record.get("plugin_executable_sha256") != plan["mica_plugin_sha256"]
+            or mica_record.get("authorization_sha256") != authorization["authorization_sha256"]
+        ):
+            raise ValueError("MICA record does not match the sealed plan and authorization")
+        _verify_file_digest(
+            run / "mica/plugin-output/geometry.npz",
+            mica_record["geometry_sha256"],
+            "MICA geometry",
+        )
+        if plan.get("authorization_mode") == "standing_local_source_consent_v1":
+            if arguments.standing_consent is None:
+                raise ValueError("DECA requires the standing consent selected by the sealed plan")
+            consent = validate_local_face_standing_consent(
+                _load(arguments.standing_consent, "standing consent"),
+                source_sha256=plan["source_image_sha256"],
+            )
+            if consent["consent_sha256"] != plan.get("standing_consent_sha256"):
+                raise ValueError("standing consent differs from the sealed plan")
         receipt = None
+    stage_key = "mica" if plugin_name == "mica-local" else "deca"
+    python = arguments.python.resolve(strict=True)
+    plugin = arguments.plugin.resolve(strict=True)
+    python_sha256 = sha256_file(python)
+    plugin_executable_sha256 = sha256_file(plugin)
+    if python_sha256 != plan[f"{stage_key}_python_sha256"]:
+        raise ValueError("Python runtime digest does not match the sealed plan")
+    if plugin_executable_sha256 != plan[f"{stage_key}_plugin_sha256"]:
+        raise ValueError("plugin executable digest does not match the sealed plan")
+    environment = _validated_plugin_environment(plugin_name, plan)
     source = arguments.source.resolve(strict=True)
     before = fingerprint_source(source)
     if before.sha256 != plan["source_image_sha256"]:
@@ -239,10 +468,6 @@ def _plugin_stage(
     )
     request_path = stage / "request.json"
     result_path = stage / "result.json"
-    python = arguments.python.resolve(strict=True)
-    plugin = arguments.plugin.resolve(strict=True)
-    python_sha256 = sha256_file(python)
-    plugin_executable_sha256 = sha256_file(plugin)
     write_face_geometry_plugin_request(request, request_path)
     result = plugin_runner(
         [str(python), str(plugin)],
@@ -250,7 +475,7 @@ def _plugin_stage(
         request_path,
         result_path,
         timeout_seconds=300,
-        environment=_plugin_environment(plugin_name),
+        environment=environment,
     )
     _verify_file_digest(python, python_sha256, "Python runtime")
     _verify_file_digest(plugin, plugin_executable_sha256, "plugin executable")
@@ -268,6 +493,9 @@ def _plugin_stage(
         "checkpoint_sha256": checkpoint,
         "python_sha256": python_sha256,
         "plugin_executable_sha256": plugin_executable_sha256,
+        "authorization_sha256": _load(run / "mica/authorization.json", "MICA authorization record")[
+            "authorization_sha256"
+        ],
         "source_unchanged": True,
         "geometry_sha256": sha256_file(geometry),
         "vertex_count": result.vertex_count,
@@ -299,14 +527,30 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
     run = arguments.run.resolve(strict=True)
     plan = _load(run / "plan.json", "face geometry plan")
     _verify_seal(plan, "plan_sha256", "face geometry plan")
+    _require_current_plan(plan)
     output = run / "fusion"
     record_path = output / "record.json"
     if record_path.exists():
         raise FileExistsError("refusing to overwrite face geometry fusion")
     mica_record = _load(run / "mica/record.json", "MICA record")
     deca_record = _load(run / "deca/record.json", "DECA record")
-    _verify_seal(mica_record, "record_sha256", "MICA record")
-    _verify_seal(deca_record, "record_sha256", "DECA record")
+    _verify_plugin_record(mica_record, "MICA record")
+    _verify_plugin_record(deca_record, "DECA record")
+    authorization = _load(run / "mica/authorization.json", "MICA authorization record")
+    _verify_authorization(authorization, plan)
+    for stage_name, record, plugin_name in (
+        ("mica", mica_record, "mica-local"),
+        ("deca", deca_record, "deca-local"),
+    ):
+        if (
+            record.get("plan_sha256") != plan["plan_sha256"]
+            or record.get("plugin") != plugin_name
+            or record.get("checkpoint_sha256") != plan[f"{stage_name}_checkpoint_sha256"]
+            or record.get("python_sha256") != plan[f"{stage_name}_python_sha256"]
+            or record.get("plugin_executable_sha256") != plan[f"{stage_name}_plugin_sha256"]
+            or record.get("authorization_sha256") != authorization["authorization_sha256"]
+        ):
+            raise ValueError(f"{stage_name.upper()} record does not match sealed plan bindings")
     _verify_file_digest(
         run / "mica/plugin-output/geometry.npz",
         mica_record["geometry_sha256"],
@@ -353,7 +597,6 @@ def _run_fuse(arguments: argparse.Namespace) -> int:
             "identity-plus-bounded-detail-v1",
         ),
     }
-    authorization = _load(run / "mica/authorization.json", "authorization")
     artifacts = {}
     for label, (data, path, engine, profile) in outputs.items():
         measured = export_clay_glb(data, path)
@@ -442,6 +685,23 @@ def _comparison(rows: Sequence[tuple[str, Path]], output: Path) -> None:
 
 def _run_verify(arguments: argparse.Namespace, *, preview_runner: Callable) -> int:
     run = arguments.run.resolve(strict=True)
+    plan = _load(run / "plan.json", "face geometry plan")
+    _verify_seal(plan, "plan_sha256", "face geometry plan")
+    _require_current_plan(plan)
+    authorization = _load(run / "mica/authorization.json", "MICA authorization record")
+    _verify_authorization(authorization, plan)
+    for stage_name, plugin_name in (("mica", "mica-local"), ("deca", "deca-local")):
+        stage_record = _load(run / stage_name / "record.json", f"{stage_name.upper()} record")
+        _verify_plugin_record(stage_record, f"{stage_name.upper()} record")
+        if (
+            stage_record.get("plan_sha256") != plan["plan_sha256"]
+            or stage_record.get("plugin") != plugin_name
+            or stage_record.get("checkpoint_sha256") != plan[f"{stage_name}_checkpoint_sha256"]
+            or stage_record.get("python_sha256") != plan[f"{stage_name}_python_sha256"]
+            or stage_record.get("plugin_executable_sha256") != plan[f"{stage_name}_plugin_sha256"]
+            or stage_record.get("authorization_sha256") != authorization["authorization_sha256"]
+        ):
+            raise ValueError(f"{stage_name.upper()} record does not match sealed plan bindings")
     fusion = _load(run / "fusion/record.json", "fusion record")
     _verify_seal(fusion, "record_sha256", "fusion record")
     verification = run / "verification"
@@ -544,8 +804,14 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--topology-sha256", required=True)
     plan.add_argument("--mica-revision", required=True)
     plan.add_argument("--mica-checkpoint-sha256", required=True)
+    plan.add_argument("--mica-detector-sha256", required=True)
+    plan.add_argument("--mica-python", type=Path, required=True)
+    plan.add_argument("--mica-plugin", type=Path, required=True)
     plan.add_argument("--deca-revision", required=True)
     plan.add_argument("--deca-checkpoint-sha256", required=True)
+    plan.add_argument("--deca-detector-sha256", required=True)
+    plan.add_argument("--deca-python", type=Path, required=True)
+    plan.add_argument("--deca-plugin", type=Path, required=True)
     plan.add_argument("--flame-sha256", required=True)
     plan.add_argument("--standing-consent", type=Path)
     for name in ("mica-run", "deca-run"):
@@ -558,6 +824,8 @@ def build_parser() -> argparse.ArgumentParser:
             authorization = command.add_mutually_exclusive_group(required=True)
             authorization.add_argument("--rights-store", type=Path)
             authorization.add_argument("--standing-consent", type=Path)
+        else:
+            command.add_argument("--standing-consent", type=Path)
     fuse = commands.add_parser("geometry-fuse")
     fuse.add_argument("--run", type=Path, required=True)
     verify = commands.add_parser("geometry-verify")

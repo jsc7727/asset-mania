@@ -36,6 +36,18 @@ _RESULT_FIELDS = frozenset(
         "persisted_identity_feature_count",
     }
 )
+_STANDARD_ENVIRONMENT = frozenset({"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"})
+_PLUGIN_SETTING_SUFFIXES = frozenset(
+    {
+        "SOURCE_ROOT",
+        "ISOLATED_HOME",
+        "CHECKPOINT_PATH",
+        "FLAME_PATH",
+        "FLAME_SHA256",
+        "DETECTOR_PATH",
+        "DETECTOR_SHA256",
+    }
+)
 
 
 def _is_lower_hex(value: str, length: int) -> bool:
@@ -240,12 +252,20 @@ def run_face_geometry_plugin(
     if result_path.exists():
         raise FileExistsError(f"refusing to overwrite {result_path}")
     source_environment = dict(environment) if environment is not None else dict(os.environ)
-    allowed = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}
     plugin_prefix = "ASSET_MANIA_MICA_" if request.plugin == MICA_PLUGIN else "ASSET_MANIA_DECA_"
+    plugin_settings = {f"{plugin_prefix}{suffix}" for suffix in _PLUGIN_SETTING_SUFFIXES}
+    unknown = sorted(
+        key
+        for key in source_environment
+        if key.startswith(plugin_prefix) and key not in plugin_settings
+    )
+    if unknown:
+        label = "MICA" if request.plugin == MICA_PLUGIN else "DECA"
+        raise ValueError(f"unknown {label} plugin environment variable")
     sanitized_environment = {
         key: value
         for key, value in source_environment.items()
-        if key.upper() in allowed or key.startswith(plugin_prefix)
+        if key.upper() in _STANDARD_ENVIRONMENT or key in plugin_settings
     }
     completed = subprocess.run(
         [*command, "--request", str(request_path), "--result", str(result_path)],

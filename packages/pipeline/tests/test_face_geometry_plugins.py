@@ -216,3 +216,28 @@ def test_launcher_uses_fixed_environment_allowlist_by_default(tmp_path: Path, mo
     assert "AWS_SECRET_ACCESS_KEY" not in seen
     assert seen["ASSET_MANIA_MICA_SOURCE_ROOT"] == "private-runtime"
     assert "PATH" in seen
+
+
+def test_launcher_rejects_unknown_plugin_environment_before_invocation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    request = geometry_request(tmp_path)
+    called = False
+
+    def recording_run(*_args, **_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(protocol.subprocess, "run", recording_run)
+
+    with pytest.raises(ValueError, match="unknown MICA plugin environment variable"):
+        run_face_geometry_plugin(
+            ["tool"],
+            request,
+            tmp_path / "request.json",
+            tmp_path / "result.json",
+            timeout_seconds=10,
+            environment={"ASSET_MANIA_MICA_UNSEALED": "surprise"},
+        )
+
+    assert called is False

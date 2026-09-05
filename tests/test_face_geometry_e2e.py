@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -72,6 +73,32 @@ def planned_run(
     faces, face_indices, inner = topology_arrays()
     np.savez_compressed(topology, faces=faces, face_indices=face_indices, inner_face_indices=inner)
     output = tmp_path / "runs"
+    mica_python = tmp_path / "mica-python.exe"
+    mica_plugin = tmp_path / "mica-plugin.py"
+    deca_python = tmp_path / "deca-python.exe"
+    deca_plugin = tmp_path / "deca-plugin.py"
+    for path in (mica_python, mica_plugin, deca_python, deca_plugin):
+        path.write_bytes(b"exe")
+    checkpoint = tmp_path / "checkpoint.bin"
+    flame = tmp_path / "flame.bin"
+    detector = tmp_path / "scrfd"
+    checkpoint.write_bytes(b"checkpoint")
+    flame.write_bytes(b"flame")
+    detector.mkdir()
+    (detector / "detector.onnx").write_bytes(b"scrfd")
+    detector_sha256 = face_geometry_script._directory_sha256(detector)
+    for prefix in ("MICA", "DECA"):
+        os.environ.update(
+            {
+                f"ASSET_MANIA_{prefix}_SOURCE_ROOT": str(tmp_path / prefix.lower()),
+                f"ASSET_MANIA_{prefix}_ISOLATED_HOME": str(tmp_path / f"{prefix.lower()}-home"),
+                f"ASSET_MANIA_{prefix}_CHECKPOINT_PATH": str(checkpoint),
+                f"ASSET_MANIA_{prefix}_FLAME_PATH": str(flame),
+                f"ASSET_MANIA_{prefix}_FLAME_SHA256": sha256_file(flame),
+                f"ASSET_MANIA_{prefix}_DETECTOR_PATH": str(detector),
+                f"ASSET_MANIA_{prefix}_DETECTOR_SHA256": detector_sha256,
+            }
+        )
     assert (
         main(
             [
@@ -87,13 +114,25 @@ def planned_run(
                 "--mica-revision",
                 "a" * 40,
                 "--mica-checkpoint-sha256",
-                "b" * 64,
+                sha256_file(checkpoint),
+                "--mica-detector-sha256",
+                detector_sha256,
+                "--mica-python",
+                str(mica_python),
+                "--mica-plugin",
+                str(mica_plugin),
                 "--deca-revision",
                 "c" * 40,
                 "--deca-checkpoint-sha256",
-                "d" * 64,
+                sha256_file(checkpoint),
+                "--deca-detector-sha256",
+                detector_sha256,
+                "--deca-python",
+                str(deca_python),
+                "--deca-plugin",
+                str(deca_plugin),
                 "--flame-sha256",
-                "e" * 64,
+                sha256_file(flame),
             ]
             + (["--standing-consent", str(consent)] if consent is not None else []),
             now="2026-08-23T00:00:00+00:00",
@@ -127,6 +166,73 @@ def test_geometry_plan_seals_plugins_gates_and_no_source_path(tmp_path: Path) ->
     assert str(source) not in plan_text
     assert source.name not in plan_text
     assert "yaw" not in plan_text.lower()
+
+
+def test_legacy_plan_is_rejected_before_source_or_plugin(tmp_path: Path, monkeypatch) -> None:
+    run, source, _topology = planned_run(tmp_path)
+    plan_path = run / "plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    del plan["mica_python_sha256"]
+    plan["plan_sha256"] = canonical_digest(
+        {key: value for key, value in plan.items() if key != "plan_sha256"}
+    )
+    plan_path.write_text(canonical_json(plan), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        face_geometry_script, "fingerprint_source", lambda *_args: calls.append("source")
+    )
+
+    with pytest.raises(ValueError, match="create a new geometry plan"):
+        main(
+            [
+                "mica-run",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--rights-store",
+                str(tmp_path / "absent-rights"),
+                "--python",
+                str(tmp_path / "mica-python.exe"),
+                "--plugin",
+                str(tmp_path / "mica-plugin.py"),
+            ],
+            plugin_runner=lambda *_args, **_kwargs: calls.append("plugin"),
+        )
+
+    assert calls == []
+
+
+def test_mica_rejects_changed_detector_before_source_or_plugin(tmp_path: Path, monkeypatch) -> None:
+    run, source, _topology = planned_run(tmp_path)
+    rights = tmp_path / "rights"
+    issue_rights(run, rights)
+    (tmp_path / "scrfd" / "detector.onnx").write_bytes(b"changed")
+    calls = []
+    monkeypatch.setattr(
+        face_geometry_script, "fingerprint_source", lambda *_args: calls.append("source")
+    )
+
+    with pytest.raises(ValueError, match="MICA detector asset digest mismatch"):
+        main(
+            [
+                "mica-run",
+                "--run",
+                str(run),
+                "--source",
+                str(source),
+                "--rights-store",
+                str(rights),
+                "--python",
+                str(tmp_path / "mica-python.exe"),
+                "--plugin",
+                str(tmp_path / "mica-plugin.py"),
+            ],
+            plugin_runner=lambda *_args, **_kwargs: calls.append("plugin"),
+            now="2026-08-23T00:00:00+00:00",
+        )
+
+    assert calls == []
 
 
 def test_standing_consent_changes_plan_digest_and_binds_only_mode_and_digest(
@@ -661,8 +767,8 @@ def test_plugin_stage_rejects_executable_changed_during_execution(
     issue_rights(run, rights)
     python = tmp_path / "python.exe"
     plugin = tmp_path / "mica.exe"
-    python.write_bytes(b"runtime")
-    plugin.write_bytes(b"plugin")
+    python.write_bytes(b"exe")
+    plugin.write_bytes(b"exe")
 
     def mutating_runner(*args, **kwargs):
         result = fake_plugin_runner(*args, **kwargs)
