@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 from asset_mania_engine_dad3dheads.mesh import (
     _DAD_TO_BLENDER,
+    _POSED_DAD_TO_GLTF,
+    _load_mesh,
     convert_dad_mesh,
     inspect_dad_mesh,
 )
@@ -11,11 +13,19 @@ from asset_mania_engine_dad3dheads.mesh import (
 
 def test_dad_axes_convert_to_gltf_y_up_without_a_second_blender_rotation() -> None:
     dad_front = np.array([0.0, 0.0, 1.0])
-    dad_image_up = np.array([0.0, -1.0, 0.0])
+    dad_up = np.array([0.0, 1.0, 0.0])
+    dad_right = np.array([1.0, 0.0, 0.0])
 
     assert np.allclose(dad_front @ _DAD_TO_BLENDER.T, [0.0, 0.0, -1.0])
-    assert np.allclose(dad_image_up @ _DAD_TO_BLENDER.T, [0.0, 1.0, 0.0])
-    assert np.isclose(np.linalg.det(_DAD_TO_BLENDER), 1.0)
+    assert np.allclose(dad_up @ _DAD_TO_BLENDER.T, [0.0, 1.0, 0.0])
+    assert np.allclose(dad_right @ _DAD_TO_BLENDER.T, [1.0, 0.0, 0.0])
+    assert np.isclose(np.linalg.det(_DAD_TO_BLENDER), -1.0)
+
+
+def test_legacy_posed_axes_are_available_only_by_explicit_mode() -> None:
+    assert np.allclose([0.0, -1.0, 0.0] @ _POSED_DAD_TO_GLTF.T, [0.0, 1.0, 0.0])
+    assert np.allclose([0.0, 0.0, 1.0] @ _POSED_DAD_TO_GLTF.T, [0.0, 0.0, -1.0])
+    assert np.isclose(np.linalg.det(_POSED_DAD_TO_GLTF), 1.0)
 
 
 from PIL import Image
@@ -111,6 +121,9 @@ def test_convert_writes_plain_and_front_colored_glbs(tmp_path: Path) -> None:
     np.savez_compressed(
         projection,
         projected_vertices=np.array([[0, 0], [3, 0], [1, 3], [2, 2]], dtype=float),
+        camera_vertices=np.array(
+            [[-1, 0, -1], [1, 0, -1], [0, 0, 1], [0, -1, 0]], dtype=float
+        ),
         image_shape=np.array([4, 4], dtype=np.int64),
     )
     pixels = np.zeros((4, 4, 3), dtype=np.uint8)
@@ -134,7 +147,41 @@ def test_convert_writes_plain_and_front_colored_glbs(tmp_path: Path) -> None:
     assert plain.is_file() and plain.stat().st_size > 0
     assert colored.is_file() and colored.stat().st_size > 0
     assert result.component_count == 1
-    assert 0.0 < result.observed_color_coverage <= 1.0
+    assert result.observed_color_coverage == 0.25
+    plain_mesh = _load_mesh(plain)
+    assert plain_mesh.is_winding_consistent
+    assert plain_mesh.volume > 0
+    assert np.allclose(plain_mesh.vertices[0], [-0.5, -0.5, 0.25])
+    assert np.allclose(plain_mesh.vertices[1], [0.5, -0.5, 0.25])
+    colored_mesh = _load_mesh(colored)
+    colors = np.asarray(colored_mesh.visual.vertex_colors)
+    assert np.array_equal(colors[2, :3], [0, 0, 255])
+    assert np.array_equal(colors[3], [160, 145, 140, 255])
+
+
+def test_convert_requires_explicit_posed_mode_for_legacy_axis_transform(tmp_path: Path) -> None:
+    obj = tmp_path / "head.obj"
+    _tetra_obj(obj)
+    projection = tmp_path / "projection.npz"
+    np.savez_compressed(
+        projection,
+        projected_vertices=np.zeros((4, 2)),
+        image_shape=np.array([4, 4]),
+    )
+    source = tmp_path / "source.png"
+    Image.new("RGB", (4, 4), "white").save(source)
+
+    convert_dad_mesh(
+        obj_path=obj,
+        projection_path=projection,
+        source_image=source,
+        plain_glb=tmp_path / "plain.glb",
+        colored_glb=tmp_path / "colored.glb",
+        geometry_pose="posed",
+    )
+
+    mesh = _load_mesh(tmp_path / "plain.glb")
+    assert np.allclose(mesh.vertices[0], [-0.5, 0.5, 0.25])
 
 
 def test_convert_is_create_only(tmp_path: Path) -> None:

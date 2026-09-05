@@ -12,17 +12,21 @@ from PIL import Image
 
 _AREA_EPSILON = 1e-12
 _NEUTRAL_RGBA = np.array([160, 145, 140, 255], dtype=np.uint8)
-# Trimesh writes glTF's Y-up coordinates. Blender's glTF importer then performs
-# the Y-up to Z-up conversion itself, so the payload must not be pre-rotated to
-# Blender axes. DAD uses +Z toward the viewer and -Y as image-up; a 180 degree
-# X rotation makes those glTF -Z (front) and +Y (up) while preserving handedness.
+# Neutral FLAME is +Y up and +Z toward the viewer. Preserve X and Y while
+# reflecting Z to glTF's canonical front; callers reverse triangle winding to
+# compensate for this handedness change.
 _DAD_TO_BLENDER = np.array(
     [
         [1.0, 0.0, 0.0],
-        [0.0, -1.0, 0.0],
+        [0.0, 1.0, 0.0],
         [0.0, 0.0, -1.0],
     ],
     dtype=np.float64,
+)
+# Explicit compatibility path for pre-neutral-worker OBJ files, where -Y was
+# treated as image-up. This proper rotation does not require a winding change.
+_POSED_DAD_TO_GLTF = np.array(
+    [[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]], dtype=np.float64
 )
 
 
@@ -179,18 +183,29 @@ def _vertex_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
     return normals
 
 
-def _load_projection(path: Path, vertex_count: int) -> tuple[np.ndarray, tuple[int, int]]:
+def _load_projection(
+    path: Path, vertex_count: int
+) -> tuple[np.ndarray, np.ndarray | None, tuple[int, int]]:
     try:
         with np.load(path, allow_pickle=False) as archive:
             projected = np.asarray(archive["projected_vertices"], dtype=np.float64)
+            camera_vertices = (
+                np.asarray(archive["camera_vertices"], dtype=np.float64)
+                if "camera_vertices" in archive.files
+                else None
+            )
             image_shape = np.asarray(archive["image_shape"], dtype=np.int64)
     except (OSError, KeyError, ValueError) as error:
         raise ValueError("DAD projection data is invalid") from error
     if projected.shape != (vertex_count, 2) or not np.isfinite(projected).all():
         raise ValueError("DAD projected vertices are invalid")
+    if camera_vertices is not None and (
+        camera_vertices.shape != (vertex_count, 3) or not np.isfinite(camera_vertices).all()
+    ):
+        raise ValueError("DAD camera vertices are invalid")
     if image_shape.shape != (2,) or np.any(image_shape <= 0):
         raise ValueError("DAD projection image shape is invalid")
-    return projected, (int(image_shape[0]), int(image_shape[1]))
+    return projected, camera_vertices, (int(image_shape[0]), int(image_shape[1]))
 
 
 def _export_create_only(mesh: trimesh.Trimesh, path: Path) -> None:
@@ -211,7 +226,10 @@ def convert_dad_mesh(
     source_image: Path,
     plain_glb: Path,
     colored_glb: Path,
+    geometry_pose: str = "neutral",
 ) -> DADMeshMeasurements:
+    if geometry_pose not in {"neutral", "posed"}:
+        raise ValueError("DAD geometry pose must be neutral or posed")
     if plain_glb.exists():
         raise FileExistsError(f"refusing to overwrite {plain_glb}")
     if colored_glb.exists():
@@ -220,7 +238,9 @@ def convert_dad_mesh(
     measurements = _measure(source_mesh, observed_color_coverage=0.0)
     original_vertices = np.asarray(source_mesh.vertices, dtype=np.float64).copy()
     faces = np.asarray(source_mesh.faces, dtype=np.int64).copy()
-    projected, image_shape = _load_projection(projection_path, len(original_vertices))
+    projected, camera_vertices, image_shape = _load_projection(
+        projection_path, len(original_vertices)
+    )
     with Image.open(source_image) as opened:
         image = np.asarray(opened.convert("RGB"), dtype=np.uint8)
     if image.shape[:2] != image_shape:
@@ -231,11 +251,16 @@ def convert_dad_mesh(
     extent = np.max(np.max(centered, axis=0) - np.min(centered, axis=0))
     if not np.isfinite(extent) or extent <= 0:
         raise ValueError("DAD mesh extent is invalid")
-    transformed = (centered / extent) @ _DAD_TO_BLENDER.T
-    plain_mesh = trimesh.Trimesh(vertices=transformed, faces=faces, process=False)
+    # Unit longest extent is a relative-shape convention for consistent framing,
+    # not metric scale and not direct size comparability with MICA or DECA.
+    transform = _DAD_TO_BLENDER if geometry_pose == "neutral" else _POSED_DAD_TO_GLTF
+    transformed = (centered / extent) @ transform.T
+    transformed_faces = faces[:, [0, 2, 1]] if geometry_pose == "neutral" else faces
+    plain_mesh = trimesh.Trimesh(vertices=transformed, faces=transformed_faces, process=False)
     _export_create_only(plain_mesh, plain_glb)
 
-    normals = _vertex_normals(original_vertices, faces)
+    visibility_vertices = camera_vertices if camera_vertices is not None else original_vertices
+    normals = _vertex_normals(visibility_vertices, faces)
     rounded = np.rint(projected).astype(np.int64)
     height, width = image_shape
     valid = (
@@ -247,7 +272,7 @@ def convert_dad_mesh(
     )
     colors = np.repeat(_NEUTRAL_RGBA[None, :], len(original_vertices), axis=0)
     colors[valid, :3] = image[rounded[valid, 1], rounded[valid, 0]]
-    colored_mesh = trimesh.Trimesh(vertices=transformed, faces=faces, process=False)
+    colored_mesh = trimesh.Trimesh(vertices=transformed, faces=transformed_faces, process=False)
     colored_mesh.visual.vertex_colors = colors
     _export_create_only(colored_mesh, colored_glb)
     coverage = float(np.count_nonzero(valid) / len(valid))
