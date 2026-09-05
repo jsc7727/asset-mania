@@ -95,23 +95,31 @@ def _run(plan, clearance, image, staging, **overrides):
 def adapter_layer_sources() -> list[Path]:
     """Every module that must stay free of an engine.
 
-    `ports/` is excluded on purpose. Something has to load the checkpoint eventually, and
-    pretending otherwise would only mean the loader hides somewhere less obvious. The split
-    is the guarantee: this layer decides *whether* a run may happen, `ports/` performs it,
-    and each is checked for the failure it can actually have. A port importing torch is its
-    job; a port acquiring its own weights is not, and `test_port_triposr.py` scans for that.
+    `ports/` and the exact multiview execution module are excluded on purpose. Something has
+    to load the checkpoint and run marching cubes eventually, and pretending otherwise would
+    only mean those loaders hide somewhere less obvious. The split is the guarantee: this
+    layer decides *whether* a run may happen, the execution modules perform it, and each is
+    checked for the failure it can actually have. Execution code importing torch is its job;
+    acquiring its own weights is not, and the distribution tests scan for that.
     """
-    return [p for p in sorted(SOURCE.rglob("*.py")) if p.parent.name != "ports"]
+    return [
+        path
+        for path in sorted(SOURCE.rglob("*.py"))
+        if path.parent.name != "ports" and path.name != "multiview.py"
+    ]
 
 
-def test_the_adapter_layer_excludes_only_the_ports_package() -> None:
-    """If `ports/` were renamed or the tree reshaped, the scan above would quietly cover
-    nothing, so the partition itself is asserted rather than assumed."""
+def test_the_adapter_layer_excludes_only_declared_execution_modules() -> None:
+    """Assert the exact execution boundary so the static scan cannot quietly lose coverage."""
     scanned = {p.relative_to(SOURCE).as_posix() for p in adapter_layer_sources()}
     everything = {p.relative_to(SOURCE).as_posix() for p in SOURCE.rglob("*.py")}
     assert "adapter.py" in scanned
     assert scanned, "the adapter layer scan covers no files"
-    assert all(p.startswith("ports/") for p in everything - scanned)
+    assert everything - scanned == {
+        "multiview.py",
+        "ports/__init__.py",
+        "ports/triposr.py",
+    }
 
 
 def test_the_adapter_imports_no_process_socket_or_loader() -> None:
