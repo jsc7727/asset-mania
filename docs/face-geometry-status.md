@@ -21,16 +21,46 @@ do not establish likeness or reconstruction accuracy.
 The original records remain intact; a separate private correction supersedes the acceptance claim.
 Do not begin downstream head assembly, hair fitting, or texture work on the strength of that verdict.
 
-## Work required before acceptance
+## Implemented corrections
 
-- Neutralize DAD's predicted global pose while preserving posed source projections.
-- Compare DECA in MICA's metric frame and enforce export geometry gates.
-- Keep detail strictly inside the sealed face mask with inward boundary feathering.
-- Verify runtime assets, authorization, and parent-stage lineage before processing.
-- Verify local worker environment and pre-source CUDA gates.
-- Crop DECA's input in memory using a sealed detector and map projections back to the source.
-- Run a new immutable comparison and judge front and both three-quarter views under matching
-  materials, framing, cameras, and lighting. A new manual result may be failed or unverified.
+- DAD's predicted global pose is neutralized while posed source projections and camera vertices
+  are preserved. Neutral FLAME coordinates preserve X/Y, reverse Z, and reverse triangle winding.
+- DECA comparison geometry is aligned into MICA's metric frame before export validation.
+- Detail feathers inward within the sealed face mask and never displaces outside vertices.
+- New plans bind worker/Python bytes and FLAME/checkpoint/detector digests. Authorization and
+  parent records are checked before subsequent stages.
+- Workers use exact environment allowlists and validate Torch and detector CUDA availability
+  before reading the portrait.
+- DECA uses the sealed SCRFD detector and the documented DECA bbox crop transform in memory,
+  including its vertical offset, with projections mapped back into source coordinates.
+- The camera starts at the declared front; lights rotate with it. All comparison rows share
+  materials, camera schedule, resolution, and lighting.
+
+## Latest real-model result
+
+The corrected September 5 local run completed MICA and DECA inference on the authorized source.
+Fusion rejected the predicted facial displacement because it exceeded the approved maximum.
+The limit was not changed, and no fused GLB was exported from that attempt.
+
+Component meshes and a neutral DAD reference can be rendered as **failed-run diagnostics**. They
+are not accepted avatars or evidence of likeness superiority. Head assembly, hair, and texture
+work remain outside this failed experiment's acceptance boundary.
+
+## New-plan requirements
+
+`geometry-plan` requires explicit `--mica-python`, `--mica-plugin`, `--deca-python`,
+`--deca-plugin`, `--mica-detector-sha256`, and `--deca-detector-sha256`, in addition to source,
+topology, FLAME, revision, and checkpoint digests. Older plans without these bindings must be
+replaced by a new create-only plan; old evidence stays unchanged.
+
+Both workers require exactly `SOURCE_ROOT`, `ISOLATED_HOME`, `CHECKPOINT_PATH`, `FLAME_PATH`,
+`FLAME_SHA256`, `DETECTOR_PATH`, and `DETECTOR_SHA256` settings under their respective
+`ASSET_MANIA_MICA_` / `ASSET_MANIA_DECA_` prefixes. In standing-consent mode, supply the same
+`--standing-consent` record to both MICA and DECA stages.
+
+Socket and HTTP guards run inside Python; they are not an OS-level sandbox for hostile native
+code. External runtimes must be trusted, pinned local installations. No new remote-service,
+download, or publication authorization is implied by standing consent.
 
 ## Verification interpretation
 
