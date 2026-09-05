@@ -11,3 +11,20 @@
 - Face/head processing is separately gated: external processing requires rights and consent
   confirmation. Never place face material in examples, fixtures, telemetry, galleries, or bug
   reports by default.
+- A real-person turntable needs exact `face_rights`, `external_egress`, and `paid_compute`
+  receipts before the first of seven calls. Stop after the first failed call; never retry or
+  substitute a model, snapshot, angle, size, quality, or background.
+- Treat every generated yaw as inferred `generated` content. Structural audit never proves
+  identity, so keep `identity_consistency` equal to `unmeasured`.
+- The approved local face-geometry v1 workflow may use a detector, landmarks, and MICA identity
+  features only transiently inside a network-denied process after a plan-bound `face_rights`
+  receipt is consumed or a private standing consent is validated for the exact source digest.
+  Standing consent permits automatic reuse only for source-specific, local, network-denied face
+  geometry. It does not relax remote, paid-compute, download, identity, or publication gates. The
+  subject remains user-declared; no detector may infer or change it.
+- Require `persisted_identity_feature_count` to equal `0`. Never write an identity embedding,
+  aligned face crop, landmark array, FLAME parameter vector, face-recognition score, or source
+  pixel into output, logs, telemetry, manifests, or fixtures.
+- MICA and DECA are optional non-commercial local research plugins. Never download, substitute,
+  update, or execute their sources, weights, FLAME assets, or detector assets without fresh exact
+  approval and sealed revision/file digests.

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 CHECKER = ROOT / "scripts" / "check_release.py"
 
+import scripts.check_release as release_checker
 from scripts.check_release import Finding, check_release, main
 
 
@@ -75,6 +76,18 @@ def _findings_with_code(root: Path, code: str) -> list[Finding]:
         "private/token.json",
         "private/cookies.txt",
         "weights/model.safetensors",
+        "artifacts/model.trcd",
+        "artifacts/projection.npz",
+        "artifacts/face.npy",
+        "artifacts/mica.tar",
+        "artifacts/deca_model.tar",
+        "artifacts/generic_model.pkl",
+        "artifacts/identity.npy",
+        "artifacts/aligned-face.png",
+        "artifacts/mica-clay.glb",
+        "models/insightface.onnx",
+        ".dad_checkpoints/model.trcd",
+        "model_training/model/static/flame.pkl",
         ".cache/download.bin",
         "cache/download.bin",
         "build/cache/download.bin",
@@ -86,7 +99,7 @@ def test_forbidden_tracked_paths_are_reported(tmp_path: Path, relative: str) -> 
 
     findings = _findings_with_code(root, "FORBIDDEN_TRACKED_PATH")
 
-    assert [finding.path for finding in findings] == [relative]
+    assert [finding.path for finding in findings] == ["private-release-entry"]
 
 
 def test_absolute_home_string_is_reported_without_echoing_it(tmp_path: Path) -> None:
@@ -104,6 +117,126 @@ def test_absolute_home_string_is_reported_without_echoing_it(tmp_path: Path) -> 
         )
     ]
     assert private_path not in findings[0].message
+
+
+@pytest.mark.parametrize(
+    ("relative", "content"),
+    [
+        ("standing-consent.json", "{}\n"),
+        (
+            "records/authorization.json",
+            '{"schema_id":"asset-mania/local-face-standing-consent",'
+            '"source_sha256":"' + "a" * 64 + '","private_path":"PRIVATE"}\n',
+        ),
+    ],
+)
+def test_tracked_standing_consent_is_rejected_without_private_details(
+    tmp_path: Path, relative: str, content: str
+) -> None:
+    root = _clean_tree(tmp_path)
+    private_path = str(Path.home() / "face" / "standing-consent.json")
+    source_digest = "a" * 64
+    _track(root, relative, content.replace("PRIVATE", private_path.replace("\\", "\\\\")))
+
+    findings = _findings_with_code(root, "STANDING_CONSENT_TRACKED")
+
+    assert len(findings) == 1
+    assert findings[0].message == "tracked local face standing consent is forbidden"
+    assert private_path not in findings[0].message
+    assert source_digest not in findings[0].message
+
+
+def test_suspicious_consent_filename_is_rejected_even_when_entry_is_not_regular(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relative = release_checker.PurePosixPath("private/standing-consent.json")
+    monkeypatch.setattr(release_checker, "_tracked_paths", lambda _root: ([relative], None))
+    monkeypatch.setattr(release_checker, "_safe_regular_file", lambda _root, _path: None)
+
+    findings = _findings_with_code(tmp_path, "STANDING_CONSENT_TRACKED")
+
+    assert findings == [
+        Finding(
+            code="STANDING_CONSENT_TRACKED",
+            path="private-standing-consent-record",
+            message="tracked local face standing consent is forbidden",
+        )
+    ]
+
+
+def test_standing_consent_cli_diagnostic_is_fully_sanitized(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _clean_tree(tmp_path)
+    private_basename = "subject-standing-consent.json"
+    private_path = str(Path.home() / "face" / private_basename)
+    source_digest = "a" * 64
+    raw_content = "explicit-private-consent-content"
+    _track(
+        root,
+        f"records/{private_basename}",
+        private_path + source_digest + raw_content,
+    )
+
+    assert main([str(root)]) == 1
+
+    rendered = capsys.readouterr().out
+    assert rendered == (
+        "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+        "tracked local face standing consent is forbidden\n"
+    )
+    for private_value in (private_path, private_basename, source_digest, raw_content):
+        assert private_value not in rendered
+
+
+@pytest.mark.parametrize(
+    ("relative", "content", "expected"),
+    [
+        (
+            ".asset-mania/subject-standing-consent.json",
+            "private standing consent bytes",
+            (
+                "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+                "tracked local face standing consent is forbidden\n"
+            ),
+        ),
+        (
+            ".asset-mania/innocuous.json",
+            '{"schema_id":"asset-mania/local-face-standing-consent",'
+            '"source_sha256":"' + "a" * 64 + '","raw":"PRIVATE-CONTENT"}\n',
+            (
+                "STANDING_CONSENT_TRACKED private-standing-consent-record: "
+                "tracked local face standing consent is forbidden\n"
+            ),
+        ),
+        (
+            ".asset-mania/ordinary-artifact.json",
+            "PRIVATE-CONTENT",
+            "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden\n",
+        ),
+    ],
+)
+def test_private_release_cli_findings_do_not_render_private_entry_details(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    relative: str,
+    content: str,
+    expected: str,
+) -> None:
+    root = _clean_tree(tmp_path)
+    _track(root, relative, content)
+
+    assert main([str(root)]) == 1
+
+    rendered = capsys.readouterr().out
+    assert rendered == expected
+    for private_value in (
+        relative,
+        Path(relative).name,
+        "a" * 64,
+        "PRIVATE-CONTENT",
+    ):
+        assert private_value not in rendered
 
 
 @pytest.mark.parametrize("name", ["api_" + "token", "session_" + "cookie"])
@@ -324,8 +457,8 @@ def test_command_prints_sorted_findings_and_returns_one(
     assert captured.err == ""
     assert captured.out.splitlines() == sorted(captured.out.splitlines())
     assert captured.out.splitlines() == [
-        "FORBIDDEN_TRACKED_PATH a.env: tracked release path is forbidden",
-        "FORBIDDEN_TRACKED_PATH z-token.json: tracked release path is forbidden",
+        "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden",
+        "FORBIDDEN_TRACKED_PATH private-release-entry: tracked release path is forbidden",
     ]
 
 

@@ -1,0 +1,294 @@
+"""Numeric validation and bounded fusion for local FLAME face geometry."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+_GEOMETRY_FIELDS = frozenset({"vertices", "faces", "source_projection", "detail_displacement"})
+_FLOAT_DTYPES = frozenset((np.dtype(np.float32), np.dtype(np.float64)))
+_INDEX_DTYPES = frozenset((np.dtype(np.int32), np.dtype(np.int64)))
+_MINIMUM_HEAD_EXTENT_METRES = 0.15
+_MAXIMUM_HEAD_EXTENT_METRES = 0.32
+
+
+@dataclass(frozen=True, slots=True)
+class FaceGeometryData:
+    vertices: np.ndarray
+    faces: np.ndarray
+    source_projection: np.ndarray
+    detail_displacement: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class SimilarityTransform:
+    scale: float
+    rotation: np.ndarray
+    translation: np.ndarray
+
+    def apply(self, points: np.ndarray) -> np.ndarray:
+        return (
+            np.asarray(points, dtype=np.float64) @ self.rotation.T * self.scale + self.translation
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FaceGeometryMeasurements:
+    vertex_count: int
+    triangle_count: int
+    non_manifold_edge_count: int
+    winding_consistent: bool
+    longest_extent_metres: float
+    maximum_displacement_metres: float
+    rms_displacement_metres: float
+    face_displacement_coverage: float
+    outside_face_displacement_count: int
+
+
+def load_face_geometry(
+    path: Path, *, expected_topology: np.ndarray, validate_extent: bool = True
+) -> FaceGeometryData:
+    try:
+        with np.load(path, allow_pickle=False) as archive:
+            if set(archive.files) != _GEOMETRY_FIELDS:
+                raise ValueError("face geometry archive inventory is invalid")
+            raw_vertices = archive["vertices"]
+            raw_faces = archive["faces"]
+            raw_projection = archive["source_projection"]
+            raw_displacement = archive["detail_displacement"]
+            if raw_vertices.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry vertices dtype is unsupported")
+            if raw_faces.dtype not in _INDEX_DTYPES:
+                raise ValueError("face geometry faces dtype is unsupported")
+            if raw_projection.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry source projection dtype is unsupported")
+            if raw_displacement.dtype not in _FLOAT_DTYPES:
+                raise ValueError("face geometry displacement dtype is unsupported")
+            vertices = raw_vertices.astype(np.float64, copy=True)
+            faces = raw_faces.astype(np.int64, copy=True)
+            projection = raw_projection.astype(np.float64, copy=True)
+            displacement = raw_displacement.astype(np.float64, copy=True)
+    except (OSError, KeyError, ValueError) as error:
+        if isinstance(error, ValueError) and (
+            "inventory" in str(error) or "dtype is unsupported" in str(error)
+        ):
+            raise
+        raise ValueError("face geometry archive is unreadable") from error
+    raw_topology = np.asarray(expected_topology)
+    if raw_topology.dtype not in _INDEX_DTYPES:
+        raise ValueError("sealed face geometry topology dtype is unsupported")
+    topology = raw_topology.astype(np.int64, copy=False)
+    if vertices.shape != (5023, 3):
+        raise ValueError("face geometry vertices must have shape (5023, 3)")
+    if faces.shape != (9976, 3) or topology.shape != (9976, 3):
+        raise ValueError("face geometry faces must have shape (9976, 3)")
+    if not np.array_equal(faces, topology):
+        raise ValueError("face geometry topology differs from the sealed topology")
+    if projection.shape != (5023, 2):
+        raise ValueError("face geometry source projection must have shape (5023, 2)")
+    if displacement.shape != (5023,):
+        raise ValueError("face geometry displacement must have shape (5023,)")
+    if not all(np.isfinite(item).all() for item in (vertices, projection, displacement)):
+        raise ValueError("face geometry contains non-finite values")
+    if faces.min() < 0 or faces.max() >= len(vertices):
+        raise ValueError("face geometry topology index is out of range")
+    if (
+        np.any(faces[:, 0] == faces[:, 1])
+        or np.any(faces[:, 1] == faces[:, 2])
+        or np.any(faces[:, 2] == faces[:, 0])
+    ):
+        raise ValueError("face geometry contains a degenerate triangle")
+    _validate_geometry(vertices, faces, label="face geometry", validate_extent=validate_extent)
+    return FaceGeometryData(vertices, faces, projection, displacement)
+
+
+def _validate_geometry(
+    vertices: np.ndarray, faces: np.ndarray, *, label: str, validate_extent: bool = True
+) -> None:
+    if not np.isfinite(vertices).all():
+        raise ValueError(f"{label} contains non-finite values")
+    extents = np.ptp(vertices, axis=0)
+    if not np.isfinite(extents).all() or np.any(extents <= 0):
+        raise ValueError(f"{label} must have positive extent on every axis")
+    triangles = vertices[faces]
+    doubled_areas = np.linalg.norm(
+        np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
+        axis=1,
+    )
+    if np.any(doubled_areas <= 1e-15):
+        raise ValueError(f"{label} contains a zero-area triangle")
+    if validate_extent:
+        longest_extent = float(extents.max())
+        if not _MINIMUM_HEAD_EXTENT_METRES <= longest_extent <= _MAXIMUM_HEAD_EXTENT_METRES:
+            raise ValueError(f"{label} longest extent must be between 0.15 and 0.32 metres")
+    non_manifold, winding = _topology_measurements(faces)
+    if non_manifold:
+        raise ValueError(f"{label} contains non-manifold edges")
+    if not winding:
+        raise ValueError(f"{label} has inconsistent winding")
+
+
+def fit_similarity_transform(source: np.ndarray, target: np.ndarray) -> SimilarityTransform:
+    source = np.asarray(source, dtype=np.float64)
+    target = np.asarray(target, dtype=np.float64)
+    if source.shape != target.shape or source.ndim != 2 or source.shape[1] != 3 or len(source) < 3:
+        raise ValueError("similarity fit requires matching 3D point arrays")
+    if not np.isfinite(source).all() or not np.isfinite(target).all():
+        raise ValueError("similarity fit contains non-finite values")
+    source_mean = source.mean(axis=0)
+    target_mean = target.mean(axis=0)
+    centered_source = source - source_mean
+    centered_target = target - target_mean
+    variance = float(np.mean(np.sum(centered_source**2, axis=1)))
+    if variance <= 1e-15:
+        raise ValueError("similarity fit source has zero variance")
+    covariance = centered_target.T @ centered_source / len(source)
+    left, singular, right_transpose = np.linalg.svd(covariance)
+    signs = np.ones(3, dtype=np.float64)
+    if np.linalg.det(left @ right_transpose) < 0:
+        signs[-1] = -1.0
+    rotation = left @ np.diag(signs) @ right_transpose
+    scale = float(np.sum(singular * signs) / variance)
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError("similarity fit scale is invalid")
+    translation = target_mean - scale * (rotation @ source_mean)
+    return SimilarityTransform(scale, rotation, translation)
+
+
+def _adjacency(vertex_count: int, faces: np.ndarray) -> list[set[int]]:
+    result = [set() for _ in range(vertex_count)]
+    for triangle in np.asarray(faces, dtype=np.int64):
+        a, b, c = map(int, triangle)
+        result[a].update((b, c))
+        result[b].update((a, c))
+        result[c].update((a, b))
+    return result
+
+
+def _validated_indices(
+    values: np.ndarray, *, vertex_count: int, label: str, minimum_count: int = 1
+) -> np.ndarray:
+    raw = np.asarray(values)
+    if (
+        raw.dtype not in _INDEX_DTYPES
+        or raw.ndim != 1
+        or len(raw) < minimum_count
+        or len(np.unique(raw)) != len(raw)
+        or raw.min() < 0
+        or raw.max() >= vertex_count
+    ):
+        raise ValueError(f"{label} are invalid")
+    return raw.astype(np.int64, copy=False)
+
+
+def build_face_taper(
+    *, vertex_count: int, faces: np.ndarray, face_indices: np.ndarray
+) -> np.ndarray:
+    validated = _validated_indices(face_indices, vertex_count=vertex_count, label="face indices")
+    indices = {int(value) for value in validated}
+    adjacency = _adjacency(vertex_count, faces)
+    taper = np.zeros(vertex_count, dtype=np.float64)
+    taper[list(indices)] = 1.0
+    boundary = {index for index in indices if adjacency[index] - indices}
+    taper[list(boundary)] = 0.25
+    next_ring = {
+        neighbor for index in boundary for neighbor in adjacency[index] if neighbor in indices
+    } - boundary
+    taper[list(next_ring)] = 0.75
+    return taper
+
+
+def _vertex_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    triangles = vertices[faces]
+    face_normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    normals = np.zeros_like(vertices, dtype=np.float64)
+    for corner in range(3):
+        np.add.at(normals, faces[:, corner], face_normals)
+    lengths = np.linalg.norm(normals, axis=1)
+    valid = lengths > 1e-15
+    normals[valid] /= lengths[valid, None]
+    return normals
+
+
+def _topology_measurements(faces: np.ndarray) -> tuple[int, bool]:
+    directed = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]), axis=0)
+    undirected = np.sort(directed, axis=1)
+    unique, inverse, counts = np.unique(undirected, axis=0, return_inverse=True, return_counts=True)
+    non_manifold = int(np.count_nonzero(counts > 2))
+    winding = True
+    for edge_index in range(len(unique)):
+        occurrences = directed[inverse == edge_index]
+        if len(occurrences) == 2 and np.array_equal(occurrences[0], occurrences[1]):
+            winding = False
+            break
+    return non_manifold, winding
+
+
+def fuse_mica_deca_geometry(
+    *,
+    mica: FaceGeometryData,
+    deca: FaceGeometryData,
+    face_indices: np.ndarray,
+    inner_face_indices: np.ndarray,
+) -> tuple[FaceGeometryData, FaceGeometryMeasurements]:
+    if not np.array_equal(mica.faces, deca.faces):
+        raise ValueError("MICA and DECA topology differs")
+    _validate_geometry(mica.vertices, mica.faces, label="MICA geometry")
+    # DECA is in its plugin's arbitrary pre-alignment coordinate system. Its
+    # topology and triangle area are meaningful here, but its metric extent is not.
+    _validate_geometry(deca.vertices, deca.faces, label="DECA geometry", validate_extent=False)
+    face = _validated_indices(face_indices, vertex_count=len(mica.vertices), label="face indices")
+    inner = _validated_indices(
+        inner_face_indices,
+        vertex_count=len(mica.vertices),
+        label="inner face indices",
+        minimum_count=3,
+    )
+    face_set = set(map(int, face))
+    if not set(map(int, inner)) < face_set:
+        raise ValueError("inner face indices are invalid")
+    transform = fit_similarity_transform(deca.vertices[inner], mica.vertices[inner])
+    aligned_displacement = np.asarray(deca.detail_displacement, dtype=np.float64) * transform.scale
+    face_region = np.zeros(len(mica.vertices), dtype=bool)
+    face_region[face] = True
+    finite_face_region = np.isfinite(aligned_displacement[face_region])
+    coverage = float(np.count_nonzero(finite_face_region) / len(face))
+    if coverage < 0.90:
+        raise ValueError("face displacement coverage is below 0.90")
+    allowed_displacement = aligned_displacement[face_region][finite_face_region]
+    maximum = float(np.max(np.abs(allowed_displacement)))
+    rms = float(np.sqrt(np.mean(allowed_displacement**2)))
+    if maximum > 0.003:
+        raise ValueError("maximum displacement exceeds 0.003 metres")
+    if rms > 0.0015:
+        raise ValueError("RMS displacement exceeds 0.0015 metres")
+    taper = build_face_taper(vertex_count=len(mica.vertices), faces=mica.faces, face_indices=face)
+    applied = np.zeros(len(mica.vertices), dtype=np.float64)
+    applied[face_region] = aligned_displacement[face_region] * taper[face_region]
+    outside_count = int(np.count_nonzero(applied[~face_region]))
+    if outside_count:
+        raise ValueError("detail displacement escaped the tapered face region")
+    normals = _vertex_normals(mica.vertices, mica.faces)
+    vertices = mica.vertices + normals * applied[:, None]
+    _validate_geometry(vertices, mica.faces, label="fused face geometry")
+    result = FaceGeometryData(
+        vertices=vertices,
+        faces=mica.faces.copy(),
+        source_projection=mica.source_projection.copy(),
+        detail_displacement=applied,
+    )
+    non_manifold, winding = _topology_measurements(result.faces)
+    measurements = FaceGeometryMeasurements(
+        vertex_count=len(vertices),
+        triangle_count=len(result.faces),
+        non_manifold_edge_count=non_manifold,
+        winding_consistent=winding,
+        longest_extent_metres=float(np.ptp(vertices, axis=0).max()),
+        maximum_displacement_metres=maximum,
+        rms_displacement_metres=rms,
+        face_displacement_coverage=coverage,
+        outside_face_displacement_count=outside_count,
+    )
+    return result, measurements

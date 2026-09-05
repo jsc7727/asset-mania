@@ -24,6 +24,11 @@ Each row states what has actually been verified, and by what. Nothing here is a 
 | Reprojection and bake | Available | coverage 40.5% against a UV island area of 41.4% on the fixture |
 | BLEND / GLB / FBX export | Available | container checks plus fresh-process reimport in a separate Blender |
 | GPT Image 2 adapter | **experimental, contract-verified** | fake transport with sockets denied; **no live call has ever been made** |
+| GPT Image 2 API turntable adapter | **experimental, fake-transport E2E verified** | approvals, no-retry ordering, audit, and provenance verified; the direct API adapter has made no live call |
+| Built-in OAuth turntable experiment | **experimental, private live run completed** | eight views passed structural audit through the Codex built-in image tool; the tool disclosed neither model snapshot nor cost, and identity consistency remains unmeasured |
+| Multi-view TripoSR voxel fusion | **experimental, visual review failed** | a private generated-face viewset produced a single watertight positive-volume GLB, but consensus removed recognizable facial detail |
+| Face-anchor visual hull | **experimental, private visual review failed** | one closed hybrid passed silhouette and topology gates, but voxel resurfacing still removed the recognizable face |
+| DAD-3DHeads face plugin | **experimental, private live visual review passed; identity unmeasured** | pinned local CUDA run produced a coherent 5,023-vertex / 9,976-triangle FLAME head with two eye shells and no non-manifold edges; it visibly improved on both voxel results, but observed color covered only 30.6%, hair/rear appearance are absent, and the external CC BY-NC-SA 4.0 model is not bundled |
 | Khronos glTF Validator | Not run | no release pinned or verified; see `tools/gltf-validator.json` |
 | Generic image to 3D | Runs, unbundled | measured below; **clearance is user-issued and unissued here**, and no wheel ships an engine or a weight |
 | Face/head reconstruction | Gated, unmeasured | `face_head` + `non_person` now refused (it sealed with no receipt before); every mesh carries a `likeness-disclosure-v1`; **no face accuracy has been measured** |
@@ -114,8 +119,36 @@ with canonical `manifest.json` and `report.json` files and an empty `logs/` dire
 [Getting started](docs/getting-started.md) for flags and [Run manifests](docs/concepts/run-manifest.md)
 for the stream and exit-code contract.
 
+The maintainer-only turntable runners are intentionally outside the public CLI while they remain
+research-grade. The direct API path plans one observed front view plus seven generated yaws and
+retains its approval-bound provider contract. A separate built-in OAuth experiment created eight
+private views but exposed no model snapshot or cost, so it is not recorded as a GPT Image 2 API
+run. Generated side and rear views are model inferences, not observations, and identity
+consistency remains unmeasured.
+
+The first live private reconstruction geometrically completed, but eight independently
+hallucinated TripoSR meshes lost facial detail when voxel-voted. The replacement research profile,
+`face-anchor-visual-hull-v1`, keeps a CUDA TripoSR mesh from the observed front and uses seven-of-
+eight silhouette support only for the side and rear envelope. Its deterministic and optional-
+runtime tests pass, and a private run produced one closed 151,564-triangle GLB with minimum/mean
+silhouette IoU 0.861/0.944 and 96.1% front-volume retention. Blender review still failed: the
+recognizable front texture and surface were lost during voxel resurfacing. GPU speed does not fix
+that model/profile limitation; a face-specific DECA/FLAME-family experiment is the next research
+step and requires a separate model-clearance decision.
+
+The next experiment now has a separate DAD-3DHeads process adapter and deterministic fake-plugin
+E2E. It does not vendor the upstream source or checkpoint, and it does not make DAD part of the
+Apache distribution. The external dependency is CC BY-NC-SA 4.0 and restricted to non-commercial
+research. The private live run passed its manual geometry review because the nose, lips, chin,
+cheeks, eye sockets, ears, and side profiles remained coherent instead of becoming voxel bands.
+It is still a parametric FLAME estimate rather than a scan: hair and rear appearance are absent,
+only 30.6% of vertices received observed-front colour, and identity consistency remains
+unmeasured.
+
 ## Project guide
 
+- [Local face geometry status](docs/face-geometry-status.md) — corrected comparison, current
+  failed fusion experiment, and the source-specific local consent workflow.
 - [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security-and-privacy.md)

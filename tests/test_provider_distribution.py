@@ -44,19 +44,18 @@ def test_the_adapter_imports_no_blender_module() -> None:
 
 
 def test_the_adapter_constructs_no_socket_or_url_opener() -> None:
-    """Transport is injected, so the adapter must not reach for one itself."""
+    """Only the explicit live transport may construct the approved HTTPS connection."""
     source_root = ROOT / "packages" / "provider-openai" / "src"
-    forbidden = (
-        "import socket",
-        "import http.client",
-        "urllib.request",
-        "import requests",
-        "httpx",
-    )
+    forbidden = {"socket", "http", "urllib", "requests", "httpx"}
+    exceptions: dict[str, set[str]] = {}
     for path in sorted(source_root.rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
-        for name in forbidden:
-            assert name not in text, f"{path}: {name}"
+        roots = _imported_roots(path.read_text(encoding="utf-8"))
+        imported = roots & forbidden
+        if path.name == "live_transport.py":
+            exceptions[path.relative_to(source_root).as_posix()] = imported
+        else:
+            assert not imported, f"{path}: {sorted(imported)}"
+    assert exceptions == {"asset_mania_provider_openai/live_transport.py": {"http"}}
 
 
 @pytest.mark.parametrize("package", ["asset_mania_cli", "asset_mania_contracts"])
@@ -137,11 +136,13 @@ def _engine_sources() -> tuple[list[Path], list[Path]]:
     """The engine package split into the layer that gates and the layer that executes."""
     source_root = ROOT / "packages" / "engine-triposr" / "src"
     everything = sorted(source_root.rglob("*.py"))
-    ports = [p for p in everything if p.parent.name == "ports"]
-    adapter = [p for p in everything if p.parent.name != "ports"]
+    execution = [
+        path for path in everything if path.parent.name == "ports" or path.name == "multiview.py"
+    ]
+    adapter = [path for path in everything if path not in execution]
     assert adapter, "no adapter-layer sources found"
-    assert ports, "no ports-layer sources found; the split below would check nothing"
-    return adapter, ports
+    assert execution, "no execution-layer sources found; the split below would check nothing"
+    return adapter, execution
 
 
 def test_the_engine_adapter_bundles_no_weight_or_downloader() -> None:
@@ -165,10 +166,38 @@ def test_the_engine_ports_load_but_never_acquire() -> None:
     would become a side effect of pressing run, and the user would read the licences after
     the bytes had already landed rather than before.
     """
-    _, ports = _engine_sources()
-    for path in ports:
+    _, execution = _engine_sources()
+    for path in execution:
         roots = _imported_roots(path.read_text(encoding="utf-8"))
         assert not (roots & ACQUISITION_IMPORTS), f"{path}: {sorted(roots & ACQUISITION_IMPORTS)}"
+
+
+def test_importing_the_engine_does_not_load_optional_runtime_or_network_modules() -> None:
+    """Static execution imports remain lazy during the default offline package import."""
+    forbidden = (
+        "torch",
+        "torchmcubes",
+        "http.client",
+        "socket",
+        "urllib.request",
+        "requests",
+        "httpx",
+        "huggingface_hub",
+    )
+    script = (
+        "import sys; import asset_mania_engine_triposr; "
+        f"forbidden = {forbidden!r}; "
+        "loaded = [name for name in forbidden if name in sys.modules]; "
+        "assert not loaded, loaded"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_the_engine_adapter_names_no_download_url() -> None:
@@ -177,6 +206,42 @@ def test_the_engine_adapter_names_no_download_url() -> None:
         text = path.read_text(encoding="utf-8")
         assert "http://" not in text, path
         assert "https://" not in text, path
+
+
+@pytest.mark.parametrize(
+    ("directory", "module"),
+    [
+        ("engine-mica", "asset_mania_engine_mica"),
+        ("engine-deca", "asset_mania_engine_deca"),
+    ],
+)
+def test_face_geometry_adapter_bundles_no_external_model_or_runtime(
+    directory: str, module: str
+) -> None:
+    package = ROOT / "packages" / directory
+    manifest = _manifest(package / "pyproject.toml")
+    dependencies = manifest["project"]["dependencies"]
+    assert not any(
+        forbidden in dependency.lower()
+        for dependency in dependencies
+        for forbidden in ("torch", "mica", "deca", "flame", "insightface", "onnx")
+    )
+    forbidden_suffixes = {".tar", ".pkl", ".npy", ".npz", ".onnx", ".pt", ".pth"}
+    assert not [path for path in package.rglob("*") if path.suffix.lower() in forbidden_suffixes]
+    assert not any(
+        "http://" in path.read_text(encoding="utf-8")
+        or "https://" in path.read_text(encoding="utf-8")
+        for path in (package / "src" / module).rglob("*.py")
+    )
+
+
+def test_notices_and_rules_name_the_local_face_geometry_boundary() -> None:
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    rules = (ROOT / "rules" / "agent" / "behavior-rules.md").read_text(encoding="utf-8")
+    assert "packages/engine-mica/" in notices
+    assert "packages/engine-deca/" in notices
+    assert "transient" in rules.lower()
+    assert "persisted_identity_feature_count" in rules
 
 
 @pytest.mark.parametrize("package", ["asset_mania_cli", "asset_mania_contracts"])

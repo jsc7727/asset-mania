@@ -207,6 +207,9 @@ _SCHEMA_FILES: dict[tuple[str, str], str] = {
     ("engine-clearance", "1.0"): "engine-clearance-v1.schema.json",
     ("reconstruction-plan", "1.0"): "reconstruction-plan-v1.schema.json",
     ("likeness-disclosure", "1.0"): "likeness-disclosure-v1.schema.json",
+    ("turntable-plan", "1.0"): "turntable-plan-v1.schema.json",
+    ("turntable-viewset", "1.0"): "turntable-viewset-v1.schema.json",
+    ("multiview-reconstruction", "1.0"): "multiview-reconstruction-v1.schema.json",
 }
 
 #: Every component role a clearance must cover, in the order the schema pins.

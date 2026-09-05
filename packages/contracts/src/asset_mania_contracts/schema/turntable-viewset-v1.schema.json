@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/turntable-viewset-v1.schema.json",
+  "title": "Asset Mania turntable viewset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "plan_sha256",
+    "yaws",
+    "views",
+    "audit",
+    "reported_usage",
+    "actual_cost",
+    "viewset_sha256"
+  ],
+  "properties": {
+    "schema_id": { "const": "asset-mania/turntable-viewset" },
+    "schema_version": { "const": "1.0" },
+    "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "yaws": { "const": [0, 45, 90, 135, 180, 225, 270, 315] },
+    "views": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "target_yaw",
+          "pitch",
+          "roll",
+          "origin",
+          "image_sha256",
+          "mask_sha256",
+          "byte_size",
+          "media_type",
+          "width",
+          "height",
+          "provider_request_id",
+          "reported_usage"
+        ],
+        "properties": {
+          "label": { "type": "string", "pattern": "^view-[1-8]$" },
+          "target_yaw": { "enum": [0, 45, 90, 135, 180, 225, 270, 315] },
+          "pitch": { "const": 0 },
+          "roll": { "const": 0 },
+          "origin": { "enum": ["observed", "generated"] },
+          "image_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "mask_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "byte_size": { "type": "integer", "minimum": 1 },
+          "media_type": { "const": "image/png" },
+          "width": { "const": 1024 },
+          "height": { "const": 1024 },
+          "provider_request_id": {
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 256 },
+              { "type": "null" }
+            ]
+          },
+          "reported_usage": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "origin": { "const": "observed" } },
+              "required": ["origin"]
+            },
+            "then": {
+              "properties": {
+                "provider_request_id": { "type": "null" },
+                "reported_usage": { "maxProperties": 0 }
+              }
+            },
+            "else": {
+              "properties": {
+                "provider_request_id": { "type": "string", "minLength": 1 },
+                "reported_usage": { "minProperties": 1 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "diagnostics", "identity_consistency", "metrics"],
+      "properties": {
+        "status": { "enum": ["passed", "failed"] },
+        "diagnostics": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "identity_consistency": { "const": "unmeasured" },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "reported_usage": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "actual_cost": {
+      "oneOf": [
+        { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$" },
+        { "type": "null" }
+      ]
+    },
+    "viewset_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -43,6 +43,47 @@ for the engine code, the weights, the preprocessing model, and every runtime dep
 `docs/superpowers/specs/2026-08-21-asset-mania-v0-3-generic-image-to-3d-design.md`. No such
 clearance ships with this repository, and no engine has been executed.
 
+## Optional non-commercial face research adapter
+
+`packages/engine-dad3dheads/` is this repository's own Apache-2.0 integration code. It is a
+separate optional process adapter and contains no DAD source, checkpoint, FLAME asset, runtime
+environment, compatibility patch, or face output.
+
+- External source: [PinataFarms/DAD-3DHeads](https://github.com/PinataFarms/DAD-3DHeads), pinned
+  for the private experiment at `68cc9b51974e2628f7a8f8ed2dadc5f73b3f8aa7`.
+- Upstream license: CC BY-NC-SA 4.0. This profile is non-commercial research only and must not be
+  described as OSI-open-source or commercially cleared.
+- Official checkpoint URL:
+  <https://media.pinatafarm.com/public/research/dad-3dheads/dad_3dheads.trcd>. The checkpoint is
+  downloaded only after fresh approval into ignored local storage. Its redistribution is
+  uncleared, and it never appears in an Asset Mania archive.
+- DAD's FLAME-family static assets and every compatibility dependency remain in the external
+  private checkout/runtime. Their terms are not replaced by this adapter's Apache license.
+- The measured compatibility runtime used upstream-pinned `hydra-core==1.1.0`,
+  `chumpy==0.70`, `albumentations==1.0.0`, `smplx==0.1.26`, and
+  `pytorch-toolbelt==0.5.0` only from ignored local storage. None is bundled in an Asset Mania
+  wheel or source archive.
+
+## Optional local face-geometry research adapters
+
+`packages/engine-mica/` and `packages/engine-deca/` are this repository's own Apache-2.0 process
+adapters. They contain no MICA, DECA, FLAME, InsightFace, face-detector, model-weight, runtime, or
+face-output bytes.
+
+- External MICA source and weights remain under the upstream Max Planck non-commercial scientific
+  research license. They are user-supplied, locally hashed, network-denied during inference, and
+  never redistributed by Asset Mania.
+- External DECA source and weights remain under the upstream Max Planck non-commercial scientific
+  research license. They are user-supplied, locally hashed, network-denied during inference, and
+  never redistributed by Asset Mania.
+- FLAME2020 and detector assets are separately licensed user-supplied dependencies. Asset Mania
+  never accepts account credentials, downloads those assets implicitly, or places them in a wheel.
+- Identity features, aligned crops, landmarks, parameter vectors, texture maps, and real-person
+  geometry are private transient or ignored-run data and are forbidden in public distributions.
+
+The adapters expose only a closed numeric geometry protocol. Their Apache license does not replace
+or broaden any external model, source, dataset, or asset license.
+
 ## External tools used but never redistributed
 
 Asset Mania invokes these tools as separate processes and bundles neither their binaries

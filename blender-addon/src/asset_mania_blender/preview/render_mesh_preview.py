@@ -32,6 +32,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", required=True, help="PNG to write")
     parser.add_argument("--samples", type=int, default=32)
     parser.add_argument("--resolution", type=int, default=720)
+    parser.add_argument("--elevation", type=float, default=0.42)
+    parser.add_argument("--start-angle-degrees", type=float, default=-90.0)
+    parser.add_argument(
+        "--orbit-axis",
+        choices=("X", "Y", "Z"),
+        default="Z",
+        help="world axis around which the camera orbits",
+    )
     parser.add_argument(
         "--views",
         type=int,
@@ -43,11 +51,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="shade from the mesh's colour attribute instead of a neutral grey",
     )
+    parser.add_argument(
+        "--use-imported-material",
+        action="store_true",
+        help="preserve the material and embedded texture imported from the mesh",
+    )
     return parser.parse_args(argv)
 
 
 def clear_scene() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def select_import_target(objects) -> bpy.types.Object:
+    """Return the first mesh, ignoring GLB hierarchy objects such as root empties."""
+    for candidate in objects:
+        if candidate.type == "MESH":
+            return candidate
+    raise ValueError("the imported scene contains no mesh object")
 
 
 def import_mesh(path: str) -> bpy.types.Object:
@@ -72,11 +93,46 @@ def import_mesh(path: str) -> bpy.types.Object:
         bpy.ops.object.select_all(action="SELECT")
         bpy.context.view_layer.objects.active = meshes[0]
         bpy.ops.object.join()
-    return bpy.context.scene.objects[0] if len(meshes) == 1 else meshes[0]
+    return select_import_target(bpy.context.scene.objects)
 
 
-def build_material(target: bpy.types.Object, use_vertex_colors: bool) -> None:
+def build_material(
+    target: bpy.types.Object,
+    use_vertex_colors: bool,
+    use_imported_material: bool = False,
+) -> None:
     """A plain dielectric. Colour comes from the mesh when it has any, grey when it does not."""
+    for polygon in target.data.polygons:
+        polygon.use_smooth = True
+    if use_imported_material and target.data.materials:
+        material = target.data.materials[0]
+        material.use_nodes = True
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        principled = nodes.get("Principled BSDF")
+        texture_nodes = [node for node in nodes if node.bl_idname == "ShaderNodeTexImage"]
+        if principled is not None:
+            imported_images = [
+                image
+                for image in bpy.data.images
+                if image.source == "FILE" and image.size[0] > 0 and image.size[1] > 0
+            ]
+            if len(imported_images) != 1:
+                raise ValueError("imported textured GLB must expose exactly one file image")
+            texture = texture_nodes[0] if texture_nodes else nodes.new("ShaderNodeTexImage")
+            texture.image = imported_images[0]
+            if not texture.inputs["Vector"].is_linked:
+                coordinates = nodes.new("ShaderNodeTexCoord")
+                links.new(coordinates.outputs["UV"], texture.inputs["Vector"])
+            if not principled.inputs["Base Color"].is_linked:
+                links.new(texture.outputs["Color"], principled.inputs["Base Color"])
+            principled.inputs["Roughness"].default_value = 0.65
+            emission = principled.inputs.get("Emission Color")
+            emission_strength = principled.inputs.get("Emission Strength")
+            if emission is not None and emission_strength is not None:
+                if not emission.is_linked:
+                    links.new(texture.outputs["Color"], emission)
+                emission_strength.default_value = 0.35
+        return
     material = bpy.data.materials.new("preview")
     material.use_nodes = True
     nodes, links = material.node_tree.nodes, material.node_tree.links
@@ -95,7 +151,24 @@ def build_material(target: bpy.types.Object, use_vertex_colors: bool) -> None:
     target.data.materials.append(material)
 
 
-def frame_and_light(target: bpy.types.Object) -> float:
+def rotated_light_setup(
+    location: tuple[float, float, float],
+    rotation_euler: tuple[float, float, float],
+    start_angle_degrees: float,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """Rotate the legacy -90-degree light rig with the selected front camera."""
+    delta = math.radians(start_angle_degrees - (-90.0))
+    if abs(delta) < 1e-12:
+        return location, rotation_euler
+    cosine = math.cos(delta)
+    sine = math.sin(delta)
+    x, y, z = location
+    rotated_location = (x * cosine - y * sine, x * sine + y * cosine, z)
+    rx, ry, rz = rotation_euler
+    return rotated_location, (rx, ry, rz + delta)
+
+
+def frame_and_light(target: bpy.types.Object, start_angle_degrees: float = -90.0) -> float:
     """Centre the subject at the origin and return the orbit radius that fits it."""
     bpy.context.view_layer.update()
     corners = [target.matrix_world @ v.co for v in target.data.vertices]
@@ -109,15 +182,21 @@ def frame_and_light(target: bpy.types.Object) -> float:
     key = bpy.data.objects.new("key", bpy.data.lights.new("key", type="AREA"))
     key.data.energy = 900 * extent**2
     key.data.size = extent * 3
-    key.location = (extent * 2.5, -extent * 2.5, extent * 3)
-    key.rotation_euler = (math.radians(50), 0, math.radians(40))
+    key.location, key.rotation_euler = rotated_light_setup(
+        (extent * 2.5, -extent * 2.5, extent * 3),
+        (math.radians(50), 0, math.radians(40)),
+        start_angle_degrees,
+    )
     bpy.context.scene.collection.objects.link(key)
 
     fill = bpy.data.objects.new("fill", bpy.data.lights.new("fill", type="AREA"))
     fill.data.energy = 250 * extent**2
     fill.data.size = extent * 4
-    fill.location = (-extent * 3, -extent * 1.5, extent * 0.5)
-    fill.rotation_euler = (math.radians(80), 0, math.radians(-60))
+    fill.location, fill.rotation_euler = rotated_light_setup(
+        (-extent * 3, -extent * 1.5, extent * 0.5),
+        (math.radians(80), 0, math.radians(-60)),
+        start_angle_degrees,
+    )
     bpy.context.scene.collection.objects.link(fill)
 
     world = bpy.data.worlds.new("world")
@@ -147,13 +226,33 @@ def configure_render(samples: int, resolution: int) -> None:
     scene.render.image_settings.color_mode = "RGB"
 
 
-def add_camera(radius: float, angle: float) -> bpy.types.Object:
+def camera_location(
+    radius: float,
+    angle: float,
+    elevation: float = 0.42,
+    orbit_axis: str = "Z",
+) -> tuple[float, float, float]:
+    radial_a = radius * math.cos(angle)
+    radial_b = radius * math.sin(angle)
+    offset = radius * elevation
+    values = {
+        "X": (offset, radial_a, radial_b),
+        "Y": (radial_a, offset, radial_b),
+        "Z": (radial_a, radial_b, offset),
+    }
+    if orbit_axis not in values:
+        raise ValueError(f"unsupported orbit axis: {orbit_axis}")
+    return tuple(0.0 if abs(value) < 1e-12 else value for value in values[orbit_axis])
+
+
+def add_camera(
+    radius: float,
+    angle: float,
+    elevation: float = 0.42,
+    orbit_axis: str = "Z",
+) -> bpy.types.Object:
     camera = bpy.data.objects.new("camera", bpy.data.cameras.new("camera"))
-    camera.location = (
-        radius * math.cos(angle),
-        radius * math.sin(angle),
-        radius * 0.42,
-    )
+    camera.location = camera_location(radius, angle, elevation, orbit_axis)
     bpy.context.scene.collection.objects.link(camera)
     bpy.context.scene.camera = camera
 
@@ -166,18 +265,29 @@ def add_camera(radius: float, angle: float) -> bpy.types.Object:
     return camera
 
 
-def main() -> int:
-    args = parse_args()
+def orbit_angles(views: int, start_angle_degrees: float) -> list[float]:
+    if views <= 0:
+        raise ValueError("views must be positive")
+    start = math.radians(start_angle_degrees)
+    return [start + index * (2 * math.pi / views) for index in range(views)]
+
+
+def prepare_scene(args: argparse.Namespace) -> float:
     clear_scene()
     target = import_mesh(args.mesh)
-    build_material(target, args.vertex_colors)
-    radius = frame_and_light(target)
+    build_material(target, args.vertex_colors, args.use_imported_material)
+    radius = frame_and_light(target, args.start_angle_degrees)
     configure_render(args.samples, args.resolution)
+    return radius
+
+
+def main() -> int:
+    args = parse_args()
+    radius = prepare_scene(args)
 
     tiles: list[str] = []
-    for index in range(args.views):
-        angle = -math.pi / 2 + index * (2 * math.pi / args.views)
-        camera = add_camera(radius, angle)
+    for index, angle in enumerate(orbit_angles(args.views, args.start_angle_degrees)):
+        camera = add_camera(radius, angle, args.elevation, args.orbit_axis)
         tile = f"{args.out}.view{index}.png"
         bpy.context.scene.render.filepath = tile
         bpy.ops.render.render(write_still=True)

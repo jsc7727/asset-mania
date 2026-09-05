@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asset-mania.dev/schemas/multiview-reconstruction-v1.schema.json",
+  "title": "Asset Mania multiview reconstruction v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "turntable_plan_sha256",
+    "viewset_sha256",
+    "observed_source_image_sha256",
+    "meshes",
+    "fusion",
+    "fused_mesh",
+    "disclosure",
+    "record_sha256"
+  ],
+  "properties": {
+    "schema_id": { "const": "asset-mania/multiview-reconstruction" },
+    "schema_version": { "const": "1.0" },
+    "turntable_plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "viewset_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "observed_source_image_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "meshes": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "target_yaw",
+          "sha256",
+          "triangle_count",
+          "vertex_count",
+          "manifold"
+        ],
+        "properties": {
+          "label": { "type": "string", "pattern": "^mesh-[1-8]$" },
+          "target_yaw": { "enum": [0, 45, 90, 135, 180, 225, 270, 315] },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "triangle_count": { "type": "integer", "minimum": 1 },
+          "vertex_count": { "type": "integer", "minimum": 1 },
+          "manifold": { "enum": ["closed", "open", "unknown"] }
+        }
+      }
+    },
+    "fusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "normalization",
+        "yaw_axis",
+        "grid_resolution",
+        "minimum_votes",
+        "eligible_mesh_count",
+        "input_mesh_count"
+      ],
+      "properties": {
+        "normalization": { "const": "bounds_center_unit_longest_extent" },
+        "yaw_axis": { "const": "+Z" },
+        "grid_resolution": { "type": "integer", "minimum": 16, "maximum": 512 },
+        "minimum_votes": { "type": "integer", "minimum": 3, "maximum": 4 },
+        "eligible_mesh_count": { "type": "integer", "minimum": 6, "maximum": 8 },
+        "input_mesh_count": { "const": 8 }
+      }
+    },
+    "fused_mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "path",
+        "sha256",
+        "byte_size",
+        "media_type",
+        "triangle_count",
+        "vertex_count",
+        "manifold",
+        "signed_volume",
+        "content_origin",
+        "sensitivity",
+        "upload_eligible"
+      ],
+      "properties": {
+        "role": { "const": "fused_mesh" },
+        "path": { "const": "fused.glb" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "byte_size": { "type": "integer", "minimum": 1 },
+        "media_type": { "const": "model/gltf-binary" },
+        "triangle_count": { "type": "integer", "minimum": 1 },
+        "vertex_count": { "type": "integer", "minimum": 1 },
+        "manifold": { "const": "closed" },
+        "signed_volume": { "type": "number", "exclusiveMinimum": 0 },
+        "content_origin": { "const": "generated" },
+        "sensitivity": { "const": "user-content" },
+        "upload_eligible": { "const": false }
+      }
+    },
+    "disclosure": {
+      "type": "object",
+      "required": [
+        "schema_id",
+        "schema_version",
+        "plan_sha256",
+        "source_image_sha256",
+        "mesh_sha256",
+        "asset_kind",
+        "subject",
+        "rights_receipt_sha256",
+        "engine",
+        "engine_profile",
+        "likeness_basis",
+        "measured_accuracy",
+        "prohibited_claims",
+        "disclosure_sha256"
+      ],
+      "properties": {
+        "schema_id": { "const": "asset-mania/likeness-disclosure" },
+        "schema_version": { "const": "1.0" },
+        "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "source_image_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "mesh_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "asset_kind": { "const": "face_head" },
+        "subject": { "enum": ["real_person", "synthetic_person"] },
+        "rights_receipt_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "engine": { "const": "triposr-local" },
+        "engine_profile": { "const": "triposr-voxel-consensus-v1" },
+        "likeness_basis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["views", "inferred"],
+          "properties": {
+            "views": { "const": 8 },
+            "inferred": { "const": true }
+          }
+        },
+        "measured_accuracy": { "type": "object" },
+        "prohibited_claims": { "type": "array", "minItems": 3, "uniqueItems": true },
+        "disclosure_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "record_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

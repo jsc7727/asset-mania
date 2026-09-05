@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -19,6 +20,7 @@ _THIRD_PARTY_NOTICES = PurePosixPath("THIRD_PARTY_NOTICES.md")
 
 _FORBIDDEN_DIRECTORY_NAMES = {
     ".asset-mania",
+    ".dad_checkpoints",
     ".cache",
     ".mypy_cache",
     ".pytest_cache",
@@ -40,7 +42,24 @@ _FORBIDDEN_FILE_NAMES = {
     "token",
     "token.json",
 }
-_FORBIDDEN_WEIGHT_SUFFIXES = {".ckpt", ".onnx", ".pt", ".pth", ".safetensors"}
+_FORBIDDEN_WEIGHT_SUFFIXES = {
+    ".ckpt",
+    ".npy",
+    ".npz",
+    ".onnx",
+    ".pt",
+    ".pth",
+    ".safetensors",
+    ".trcd",
+    ".tar",
+    ".pkl",
+}
+_FORBIDDEN_FACE_ARTIFACT_NAMES = {
+    "aligned-face.png",
+    "mica-clay.glb",
+    "deca-clay.glb",
+    "mica-deca-clay.glb",
+}
 _TEXT_FIXTURE_SUFFIXES = {
     ".csv",
     ".json",
@@ -108,6 +127,7 @@ def _tracked_paths(root: Path) -> tuple[list[PurePosixPath], Finding | None]:
 
 def _is_forbidden_path(relative: PurePosixPath) -> bool:
     lowered_parts = tuple(part.lower() for part in relative.parts)
+    lowered_path = relative.as_posix().lower()
     name = lowered_parts[-1]
     stem = PurePosixPath(name).stem
     return (
@@ -120,6 +140,27 @@ def _is_forbidden_path(relative: PurePosixPath) -> bool:
         or stem == "cookie"
         or stem == "cookies"
         or PurePosixPath(name).suffix in _FORBIDDEN_WEIGHT_SUFFIXES
+        or name in _FORBIDDEN_FACE_ARTIFACT_NAMES
+        or lowered_path.startswith("model_training/model/static/flame")
+    )
+
+
+def _has_standing_consent_filename(relative: PurePosixPath) -> bool:
+    lowered_name = relative.name.lower()
+    return relative.suffix.lower() == ".json" and (
+        "standing-consent" in lowered_name or "standing_consent" in lowered_name
+    )
+
+
+def _is_standing_consent_content(text: str | None) -> bool:
+    if text is None:
+        return False
+    try:
+        value = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(value, dict) and value.get("schema_id") == (
+        "asset-mania/local-face-standing-consent"
     )
 
 
@@ -270,17 +311,38 @@ def check_release(root: Path) -> list[Finding]:
     third_party_notices = _inventory_entries(root, tracked, _THIRD_PARTY_NOTICES)
 
     for relative in tracked_paths:
-        if _is_forbidden_path(relative):
+        if _has_standing_consent_filename(relative):
             findings.append(
                 Finding(
-                    code="FORBIDDEN_TRACKED_PATH",
-                    path=relative.as_posix(),
-                    message="tracked release path is forbidden",
+                    code="STANDING_CONSENT_TRACKED",
+                    path="private-standing-consent-record",
+                    message="tracked local face standing consent is forbidden",
                 )
             )
             continue
 
         path = _safe_regular_file(root, relative)
+        text = _read_text(path) if path is not None else None
+        if _is_standing_consent_content(text):
+            findings.append(
+                Finding(
+                    code="STANDING_CONSENT_TRACKED",
+                    path="private-standing-consent-record",
+                    message="tracked local face standing consent is forbidden",
+                )
+            )
+            continue
+
+        if _is_forbidden_path(relative):
+            findings.append(
+                Finding(
+                    code="FORBIDDEN_TRACKED_PATH",
+                    path="private-release-entry",
+                    message="tracked release path is forbidden",
+                )
+            )
+            continue
+
         if path is None:
             continue
 
@@ -309,7 +371,6 @@ def check_release(root: Path) -> list[Finding]:
                 )
             )
 
-        text = _read_text(path)
         if text is None:
             continue
         if _contains_absolute_home(text):
@@ -355,7 +416,7 @@ def check_release(root: Path) -> list[Finding]:
             )
         )
 
-    return sorted(set(findings))
+    return sorted(findings)
 
 
 def main(arguments: list[str] | None = None) -> int:

@@ -36,6 +36,7 @@ class ProviderRequest:
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     #: The credential is resolved at call time and never stored on the request.
     credential_reference: str = "secret-interface"
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
     def redacted(self) -> dict[str, Any]:
         """A log-safe view: no credential, no prompt text, no image bytes.
@@ -63,6 +64,7 @@ class ProviderRequest:
                 }
                 for part in self.parts
             ],
+            "metadata": dict(sorted(self.metadata.items())),
             "timeout_seconds": self.timeout_seconds,
         }
 
