@@ -9,6 +9,7 @@ from asset_mania_engine_dad3dheads.plugin import (
     DADPluginSettings,
     _install_python312_compatibility,
     _neutral_mesh_vertices,
+    _prediction_geometry,
     _write_projection,
     run_face_plugin,
     validate_dad_runtime,
@@ -49,6 +50,39 @@ def test_neutral_mesh_vertices_remove_nonzero_global_pose() -> None:
 
     assert np.allclose(result, neutral)
     assert not np.allclose(result, predictions["3d_vertices"])
+
+
+def test_prediction_geometry_keeps_posed_camera_vertices_and_projection() -> None:
+    neutral = np.array(
+        [[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.2, 0.05]], dtype=np.float64
+    )
+    posed = np.array(
+        [[-0.08, -0.06, 0.0], [0.08, 0.06, 0.0], [-0.12, 0.16, 0.05]], dtype=np.float64
+    )
+    projected = np.array([[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]])
+    parameters = object()
+
+    class HeadMesh:
+        def vertices_3d(self, supplied, *, zero_rotation=False):
+            assert supplied is parameters
+            assert zero_rotation is True
+            return neutral[None, ...]
+
+    class Predictor:
+        head_mesh = HeadMesh()
+
+    mesh, camera, image_projection = _prediction_geometry(
+        Predictor(),
+        {
+            "3d_vertices": posed,
+            "3dmm_params": parameters,
+            "projected_vertices": projected,
+        },
+    )
+
+    assert np.array_equal(np.squeeze(mesh), neutral)
+    assert np.array_equal(camera, posed)
+    assert np.array_equal(image_projection, projected)
 
 
 def test_python312_compatibility_restores_getargspec(monkeypatch) -> None:

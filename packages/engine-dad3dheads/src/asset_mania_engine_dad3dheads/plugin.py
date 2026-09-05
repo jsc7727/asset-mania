@@ -172,6 +172,14 @@ def _neutral_mesh_vertices(predictor, predictions):
     )
 
 
+def _prediction_geometry(predictor, predictions):
+    return (
+        _neutral_mesh_vertices(predictor, predictions),
+        _tensor_numpy(predictions["3d_vertices"]),
+        _tensor_numpy(predictions["projected_vertices"]),
+    )
+
+
 def _write_obj(path: Path, vertices, faces) -> None:
     with path.open("x", encoding="utf-8", newline="\n") as handle:
         for vertex in vertices:
@@ -246,9 +254,14 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
 
-    vertices = np.asarray(_neutral_mesh_vertices(predictor, predictions), dtype=np.float64)
-    projected = np.asarray(_tensor_numpy(predictions["projected_vertices"]), dtype=np.float64)
+    neutral_vertices, camera_vertices, projected_vertices = _prediction_geometry(
+        predictor, predictions
+    )
+    vertices = np.asarray(neutral_vertices, dtype=np.float64)
+    camera_vertices = np.asarray(camera_vertices, dtype=np.float64)
+    projected = np.asarray(projected_vertices, dtype=np.float64)
     vertices = np.squeeze(vertices)
+    camera_vertices = np.squeeze(camera_vertices)
     projected = np.squeeze(projected)
     faces_path = settings.source_root / "model_training/model/static/flame_mesh_faces.pt"
     faces = np.asarray(
@@ -256,6 +269,8 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
     )
     if vertices.ndim != 2 or vertices.shape[1] != 3 or not np.isfinite(vertices).all():
         raise ValueError("DAD returned invalid vertices")
+    if camera_vertices.shape != vertices.shape or not np.isfinite(camera_vertices).all():
+        raise ValueError("DAD returned invalid camera vertices")
     if faces.ndim != 2 or faces.shape[1] != 3:
         raise ValueError("DAD returned invalid faces")
     if projected.shape != (len(vertices), 2) or not np.isfinite(projected).all():
@@ -265,7 +280,7 @@ def execute_dad_request(request_path: Path, result_path: Path, settings: DADPlug
     mesh_path = request.output_directory / "head.obj"
     projection_path = request.output_directory / "projection.npz"
     _write_obj(mesh_path, vertices, faces + 1)
-    _write_projection(projection_path, projected, vertices, image_rgb.shape[:2])
+    _write_projection(projection_path, projected, camera_vertices, image_rgb.shape[:2])
     result = {
         "schema": "asset-mania.face-plugin-result.v0",
         "plugin": DAD_PLUGIN,
